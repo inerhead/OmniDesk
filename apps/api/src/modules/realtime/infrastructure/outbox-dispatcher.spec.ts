@@ -2,10 +2,14 @@ import type { RealtimeEvent } from '@omnidesk/contracts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { TransactionRunner } from '../../../shared/application/transaction-runner.port';
 import type { OutboxEventStore, PendingOutboxEvent } from '../application/ports/outbox-event-store';
+import type { OutboundMessageSender } from '../application/ports/outbound-message-sender';
 import type { RealtimePublisher } from '../application/ports/realtime-publisher';
-import { BATCH_SIZE, OutboxDispatcher } from './outbox-dispatcher';
+import { BATCH_SIZE, OutboxDispatcher, SEND_MAX_RETRIES } from './outbox-dispatcher';
 
-const noTransaction: TransactionRunner = { run: (work) => work() };
+const noTransaction: TransactionRunner = {
+  run: (work) => work(),
+  runDetached: (work) => work(),
+};
 const T0 = new Date('2026-10-12T10:00:00.000Z');
 const HOUR = 60 * 60 * 1000;
 
@@ -46,8 +50,10 @@ class InMemoryStore implements OutboxEventStore {
       .slice(0, limit);
   }
 
-  async markPublished(id: string, at: Date) {
-    this.get(id).publishedAt = at;
+  async markPublished(id: string, at: Date, lastError?: string) {
+    const event = this.get(id);
+    event.publishedAt = at;
+    if (lastError !== undefined) event.lastError = lastError;
   }
 
   async scheduleRetry(id: string, retry: { attempts: number; error: string; at: Date }) {
@@ -82,15 +88,35 @@ class FakePublisher implements RealtimePublisher {
   }
 }
 
+/** Proveedor falso: falla las primeras `failures` veces. */
+class FakeSender implements OutboundMessageSender {
+  readonly sent: unknown[] = [];
+  readonly failed: { payload: unknown; reason: string }[] = [];
+  calls = 0;
+  failures = 0;
+
+  async send(_tenantId: string, payload: unknown) {
+    this.calls += 1;
+    if (this.calls <= this.failures) throw new Error(`proveedor caído (${this.calls})`);
+    this.sent.push(payload);
+  }
+
+  async fail(_tenantId: string, payload: unknown, reason: string) {
+    this.failed.push({ payload, reason });
+  }
+}
+
 describe('OutboxDispatcher', () => {
   let store: InMemoryStore;
   let publisher: FakePublisher;
+  let sender: FakeSender;
   let dispatcher: OutboxDispatcher;
 
   beforeEach(() => {
     store = new InMemoryStore();
     publisher = new FakePublisher();
-    dispatcher = new OutboxDispatcher(noTransaction, store, publisher);
+    sender = new FakeSender();
+    dispatcher = new OutboxDispatcher(noTransaction, store, publisher, sender);
   });
 
   it('publica el evento en el room de su tenant y lo marca como publicado', async () => {
@@ -180,6 +206,78 @@ describe('OutboxDispatcher', () => {
 
     expect(await dispatcher.tick(T0)).toBe(BATCH_SIZE);
     expect(await dispatcher.tick(T0)).toBe(1);
+  });
+
+  describe('message.send_requested', () => {
+    const sendEvent = (overrides: Partial<StoredEvent> = {}) =>
+      store.add({
+        type: 'message.send_requested',
+        payload: { messageId: '0199c0de-0000-7000-8000-0000000000aa' },
+        ...overrides,
+      });
+
+    it('envía por el proveedor, no por Socket.IO, y lo marca como procesado', async () => {
+      const event = sendEvent();
+
+      expect(await dispatcher.tick(T0)).toBe(1);
+
+      expect(sender.sent).toEqual([event.payload]);
+      expect(publisher.published).toHaveLength(0);
+      expect(event.publishedAt).toEqual(T0);
+    });
+
+    it('reintenta con backoff de 1, 2, 4, 8 y 16 s', async () => {
+      const event = sendEvent();
+      sender.failures = 99;
+      let now = T0;
+      const waits: number[] = [];
+
+      for (let retry = 0; retry < SEND_MAX_RETRIES; retry += 1) {
+        await dispatcher.tick(now);
+        waits.push((event.nextAttemptAt.getTime() - now.getTime()) / 1000);
+        now = event.nextAttemptAt;
+      }
+
+      expect(waits).toEqual([1, 2, 4, 8, 16]);
+      expect(event.attempts).toBe(5);
+    });
+
+    it('no reintenta antes de tiempo y se recupera cuando el proveedor vuelve', async () => {
+      const event = sendEvent();
+      sender.failures = 2;
+
+      await dispatcher.tick(T0); // falla: +1 s
+      await dispatcher.tick(new Date(T0.getTime() + 999)); // aún no toca
+      await dispatcher.tick(new Date(T0.getTime() + 1_000)); // falla: +2 s
+      expect(sender.calls).toBe(2);
+      await dispatcher.tick(new Date(T0.getTime() + 3_000)); // éxito
+
+      expect(sender.sent).toHaveLength(1);
+      expect(sender.failed).toHaveLength(0);
+      expect(event).toMatchObject({ attempts: 2 });
+      expect(event.publishedAt).not.toBeNull();
+    });
+
+    it('tras agotar los reintentos (≈ 31 s) marca el mensaje como FAILED y cierra el evento', async () => {
+      const event = sendEvent();
+      sender.failures = 99;
+      let now = T0;
+
+      for (let call = 0; call <= SEND_MAX_RETRIES; call += 1) {
+        await dispatcher.tick(now);
+        now = event.nextAttemptAt;
+      }
+
+      expect(sender.calls).toBe(6);
+      expect(sender.failed).toEqual([{ payload: event.payload, reason: 'proveedor caído (6)' }]);
+      expect(event.attempts).toBe(5);
+      expect(event.lastError).toBe('proveedor caído (6)');
+      expect(event.publishedAt).not.toBeNull();
+      expect(now.getTime() - T0.getTime()).toBe(31_000);
+
+      await dispatcher.tick(new Date(now.getTime() + 60_000));
+      expect(sender.calls).toBe(6);
+    });
   });
 
   describe('limpieza', () => {

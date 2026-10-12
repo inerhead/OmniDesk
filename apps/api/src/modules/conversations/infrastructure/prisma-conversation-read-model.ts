@@ -10,6 +10,7 @@ import type {
 } from '../application/ports/conversation-read-model';
 import type { Conversation } from '../domain/conversation';
 import type { Message } from '../domain/message';
+import { messageSelect } from './prisma-conversation.repository';
 
 const summarySelect = {
   id: true,
@@ -103,16 +104,7 @@ export class PrismaConversationReadModel implements ConversationReadModel {
       where: { conversationId, ...(before !== null && { sequence: { lt: before } }) },
       orderBy: { sequence: 'desc' },
       take,
-      select: {
-        id: true,
-        conversationId: true,
-        sequence: true,
-        direction: true,
-        senderType: true,
-        text: true,
-        status: true,
-        createdAt: true,
-      },
+      select: messageSelect,
     });
   }
 

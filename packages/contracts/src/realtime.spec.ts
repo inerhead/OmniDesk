@@ -21,8 +21,12 @@ describe('RealtimeEventSchema', () => {
     expect(RealtimeEventSchema.safeParse({ ...valid, reason: 'assignment' }).success).toBe(true);
   });
 
+  it('acepta el motivo delivery', () => {
+    expect(RealtimeEventSchema.safeParse({ ...valid, reason: 'delivery' }).success).toBe(true);
+  });
+
   it('rechaza un motivo desconocido', () => {
-    expect(RealtimeEventSchema.safeParse({ ...valid, reason: 'delivery' }).success).toBe(false);
+    expect(RealtimeEventSchema.safeParse({ ...valid, reason: 'otro' }).success).toBe(false);
   });
 
   it('rechaza un conversationId que no es uuid', () => {

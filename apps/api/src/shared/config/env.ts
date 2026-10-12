@@ -26,6 +26,10 @@ export const EnvSchema = z
     DEMO_MODE: booleanString,
     /** API key del canal demo; se guarda hasheada. */
     DEMO_CHANNEL_API_KEY: z.string().min(24).optional(),
+    /** Adaptador de mensajería saliente; hoy solo existe el simulado. */
+    MESSAGING_PROVIDER: z.enum(['simulated']).default('simulated'),
+    /** Probabilidad (0 a 1) de que el proveedor simulado falle un envío. */
+    SIMULATED_PROVIDER_FAILURE_RATE: z.coerce.number().min(0).max(1).default(0),
   })
   .superRefine((env, ctx) => {
     if (!env.DEMO_MODE) return;

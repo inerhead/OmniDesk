@@ -1,4 +1,5 @@
-// Modelo de la bandeja de conversaciones (SPEC 02), tiempo real (SPEC 03) y asignación (SPEC 04).
+// Modelo de la bandeja de conversaciones (SPEC 02), tiempo real (SPEC 03), asignación (SPEC 04)
+// y atención humana (SPEC 05).
 // Todas las tablas de negocio llevan tenant_id: el tenant se resuelve siempre en el servidor.
 
 generator client {
@@ -178,18 +179,26 @@ model Message {
   senderType        SenderType       @map("sender_type")
   text              String
   status            MessageStatus
-  /// Id del proveedor (mensajes entrantes).
+  /// Id del proveedor: en los entrantes, el del mensaje; en los salientes, el `providerMessageId`.
   externalId        String?          @map("external_id")
   /// Clave de idempotencia (respuestas de IA).
   idempotencyKey    String?          @map("idempotency_key")
   providerTimestamp DateTime?        @map("provider_timestamp") @db.Timestamptz(3)
+  /// Agente que escribió el mensaje (solo AGENT).
+  senderMemberId    String?          @map("sender_member_id") @db.Uuid
+  /// Idempotencia del composer de la web.
+  clientMessageId   String?          @map("client_message_id")
+  failureReason     String?          @map("failure_reason")
+  statusUpdatedAt   DateTime?        @map("status_updated_at") @db.Timestamptz(3)
   createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  tenant       Tenant       @relation(fields: [tenantId], references: [id])
-  channel      Channel      @relation(fields: [channelId], references: [id])
-  conversation Conversation @relation(fields: [conversationId], references: [id])
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  channel      Channel       @relation(fields: [channelId], references: [id])
+  conversation Conversation  @relation(fields: [conversationId], references: [id])
+  sender       TenantMember? @relation(fields: [senderMemberId], references: [id], onDelete: Restrict)
 
   @@unique([conversationId, sequence])
+  @@unique([conversationId, clientMessageId])
   @@unique([channelId, externalId])
   @@unique([conversationId, idempotencyKey])
   @@map("messages")
@@ -207,6 +216,7 @@ model TenantMember {
   assignedConversations Conversation[]
   actedEvents           ConversationEvent[] @relation("EventActor")
   targetedEvents        ConversationEvent[] @relation("EventTarget")
+  sentMessages          Message[]
 
   @@unique([tenantId, email])
   @@map("tenant_members")
@@ -237,7 +247,7 @@ model ConversationEvent {
 model OutboxEvent {
   id            String    @id @default(uuid(7)) @db.Uuid
   tenantId      String    @map("tenant_id") @db.Uuid
-  /// "conversation.changed" (SPEC 03); el SPEC 05 añade "message.send_requested".
+  /// "conversation.changed" (SPEC 03) o "message.send_requested" (SPEC 05).
   type          String
   payload       Json
   attempts      Int       @default(0)
@@ -249,4 +259,16 @@ model OutboxEvent {
   @@index([nextAttemptAt], map: "outbox_events_pending", where: raw("published_at IS NULL"))
   @@index([publishedAt])
   @@map("outbox_events")
+}
+
+/// Deduplicación de reportes de integraciones (SPEC 05).
+model EventInbox {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  channelId  String   @map("channel_id") @db.Uuid
+  /// "<messageId>:<status>" para estados de entrega.
+  externalId String   @map("external_id")
+  receivedAt DateTime @default(now()) @map("received_at") @db.Timestamptz(3)
+
+  @@unique([channelId, externalId])
+  @@map("event_inbox")
 }

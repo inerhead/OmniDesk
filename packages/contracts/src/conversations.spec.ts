@@ -5,6 +5,8 @@ import {
   ListConversationsQuerySchema,
   ListMessagesQuerySchema,
   ListTimelineResponseSchema,
+  SendAgentMessageRequestSchema,
+  SendAgentMessageResponseSchema,
   TimelineItemSchema,
 } from './conversations';
 
@@ -65,6 +67,8 @@ describe('TimelineItemSchema', () => {
     senderType: 'CUSTOMER',
     text: 'Hola',
     status: 'RECEIVED',
+    sender: null,
+    failureReason: null,
     createdAt: '2026-10-12T10:00:00.000Z',
   };
   const event = {
@@ -109,5 +113,46 @@ describe('ListMessagesQuerySchema', () => {
   it('rechaza limit fuera de rango y before no positivo', () => {
     expect(ListMessagesQuerySchema.safeParse({ limit: '101' }).success).toBe(false);
     expect(ListMessagesQuerySchema.safeParse({ before: '0' }).success).toBe(false);
+  });
+});
+
+describe('SendAgentMessageRequestSchema', () => {
+  const valid = { text: 'Hola', clientMessageId: '0199c0de-0000-7000-8000-000000000001' };
+
+  it('acepta un texto y un clientMessageId uuid', () => {
+    expect(SendAgentMessageRequestSchema.parse(valid)).toEqual(valid);
+  });
+
+  it('rechaza texto vacío, de más de 4096 caracteres o un clientMessageId que no es uuid', () => {
+    expect(SendAgentMessageRequestSchema.safeParse({ ...valid, text: '' }).success).toBe(false);
+    expect(
+      SendAgentMessageRequestSchema.safeParse({ ...valid, text: 'a'.repeat(4097) }).success,
+    ).toBe(false);
+    expect(
+      SendAgentMessageRequestSchema.safeParse({ ...valid, text: 'a'.repeat(4096) }).success,
+    ).toBe(true);
+    expect(
+      SendAgentMessageRequestSchema.safeParse({ ...valid, clientMessageId: 'x' }).success,
+    ).toBe(false);
+  });
+});
+
+describe('SendAgentMessageResponseSchema', () => {
+  it('lleva el agente remitente y el motivo del fallo', () => {
+    const message = {
+      id: '0199c0de-0000-7000-8000-000000000001',
+      sequence: 3,
+      direction: 'OUTBOUND',
+      senderType: 'AGENT',
+      text: 'Hola',
+      status: 'PENDING',
+      sender: { id: '0199c0de-0000-7000-8000-000000000004', displayName: 'Laura' },
+      failureReason: null,
+      createdAt: '2026-10-12T10:00:00.000Z',
+    };
+    expect(SendAgentMessageResponseSchema.parse(message).sender?.displayName).toBe('Laura');
+    expect(
+      SendAgentMessageResponseSchema.safeParse({ ...message, sender: undefined }).success,
+    ).toBe(false);
   });
 });

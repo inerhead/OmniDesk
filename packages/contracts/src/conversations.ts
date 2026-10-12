@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MessageTextSchema } from './integrations';
 
 export const ConversationStatusSchema = z.enum(['OPEN', 'CLOSED']);
 export const ChannelTypeSchema = z.enum(['WHATSAPP']);
@@ -68,6 +69,8 @@ export const ListMessagesQuerySchema = z.object({
 });
 export type ListMessagesQuery = z.infer<typeof ListMessagesQuerySchema>;
 
+export const MemberRefSchema = z.object({ id: z.uuid(), displayName: z.string() });
+
 export const MessageSchema = z.object({
   id: z.uuid(),
   sequence: z.int().min(1),
@@ -75,6 +78,10 @@ export const MessageSchema = z.object({
   senderType: SenderTypeSchema,
   text: z.string(),
   status: MessageStatusSchema,
+  /** Agente que escribió el mensaje; `null` si no es de un agente. */
+  sender: MemberRefSchema.nullable(),
+  /** Motivo del último fallo de envío; `null` si no falló. */
+  failureReason: z.string().nullable(),
   createdAt: z.iso.datetime(),
 });
 export type Message = z.infer<typeof MessageSchema>;
@@ -86,8 +93,6 @@ export const ListMessagesResponseSchema = z.object({
   prevCursor: z.int().min(1).nullable(),
 });
 export type ListMessagesResponse = z.infer<typeof ListMessagesResponseSchema>;
-
-export const MemberRefSchema = z.object({ id: z.uuid(), displayName: z.string() });
 
 /** `GET /api/v1/conversations/:id/timeline`: mensajes y eventos intercalados por `sequence`. */
 export const ListTimelineQuerySchema = ListMessagesQuerySchema;
@@ -141,3 +146,15 @@ export const ConversationCommandRejectedSchema = z.object({
   reason: z.enum(['CONTROL_CHANGED', 'INVALID_STATE']),
 });
 export type ConversationCommandRejected = z.infer<typeof ConversationCommandRejectedSchema>;
+
+/** `POST /api/v1/conversations/:id/messages`: el agente asignado responde desde la PWA. */
+export const SendAgentMessageRequestSchema = z.object({
+  text: MessageTextSchema,
+  /** uuid generado en la web: un reintento por error de red no duplica el mensaje. */
+  clientMessageId: z.uuid(),
+});
+export type SendAgentMessageRequest = z.infer<typeof SendAgentMessageRequestSchema>;
+
+/** El mensaje recién registrado (`PENDING`). */
+export const SendAgentMessageResponseSchema = MessageSchema;
+export type SendAgentMessageResponse = Message;

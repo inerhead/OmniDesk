@@ -5,11 +5,17 @@ export type MessageStatus = 'RECEIVED' | 'PENDING' | 'SENT' | 'DELIVERED' | 'REA
 export interface Message {
   id: string;
   conversationId: string;
+  channelId: string;
   sequence: number;
   direction: MessageDirection;
   senderType: SenderType;
   text: string;
   status: MessageStatus;
+  /** Entrantes: id del mensaje en el proveedor. Salientes: el `providerMessageId` del envío. */
+  externalId: string | null;
+  /** Agente que lo escribió (solo `AGENT`). */
+  sender: { id: string; displayName: string } | null;
+  failureReason: string | null;
   createdAt: Date;
 }
 
@@ -22,6 +28,10 @@ export interface NewMessage {
   externalId?: string;
   idempotencyKey?: string;
   providerTimestamp?: Date;
+  /** Agente que escribe (solo `AGENT`). */
+  senderMemberId?: string;
+  /** Idempotencia del composer de la web. */
+  clientMessageId?: string;
 }
 
 /** Mensaje del cliente: entrante y ya recibido. */
@@ -43,4 +53,20 @@ export function customerMessage(
 /** Respuesta de IA: saliente y pendiente de confirmación del proveedor. */
 export function aiReply(text: string, idempotencyKey: string): NewMessage {
   return { direction: 'OUTBOUND', senderType: 'AI', status: 'PENDING', text, idempotencyKey };
+}
+
+/** Mensaje del agente: saliente y pendiente de que el proveedor lo confirme. */
+export function agentMessage(
+  text: string,
+  senderMemberId: string,
+  clientMessageId: string,
+): NewMessage {
+  return {
+    direction: 'OUTBOUND',
+    senderType: 'AGENT',
+    status: 'PENDING',
+    text,
+    senderMemberId,
+    clientMessageId,
+  };
 }

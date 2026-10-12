@@ -3,7 +3,9 @@ import { rethrowUniqueConflict } from '../../../shared/infrastructure/prisma/pri
 import { PrismaDb } from '../../../shared/infrastructure/prisma/prisma-transaction-runner';
 import type {
   ConversationRepository,
+  MessageDeliveryUpdate,
   NewConversation,
+  OutboundForSend,
 } from '../application/ports/conversation.repository';
 import { appendMessage, type Conversation } from '../domain/conversation';
 import type { ConversationEvent, NewConversationEvent } from '../domain/conversation-event';
@@ -23,15 +25,19 @@ const conversationSelect = {
   lastMessagePreview: true,
 } as const;
 
-const messageSelect = {
+export const messageSelect = {
   id: true,
   conversationId: true,
+  channelId: true,
   sequence: true,
   direction: true,
   senderType: true,
   text: true,
   status: true,
+  externalId: true,
+  failureReason: true,
   createdAt: true,
+  sender: { select: { id: true, displayName: true } },
 } as const;
 
 @Injectable()
@@ -153,6 +159,55 @@ export class PrismaConversationRepository implements ConversationRepository {
         targetMemberId: true,
         createdAt: true,
       },
+    });
+  }
+
+  findMessageById(tenantId: string, messageId: string): Promise<Message | null> {
+    return this.db.client.message.findFirst({
+      where: { id: messageId, tenantId },
+      select: messageSelect,
+    });
+  }
+
+  findMessageByClientId(conversationId: string, clientMessageId: string): Promise<Message | null> {
+    return this.db.client.message.findUnique({
+      where: { conversationId_clientMessageId: { conversationId, clientMessageId } },
+      select: messageSelect,
+    });
+  }
+
+  async findOutboundForSend(tenantId: string, messageId: string): Promise<OutboundForSend | null> {
+    const row = await this.db.client.message.findFirst({
+      where: { id: messageId, tenantId, direction: 'OUTBOUND' },
+      select: {
+        ...messageSelect,
+        conversation: {
+          select: {
+            contact: {
+              select: { identities: { select: { channelId: true, externalId: true } } },
+            },
+          },
+        },
+      },
+    });
+    if (!row) return null;
+    const { conversation, ...message } = row;
+    const to = conversation.contact.identities.find(
+      (identity) => identity.channelId === message.channelId,
+    )?.externalId;
+    return to ? { message, tenantId, to } : null;
+  }
+
+  updateMessageDelivery(messageId: string, update: MessageDeliveryUpdate): Promise<Message> {
+    return this.db.client.message.update({
+      where: { id: messageId },
+      data: {
+        status: update.status,
+        failureReason: update.failureReason,
+        statusUpdatedAt: update.at,
+        ...(update.externalId !== undefined && { externalId: update.externalId }),
+      },
+      select: messageSelect,
     });
   }
 

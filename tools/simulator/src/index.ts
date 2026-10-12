@@ -10,6 +10,30 @@ import {
 
 const LIVE_INTERVAL_MS = 4_000;
 const LIVE_AI_DELAY_MS = 1_500;
+/** Tiempo entre `SENT` y `DELIVERED` de una respuesta de IA. */
+const DELIVERED_AFTER_MS = 1_000;
+
+/** Reportes `DELIVERED` en curso: el modo fijo espera a que terminen antes de salir. */
+const pendingReports = new Set<Promise<void>>();
+
+/** Como lo hará n8n: `SENT` al enviar la respuesta y, 1 s después, `DELIVERED`. */
+async function reportDelivery(client: IntegrationClient, messageId: string): Promise<void> {
+  const report = (status: 'SENT' | 'DELIVERED') =>
+    client.reportStatus({
+      messageId,
+      providerMessageId: `sim-ai-${messageId}`,
+      status,
+      occurredAt: new Date().toISOString(),
+    });
+
+  await report('SENT');
+  const delivered = sleep(DELIVERED_AFTER_MS)
+    .then(() => report('DELIVERED'))
+    .then(() => undefined)
+    .catch((error: unknown) => console.warn(`  DELIVERED no reportado: ${String(error)}`))
+    .finally(() => pendingReports.delete(delivered));
+  pendingReports.add(delivered);
+}
 
 function config(): { apiUrl: string; apiKey: string } {
   const apiKey = process.env.DEMO_CHANNEL_API_KEY;
@@ -44,7 +68,8 @@ async function playTurn(
     idempotencyKey: turn.id,
     text: turn.ai,
   });
-  if (!reply.sent) console.warn(`  IA rechazada en ${scenario.name}: ${reply.reason}`);
+  if (reply.sent) await reportDelivery(client, reply.messageId);
+  else console.warn(`  IA rechazada en ${scenario.name}: ${reply.reason}`);
   return { duplicate: inbound.duplicate, aiSent: reply.sent };
 }
 
@@ -61,6 +86,7 @@ async function runFixedScenario(client: IntegrationClient): Promise<void> {
     }
     console.log(`✓ ${scenario.name} (${scenario.phone}): ${scenario.turns.length} turnos`);
   }
+  await Promise.all(pendingReports);
   console.log(
     `\n5 conversaciones · ${customer} mensajes del cliente (${duplicates} ya existían) · ${ai} respuestas de IA registradas`,
   );

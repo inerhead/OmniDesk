@@ -5,11 +5,14 @@ import { useCurrentActor } from '@/features/actor/api/use-actor';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { useConversationCommand } from '../api/use-conversation-command';
+import { useSendMessage } from '../api/use-send-message';
 import { isNotFound, useConversation, useTimeline } from '../api/use-conversations';
 import { statusLabel } from '../model/describe-event';
+import { composerMode } from '../model/composer-mode';
 import { contactLabel } from '../model/to-bubble-view';
 import { ConversationActions } from './conversation-actions';
 import { MessageBubble } from './message-bubble';
+import { MessageComposer } from './message-composer';
 import { SystemLine } from './system-line';
 
 function BackLink() {
@@ -30,7 +33,11 @@ export function ChatView({ conversationId }: { conversationId: string }) {
   const timeline = useTimeline(conversationId);
   const conversation = useConversation(conversationId);
   const command = useConversationCommand(conversationId);
+  const messaging = useSendMessage(conversationId);
+  const notice = command.notice ?? messaging.notice;
+  const dismissNotice = command.notice ? command.dismissNotice : messaging.dismissNotice;
   const summary = conversation.data;
+  const mode = summary && actor ? composerMode(summary, actor) : { kind: 'none' as const };
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -106,18 +113,18 @@ export function ChatView({ conversationId }: { conversationId: string }) {
         )}
       </header>
 
-      {command.notice && (
+      {notice && (
         <div
           role="status"
           className="bg-warning text-warning-foreground flex shrink-0 items-center justify-between gap-2 px-4 py-2 text-sm"
         >
-          <span>{command.notice}</span>
+          <span>{notice}</span>
           <Button
             size="sm"
             variant="ghost"
             aria-label="Cerrar aviso"
             className="size-6 p-0"
-            onClick={command.dismissNotice}
+            onClick={dismissNotice}
           >
             <X aria-hidden />
           </Button>
@@ -163,11 +170,44 @@ export function ChatView({ conversationId }: { conversationId: string }) {
             item.kind === 'event' ? (
               <SystemLine key={item.id} event={item} />
             ) : (
-              <MessageBubble key={item.id} message={item} />
+              <MessageBubble
+                key={item.id}
+                message={item}
+                onRetry={mode.kind === 'compose' ? messaging.retry : undefined}
+                retrying={messaging.retryingId === item.id}
+              />
             ),
           )}
         </ol>
       </div>
+
+      {mode.kind === 'compose' && (
+        <MessageComposer sending={messaging.sending} onSend={messaging.send} />
+      )}
+
+      {mode.kind === 'take' && summary && actor && (
+        <div className="bg-background shrink-0 border-t px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-6">
+          <Button
+            className="w-full"
+            disabled={command.pending}
+            onClick={() =>
+              command.run({
+                command: 'assign',
+                controlVersion: summary.controlVersion,
+                memberId: actor.id,
+              })
+            }
+          >
+            Tomar conversación para responder
+          </Button>
+        </div>
+      )}
+
+      {mode.kind === 'assigned-other' && (
+        <p className="text-muted-foreground bg-background shrink-0 border-t px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-center text-sm md:px-6">
+          Asignada a {mode.name}
+        </p>
+      )}
     </div>
   );
 }

@@ -61,3 +61,30 @@ describe('parseEnv — modo demo', () => {
     ).toThrowError(/DEMO_MODE: DEMO_MODE=true no está permitido/);
   });
 });
+
+describe('parseEnv — mensajería saliente', () => {
+  it('usa el proveedor simulado y una tasa de fallo 0 por defecto', () => {
+    const env = parseEnv(valid);
+
+    expect(env.MESSAGING_PROVIDER).toBe('simulated');
+    expect(env.SIMULATED_PROVIDER_FAILURE_RATE).toBe(0);
+  });
+
+  it('convierte la tasa de fallo a número', () => {
+    expect(parseEnv({ ...valid, SIMULATED_PROVIDER_FAILURE_RATE: '0.25' })).toMatchObject({
+      SIMULATED_PROVIDER_FAILURE_RATE: 0.25,
+    });
+  });
+
+  it.each(['-0.1', '1.5', 'mucho'])('rechaza la tasa de fallo %s', (rate) => {
+    expect(() => parseEnv({ ...valid, SIMULATED_PROVIDER_FAILURE_RATE: rate })).toThrowError(
+      /SIMULATED_PROVIDER_FAILURE_RATE/,
+    );
+  });
+
+  it('rechaza un proveedor que no sea simulated', () => {
+    expect(() => parseEnv({ ...valid, MESSAGING_PROVIDER: 'n8n' })).toThrowError(
+      /MESSAGING_PROVIDER/,
+    );
+  });
+});

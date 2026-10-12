@@ -11,6 +11,23 @@ export interface NewConversation {
   preview: string;
 }
 
+/** Cambios de un mensaje saliente por un estado de entrega. */
+export interface MessageDeliveryUpdate {
+  status: Message['status'];
+  /** Solo si cambia: `providerMessageId` del envío. */
+  externalId?: string;
+  /** `null` borra el motivo del fallo anterior. */
+  failureReason: string | null;
+  at: Date;
+}
+
+/** Mensaje saliente listo para entregar al proveedor, con el teléfono del destinatario. */
+export interface OutboundForSend {
+  message: Message;
+  tenantId: string;
+  to: string;
+}
+
 export interface ConversationRepository {
   findById(tenantId: string, id: string): Promise<Conversation | null>;
   /** Igual que `findById`, bloqueando la fila hasta el fin de la transacción (`FOR UPDATE`). */
@@ -36,6 +53,13 @@ export interface ConversationRepository {
     event: NewConversationEvent,
     at: Date,
   ): Promise<ConversationEvent>;
+  findMessageById(tenantId: string, messageId: string): Promise<Message | null>;
+  /** Idempotencia del composer: el mensaje que ya creó ese `clientMessageId`, si existe. */
+  findMessageByClientId(conversationId: string, clientMessageId: string): Promise<Message | null>;
+  /** Mensaje saliente con el teléfono del contacto en el canal, o `null` si no existe. */
+  findOutboundForSend(tenantId: string, messageId: string): Promise<OutboundForSend | null>;
+  /** Actualiza el estado de entrega. La fila de la conversación debe estar bloqueada. */
+  updateMessageDelivery(messageId: string, update: MessageDeliveryUpdate): Promise<Message>;
   findMessageByExternalId(channelId: string, externalId: string): Promise<Message | null>;
   findMessageByIdempotencyKey(
     conversationId: string,

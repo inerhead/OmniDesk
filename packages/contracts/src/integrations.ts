@@ -53,3 +53,23 @@ export const OutboundAiMessageRejectedSchema = z.object({
   reason: z.enum(['CONTROL_CHANGED', 'CONVERSATION_CLOSED']),
 });
 export type OutboundAiMessageRejected = z.infer<typeof OutboundAiMessageRejectedSchema>;
+
+/** `POST /api/v1/integrations/messages/status`: la integración reporta el estado de entrega. */
+export const DeliveryStatusSchema = z.enum(['SENT', 'DELIVERED', 'READ', 'FAILED']);
+export type DeliveryStatus = z.infer<typeof DeliveryStatusSchema>;
+
+export const DeliveryStatusRequestSchema = z.object({
+  messageId: z.uuid(),
+  providerMessageId: z.string().min(1).max(200),
+  status: DeliveryStatusSchema,
+  occurredAt: z.iso.datetime(),
+  error: z.string().max(500).optional(),
+});
+export type DeliveryStatusRequest = z.infer<typeof DeliveryStatusRequestSchema>;
+
+export const DeliveryStatusResponseSchema = z.object({
+  /** `false` si el reporte se ignoró (repetido o fuera de orden). */
+  applied: z.boolean(),
+  status: z.enum(['RECEIVED', 'PENDING', 'SENT', 'DELIVERED', 'READ', 'FAILED']),
+});
+export type DeliveryStatusResponse = z.infer<typeof DeliveryStatusResponseSchema>;

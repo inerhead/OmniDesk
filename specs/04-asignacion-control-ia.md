@@ -1,6 +1,6 @@
 # SPEC 04 — Asignación de conversaciones y control de IA
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:** SPEC 02, SPEC 03
 > **Date:** 2026-10-12
 > **Objective:** Supervisores y agentes demo pueden tomar, asignar, liberar, cerrar y reabrir conversaciones según su rol, con bandejas IA/Mías/Todas/Cerradas, eventos visibles en el historial y suspensión inmediata de la IA vía `controlVersion`, todo actualizado en tiempo real.

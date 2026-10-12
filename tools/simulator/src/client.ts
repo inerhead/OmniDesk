@@ -1,9 +1,13 @@
 import {
+  DeliveryStatusRequestSchema,
+  DeliveryStatusResponseSchema,
   InboundMessageRequestSchema,
   InboundMessageResponseSchema,
   OutboundAiMessageRejectedSchema,
   OutboundAiMessageRequestSchema,
   OutboundAiMessageResponseSchema,
+  type DeliveryStatusRequest,
+  type DeliveryStatusResponse,
   type InboundMessageRequest,
   type InboundMessageResponse,
   type OutboundAiMessageRequest,
@@ -47,6 +51,16 @@ export class IntegrationClient {
       sent: true,
       messageId: OutboundAiMessageResponseSchema.parse(await res.json()).messageId,
     };
+  }
+
+  /** Reporta el estado de entrega de una respuesta de IA, como lo hará n8n. */
+  async reportStatus(request: DeliveryStatusRequest): Promise<DeliveryStatusResponse> {
+    const res = await this.post(
+      '/api/v1/integrations/messages/status',
+      DeliveryStatusRequestSchema.parse(request),
+    );
+    if (res.status !== 200) throw await httpError(res);
+    return DeliveryStatusResponseSchema.parse(await res.json());
   }
 
   private post(path: string, body: unknown): Promise<Response> {

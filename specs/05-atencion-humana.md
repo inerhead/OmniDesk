@@ -1,6 +1,6 @@
 # SPEC 05 — Atención humana: el agente responde desde la PWA
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:** SPEC 03, SPEC 04
 > **Date:** 2026-10-12
 > **Objective:** El agente asignado escribe desde la PWA. El mensaje se registra como `PENDING`, se envía por el puerto `MessagingProvider` (adaptador simulado) mediante el Outbox con reintentos, y su estado de entrega (enviado, entregado, leído o fallido) se ve en tiempo real con opción de reintentar.

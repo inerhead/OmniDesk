@@ -6,7 +6,7 @@ export interface OutboxPort {
   /** Encola un evento en la transacción activa. Debe llamarse dentro de `TransactionRunner.run`. */
   enqueue(event: {
     tenantId: string;
-    type: 'conversation.changed';
+    type: 'conversation.changed' | 'message.send_requested';
     payload: object;
   }): Promise<void>;
 }

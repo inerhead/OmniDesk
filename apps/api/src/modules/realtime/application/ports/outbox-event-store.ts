@@ -12,7 +12,8 @@ export interface OutboxEventStore {
    * bloqueándolos hasta el fin de la transacción activa (`FOR UPDATE SKIP LOCKED`).
    */
   lockPending(limit: number, now: Date): Promise<PendingOutboxEvent[]>;
-  markPublished(id: string, at: Date): Promise<void>;
+  /** Marca el evento como procesado; `lastError` queda si se abandonó tras agotar los intentos. */
+  markPublished(id: string, at: Date, lastError?: string): Promise<void>;
   scheduleRetry(id: string, retry: { attempts: number; error: string; at: Date }): Promise<void>;
   /** Borra los eventos publicados antes de `cutoff`. Devuelve cuántos borró. */
   deletePublishedBefore(cutoff: Date): Promise<number>;

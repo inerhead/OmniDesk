@@ -4,10 +4,12 @@ import {
   DEMO_MEMBER_HEADER,
   ListConversationsResponseSchema,
   ListTimelineResponseSchema,
+  SendAgentMessageResponseSchema,
   type ConversationSummary,
   type Inbox,
   type ListConversationsResponse,
   type ListTimelineResponse,
+  type Message,
 } from '@omnidesk/contracts';
 import { ApiHttpError, getJson, postJson } from '@/shared/api/http-client';
 
@@ -80,4 +82,45 @@ export async function postConversationCommand(
   if (status === 200) return ConversationSummarySchema.parse(body);
   const rejected = ConversationCommandRejectedSchema.safeParse(body);
   throw new ConversationCommandError(status, rejected.success ? rejected.data.reason : undefined);
+}
+
+/** El envío o el reintento no se aplicó. */
+export class SendMessageError extends ApiHttpError {
+  constructor(status: number) {
+    super(status);
+    this.name = 'SendMessageError';
+  }
+}
+
+/**
+ * Registra el mensaje del agente (`PENDING`); el API lo envía por el Outbox. Es idempotente por
+ * `clientMessageId`: repetir la petición tras un error de red no duplica el mensaje.
+ */
+export async function postAgentMessage(
+  actorId: string,
+  conversationId: string,
+  payload: { text: string; clientMessageId: string },
+): Promise<Message> {
+  const { status, body } = await postJson(
+    `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages`,
+    payload,
+    asActor(actorId),
+  );
+  if (status === 200 || status === 201) return SendAgentMessageResponseSchema.parse(body);
+  throw new SendMessageError(status);
+}
+
+/** Devuelve un mensaje `FAILED` a `PENDING` para que el API lo envíe de nuevo. */
+export async function postRetryMessage(
+  actorId: string,
+  conversationId: string,
+  messageId: string,
+): Promise<Message> {
+  const { status, body } = await postJson(
+    `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/retry`,
+    undefined,
+    asActor(actorId),
+  );
+  if (status === 200) return SendAgentMessageResponseSchema.parse(body);
+  throw new SendMessageError(status);
 }

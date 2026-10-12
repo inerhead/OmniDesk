@@ -10,6 +10,8 @@ import {
   ListMessagesResponseSchema,
   ListTimelineQuerySchema,
   ListTimelineResponseSchema,
+  SendAgentMessageRequestSchema,
+  SendAgentMessageResponseSchema,
 } from '@omnidesk/contracts';
 import { createZodDto } from 'nestjs-zod';
 
@@ -28,3 +30,5 @@ export class ConversationCommandResponseDto extends createZodDto(
 export class ConversationCommandRejectedDto extends createZodDto(
   ConversationCommandRejectedSchema,
 ) {}
+export class SendAgentMessageRequestDto extends createZodDto(SendAgentMessageRequestSchema) {}
+export class SendAgentMessageResponseDto extends createZodDto(SendAgentMessageResponseSchema) {}

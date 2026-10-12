@@ -6,9 +6,12 @@ import type { ContactRepository } from '../../contacts/application/ports/contact
 import type { Contact } from '../../contacts/domain/contact';
 import type { MemberRepository } from '../../members/application/ports/member.repository';
 import type { Member, NewMember } from '../../members/domain/member';
+import type { EventInbox } from '../application/ports/event-inbox';
 import type {
   ConversationRepository,
+  MessageDeliveryUpdate,
   NewConversation,
+  OutboundForSend,
 } from '../application/ports/conversation.repository';
 import { appendMessage, type Conversation } from '../domain/conversation';
 import type { ConversationEvent, NewConversationEvent } from '../domain/conversation-event';
@@ -17,7 +20,10 @@ import type { Message, NewMessage } from '../domain/message';
 
 /** Dobles en memoria para las pruebas unitarias de los casos de uso. */
 
-export const noTransaction: TransactionRunner = { run: (work) => work() };
+export const noTransaction: TransactionRunner = {
+  run: (work) => work(),
+  runDetached: (work) => work(),
+};
 
 export class InMemoryOutbox implements OutboxPort {
   readonly events: Parameters<OutboxPort['enqueue']>[0][] = [];
@@ -48,7 +54,11 @@ export class InMemoryContacts implements ContactRepository {
 
 export class InMemoryConversations implements ConversationRepository {
   readonly conversations: Conversation[] = [];
-  readonly messages: (Message & NewMessage & { channelId: string })[] = [];
+  readonly messages: (Message & Omit<NewMessage, 'externalId'>)[] = [];
+  /** Nombres de los agentes remitentes, por id de miembro. */
+  readonly memberNames = new Map<string, string>();
+  /** Teléfono del destinatario de cada conversación (para `findOutboundForSend`). */
+  readonly phones = new Map<string, string>();
   readonly events: ConversationEvent[] = [];
   /** Simula que otra transacción creó la conversación a la vez la próxima vez que se llame a createOpen. */
   raceOnNextCreate = false;
@@ -108,6 +118,14 @@ export class InMemoryConversations implements ConversationRepository {
       channelId: conversation.channelId,
       conversationId: conversation.id,
       sequence: conversation.lastSequence,
+      externalId: message.externalId ?? null,
+      sender: message.senderMemberId
+        ? {
+            id: message.senderMemberId,
+            displayName: this.memberNames.get(message.senderMemberId) ?? message.senderMemberId,
+          }
+        : null,
+      failureReason: null,
       createdAt: at,
     };
     this.messages.push(stored);
@@ -130,6 +148,35 @@ export class InMemoryConversations implements ConversationRepository {
     };
     this.events.push(stored);
     return stored;
+  }
+
+  async findMessageById(tenantId: string, messageId: string) {
+    const message = this.messages.find((m) => m.id === messageId) ?? null;
+    const conversation = message && (await this.findById(tenantId, message.conversationId));
+    return conversation ? message : null;
+  }
+
+  async findMessageByClientId(conversationId: string, clientMessageId: string) {
+    return (
+      this.messages.find(
+        (m) => m.conversationId === conversationId && m.clientMessageId === clientMessageId,
+      ) ?? null
+    );
+  }
+
+  async findOutboundForSend(tenantId: string, messageId: string): Promise<OutboundForSend | null> {
+    const message = await this.findMessageById(tenantId, messageId);
+    if (!message || message.direction !== 'OUTBOUND') return null;
+    return { message, tenantId, to: this.phones.get(message.conversationId) ?? '+573001234567' };
+  }
+
+  async updateMessageDelivery(messageId: string, update: MessageDeliveryUpdate) {
+    const message = this.messages.find((m) => m.id === messageId);
+    if (!message) throw new Error(`sin mensaje ${messageId}`);
+    message.status = update.status;
+    message.failureReason = update.failureReason;
+    if (update.externalId !== undefined) message.externalId = update.externalId;
+    return message;
   }
 
   async findMessageByExternalId(channelId: string, externalId: string) {
@@ -171,5 +218,16 @@ export class InMemoryMembers implements MemberRepository {
 
   async list(tenantId: string) {
     return this.members.filter((m) => m.tenantId === tenantId);
+  }
+}
+
+export class InMemoryEventInbox implements EventInbox {
+  readonly recorded = new Set<string>();
+
+  async recordIfNew(channelId: string, externalId: string) {
+    const key = `${channelId}|${externalId}`;
+    if (this.recorded.has(key)) return false;
+    this.recorded.add(key);
+    return true;
   }
 }

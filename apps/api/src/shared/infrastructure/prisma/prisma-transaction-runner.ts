@@ -24,4 +24,8 @@ export class PrismaTransactionRunner implements TransactionRunner {
     if (activeTransaction.getStore()) return work();
     return this.prisma.$transaction((tx) => activeTransaction.run(tx, work));
   }
+
+  runDetached<T>(work: () => Promise<T>): Promise<T> {
+    return activeTransaction.exit(work);
+  }
 }

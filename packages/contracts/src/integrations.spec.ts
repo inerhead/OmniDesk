@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { InboundMessageRequestSchema, OutboundAiMessageRequestSchema } from './integrations';
+import {
+  DeliveryStatusRequestSchema,
+  InboundMessageRequestSchema,
+  OutboundAiMessageRequestSchema,
+} from './integrations';
 
 const inbound = {
   externalMessageId: 'wamid.123',
@@ -41,6 +45,39 @@ describe('OutboundAiMessageRequestSchema', () => {
   it('rechaza controlVersion negativo', () => {
     expect(
       OutboundAiMessageRequestSchema.safeParse({ ...outbound, controlVersion: -1 }).success,
+    ).toBe(false);
+  });
+});
+
+describe('DeliveryStatusRequestSchema', () => {
+  const report = {
+    messageId: '0199d8a0-0000-7000-8000-000000000001',
+    providerMessageId: 'sim-ai-1',
+    status: 'DELIVERED',
+    occurredAt: '2026-10-12T10:00:00.000Z',
+  };
+
+  it('acepta un reporte válido, con error opcional', () => {
+    expect(DeliveryStatusRequestSchema.parse(report)).toEqual(report);
+    expect(
+      DeliveryStatusRequestSchema.safeParse({ ...report, status: 'FAILED', error: 'sin red' })
+        .success,
+    ).toBe(true);
+  });
+
+  it.each(['PENDING', 'RECEIVED', 'otro'])('rechaza el estado %s', (status) => {
+    expect(DeliveryStatusRequestSchema.safeParse({ ...report, status }).success).toBe(false);
+  });
+
+  it('rechaza messageId que no es uuid, providerMessageId vacío y error de más de 500', () => {
+    expect(DeliveryStatusRequestSchema.safeParse({ ...report, messageId: 'x' }).success).toBe(
+      false,
+    );
+    expect(
+      DeliveryStatusRequestSchema.safeParse({ ...report, providerMessageId: '' }).success,
+    ).toBe(false);
+    expect(
+      DeliveryStatusRequestSchema.safeParse({ ...report, error: 'e'.repeat(501) }).success,
     ).toBe(false);
   });
 });

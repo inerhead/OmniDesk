@@ -1,4 +1,6 @@
 import {
+  DeliveryStatusRequestSchema,
+  DeliveryStatusResponseSchema,
   InboundMessageRequestSchema,
   InboundMessageResponseSchema,
   OutboundAiMessageRejectedSchema,
@@ -12,3 +14,5 @@ export class InboundMessageResponseDto extends createZodDto(InboundMessageRespon
 export class OutboundAiMessageRequestDto extends createZodDto(OutboundAiMessageRequestSchema) {}
 export class OutboundAiMessageResponseDto extends createZodDto(OutboundAiMessageResponseSchema) {}
 export class OutboundAiMessageRejectedDto extends createZodDto(OutboundAiMessageRejectedSchema) {}
+export class DeliveryStatusRequestDto extends createZodDto(DeliveryStatusRequestSchema) {}
+export class DeliveryStatusResponseDto extends createZodDto(DeliveryStatusResponseSchema) {}

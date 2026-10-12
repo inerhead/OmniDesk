@@ -10,11 +10,15 @@ const laura: ActorContext = { tenantId: 't1', memberId: 'laura', role: 'AGENT' }
 const message = (sequence: number): Message => ({
   id: `m${sequence}`,
   conversationId: 'c1',
+  channelId: 'ch1',
   sequence,
   direction: 'INBOUND',
   senderType: 'CUSTOMER',
   text: `mensaje ${sequence}`,
   status: 'RECEIVED',
+  externalId: null,
+  sender: null,
+  failureReason: null,
   createdAt: new Date(2026, 9, 12, 10, sequence),
 });
 

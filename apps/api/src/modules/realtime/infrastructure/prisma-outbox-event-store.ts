@@ -16,8 +16,11 @@ export class PrismaOutboxEventStore implements OutboxEventStore {
       FOR UPDATE SKIP LOCKED`;
   }
 
-  async markPublished(id: string, at: Date): Promise<void> {
-    await this.db.client.outboxEvent.update({ where: { id }, data: { publishedAt: at } });
+  async markPublished(id: string, at: Date, lastError?: string): Promise<void> {
+    await this.db.client.outboxEvent.update({
+      where: { id },
+      data: { publishedAt: at, ...(lastError !== undefined && { lastError }) },
+    });
   }
 
   async scheduleRetry(

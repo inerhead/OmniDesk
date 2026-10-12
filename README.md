@@ -97,6 +97,25 @@ Hasta que exista el login, el header tiene un selector **Actuar como** con los m
 
 Si dos pestañas pulsan **Tomar** casi a la vez, una gana y la otra muestra "La conversación cambió. Se actualizó con el estado actual".
 
+### Responder desde la PWA y ver los ticks
+
+Solo escribe el **agente asignado** (un supervisor primero se asigna la conversación).
+
+1. Como Sup. Demo, lanza `pnpm simulate` y abre una conversación de la pestaña **IA**: en lugar del composer verás **Tomar conversación para responder**. Las respuestas de IA del simulador ya muestran ✓✓ (entregado).
+2. Cambia a **Laura** (selector **Actuar como**), abre una conversación de la pestaña **IA** y pulsa **Tomar conversación para responder**. Aparece el composer.
+3. Escribe y pulsa Enter (Shift+Enter inserta un salto de línea). La burbuja nace con el reloj, pasa a ✓ (enviado), ✓✓ a los ≈ 1,5 s (entregado) y ✓✓ azul a los ≈ 4 s (leído), sin recargar. En otra pestaña como Sup. Demo (pestaña **Todas**) se ven el mensaje y sus ticks.
+4. Si la conversación está asignada a Mateo, Sup. Demo ve "Asignada a Mateo" y no el composer.
+
+El proveedor es simulado (`MESSAGING_PROVIDER=simulated`). Para probar el reintento, falla a propósito todos los envíos:
+
+```bash
+# en .env
+SIMULATED_PROVIDER_FAILURE_RATE=1     # número entre 0 y 1; por defecto 0
+docker compose up -d api              # recrea el API con la nueva variable
+```
+
+Al enviar un mensaje, el API reintenta con esperas de 1, 2, 4, 8 y 16 s (≈ 31 s) y lo deja en rojo con **No enviado · Reintentar**. Vuelve a poner `SIMULATED_PROVIDER_FAILURE_RATE=0`, recrea el API y pulsa **Reintentar**: el mensaje pasa a ✓.
+
 Las pruebas e2e del API usan una base aparte (`<base>_e2e`), así que no tocan estos datos.
 
 ## Probar la PWA

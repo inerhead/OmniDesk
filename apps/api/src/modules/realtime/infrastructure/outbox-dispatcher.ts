@@ -6,6 +6,7 @@ import {
   type OnModuleDestroy,
 } from '@nestjs/common';
 import { RealtimeEventSchema } from '@omnidesk/contracts';
+import { MESSAGE_SEND_REQUESTED } from '../../conversations/application/enqueue-send-requested';
 import {
   TRANSACTION_RUNNER,
   type TransactionRunner,
@@ -16,6 +17,10 @@ import {
   type PendingOutboxEvent,
 } from '../application/ports/outbox-event-store';
 import {
+  OUTBOUND_MESSAGE_SENDER,
+  type OutboundMessageSender,
+} from '../application/ports/outbound-message-sender';
+import {
   REALTIME_PUBLISHER,
   type RealtimePublisher,
 } from '../application/ports/realtime-publisher';
@@ -24,6 +29,8 @@ export const DISPATCH_INTERVAL_MS = 500;
 export const BATCH_SIZE = 100;
 export const CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 export const PUBLISHED_RETENTION_MS = 24 * 60 * 60 * 1000;
+/** Reintentos del envío a un proveedor: esperas de 1, 2, 4, 8 y 16 s (31 s en total). */
+export const SEND_MAX_RETRIES = 5;
 /** Tope del backoff `2^attempts` s: evita fechas inválidas si un evento falla muchas veces. */
 const MAX_BACKOFF_SECONDS = 60 * 60;
 
@@ -40,6 +47,7 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
     @Inject(TRANSACTION_RUNNER) private readonly tx: TransactionRunner,
     @Inject(OUTBOX_EVENT_STORE) private readonly store: OutboxEventStore,
     @Inject(REALTIME_PUBLISHER) private readonly publisher: RealtimePublisher,
+    @Inject(OUTBOUND_MESSAGE_SENDER) private readonly sender: OutboundMessageSender,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -81,13 +89,15 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
 
   private async dispatch(event: PendingOutboxEvent, now: Date): Promise<boolean> {
     try {
-      this.publish(event);
+      await this.handle(event);
       await this.store.markPublished(event.id, now);
       return true;
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (event.type === MESSAGE_SEND_REQUESTED) return this.failSend(event, message, now);
+
       const attempts = event.attempts + 1;
       const delaySeconds = Math.min(2 ** attempts, MAX_BACKOFF_SECONDS);
-      const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(`Outbox ${event.id}: intento ${attempts} fallido: ${message}`);
       await this.store.scheduleRetry(event.id, {
         attempts,
@@ -98,11 +108,38 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
     }
   }
 
-  private publish(event: PendingOutboxEvent): void {
-    if (event.type !== 'conversation.changed') {
-      throw new Error(`Tipo de evento no soportado: ${event.type}`);
+  private async handle(event: PendingOutboxEvent): Promise<void> {
+    switch (event.type) {
+      case 'conversation.changed':
+        this.publisher.publish(event.tenantId, RealtimeEventSchema.parse(event.payload));
+        return;
+      case MESSAGE_SEND_REQUESTED:
+        await this.sender.send(event.tenantId, event.payload);
+        return;
+      default:
+        throw new Error(`Tipo de evento no soportado: ${event.type}`);
     }
-    this.publisher.publish(event.tenantId, RealtimeEventSchema.parse(event.payload));
+  }
+
+  /**
+   * El proveedor falló: reintenta con backoff 1, 2, 4, 8 y 16 s (`attempts` cuenta los reintentos
+   * programados). Si ya se programaron 5, el mensaje pasa a `FAILED` y el evento se da por procesado.
+   */
+  private async failSend(event: PendingOutboxEvent, reason: string, now: Date): Promise<boolean> {
+    if (event.attempts < SEND_MAX_RETRIES) {
+      const attempts = event.attempts + 1;
+      this.logger.warn(`Outbox ${event.id}: envío fallido (reintento ${attempts}): ${reason}`);
+      await this.store.scheduleRetry(event.id, {
+        attempts,
+        error: reason,
+        at: new Date(now.getTime() + 2 ** (attempts - 1) * 1000),
+      });
+      return false;
+    }
+    this.logger.warn(`Outbox ${event.id}: envío abandonado tras ${event.attempts} reintentos`);
+    await this.sender.fail(event.tenantId, event.payload, reason);
+    await this.store.markPublished(event.id, now, reason);
+    return false;
   }
 
   /** Ejecuta `work` sin solaparse con otra ejecución en curso; los errores se registran. */

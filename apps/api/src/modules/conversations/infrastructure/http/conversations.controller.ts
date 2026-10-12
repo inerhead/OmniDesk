@@ -6,15 +6,18 @@ import {
   ForbiddenException,
   Get,
   HttpCode,
+  HttpStatus,
   NotFoundException,
   Param,
   ParseUUIDPipe,
   Post,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import {
   ApiConflictResponse,
+  ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -27,7 +30,10 @@ import type {
   ListConversationsResponse,
   ListMessagesResponse,
   ListTimelineResponse,
+  Message as MessageResponse,
+  SendAgentMessageResponse,
 } from '@omnidesk/contracts';
+import type { Response } from 'express';
 import type { ActorContext } from '../../../../shared/application/request-context';
 import { CurrentActor } from '../../../../shared/infrastructure/http/request-context.decorators';
 import { DemoActorGuard } from '../../../demo/infrastructure/http/demo-actor.guard';
@@ -43,6 +49,9 @@ import { ListMessagesUseCase } from '../../application/list-messages.use-case';
 import { ListTimelineUseCase } from '../../application/list-timeline.use-case';
 import { ReleaseConversationUseCase } from '../../application/release-conversation.use-case';
 import { ReopenConversationUseCase } from '../../application/reopen-conversation.use-case';
+import { RetryFailedMessageUseCase } from '../../application/retry-failed-message.use-case';
+import { SendAgentMessageUseCase } from '../../application/send-agent-message.use-case';
+import type { Message } from '../../domain/message';
 import {
   AssignConversationRequestDto,
   ConversationCommandRejectedDto,
@@ -55,10 +64,26 @@ import {
   ListMessagesResponseDto,
   ListTimelineQueryDto,
   ListTimelineResponseDto,
+  SendAgentMessageRequestDto,
+  SendAgentMessageResponseDto,
 } from './conversations.dto';
 
 function toSummaryDto(summary: ConversationSummary): ConversationSummaryResponse {
   return { ...summary, lastMessageAt: summary.lastMessageAt.toISOString() };
+}
+
+function toMessageDto(message: Message): MessageResponse {
+  return {
+    id: message.id,
+    sequence: message.sequence,
+    direction: message.direction,
+    senderType: message.senderType,
+    text: message.text,
+    status: message.status,
+    sender: message.sender,
+    failureReason: message.failureReason,
+    createdAt: message.createdAt.toISOString(),
+  };
 }
 
 /**
@@ -81,6 +106,8 @@ export class ConversationsController {
     private readonly releaseConversation: ReleaseConversationUseCase,
     private readonly closeConversation: CloseConversationUseCase,
     private readonly reopenConversation: ReopenConversationUseCase,
+    private readonly sendAgentMessage: SendAgentMessageUseCase,
+    private readonly retryFailedMessage: RetryFailedMessageUseCase,
   ) {}
 
   @Get()
@@ -130,10 +157,7 @@ export class ConversationsController {
     const page = await this.listMessages.execute(actor, id, query.before, query.limit);
     if (!page) throw new NotFoundException('Conversación no encontrada');
     return {
-      items: page.items.map(({ conversationId: _conversationId, ...message }) => ({
-        ...message,
-        createdAt: message.createdAt.toISOString(),
-      })),
+      items: page.items.map(toMessageDto),
       prevCursor: page.prevCursor,
     };
   }
@@ -153,19 +177,75 @@ export class ConversationsController {
         if (item.kind === 'event') {
           return { ...item, createdAt: item.createdAt.toISOString() };
         }
-        return {
-          kind: 'message' as const,
-          id: item.id,
-          sequence: item.sequence,
-          direction: item.direction,
-          senderType: item.senderType,
-          text: item.text,
-          status: item.status,
-          createdAt: item.createdAt.toISOString(),
-        };
+        return { kind: 'message' as const, ...toMessageDto(item) };
       }),
       prevCursor: page.prevCursor,
     };
+  }
+
+  @Post(':id/messages')
+  @ApiCreatedResponse({
+    type: SendAgentMessageResponseDto.Output,
+    description: 'Mensaje registrado como PENDING; el Outbox lo envía al proveedor.',
+  })
+  @ApiOkResponse({
+    type: SendAgentMessageResponseDto.Output,
+    description: 'Idempotente: el `clientMessageId` ya estaba registrado.',
+  })
+  @ApiConflictResponse({ description: 'La conversación está cerrada (`INVALID_STATE`).' })
+  @ApiForbiddenResponse({ description: 'Solo escribe el agente asignado.' })
+  @ApiNotFoundResponse({ description: 'La conversación no existe o no puedes verla.' })
+  async send(
+    @CurrentActor() actor: ActorContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: SendAgentMessageRequestDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<SendAgentMessageResponse> {
+    const result = await this.sendAgentMessage.execute(actor, {
+      conversationId: id,
+      text: body.text,
+      clientMessageId: body.clientMessageId,
+    });
+    switch (result.kind) {
+      case 'not-found':
+        throw new NotFoundException('Conversación no encontrada');
+      case 'forbidden':
+        throw new ForbiddenException('Solo el agente asignado puede responder');
+      case 'rejected':
+        throw new ConflictException({ reason: result.reason });
+      case 'ok':
+        res.status(result.duplicate ? HttpStatus.OK : HttpStatus.CREATED);
+        return toMessageDto(result.message);
+    }
+  }
+
+  @Post(':id/messages/:messageId/retry')
+  @HttpCode(200)
+  @ApiOkResponse({ type: SendAgentMessageResponseDto.Output })
+  @ApiConflictResponse({ description: 'El mensaje no está en FAILED (`INVALID_STATE`).' })
+  @ApiForbiddenResponse({ description: 'Solo reintenta el agente asignado.' })
+  @ApiNotFoundResponse({
+    description: 'La conversación o el mensaje no existen, o no puedes verla.',
+  })
+  async retry(
+    @CurrentActor() actor: ActorContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('messageId', new ParseUUIDPipe()) messageId: string,
+  ): Promise<SendAgentMessageResponse> {
+    const result = await this.retryFailedMessage.execute(actor, {
+      conversationId: id,
+      messageId,
+    });
+    switch (result.kind) {
+      case 'not-found':
+        throw new NotFoundException('Mensaje no encontrado');
+      case 'forbidden':
+        throw new ForbiddenException('Solo el agente asignado puede reintentar');
+      case 'rejected':
+        throw new ConflictException({ reason: result.reason });
+      case 'ok':
+        return toMessageDto(result.message);
+    }
   }
 
   @Post(':id/assign')

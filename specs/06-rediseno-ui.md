@@ -1,6 +1,6 @@
 # SPEC 06 — Rediseño UI: sistema de diseño, bandeja, chat y panel de contacto
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:** SPEC 05
 > **Date:** 2026-10-12
 > **Objective:** La PWA adopta un aspecto de herramienta de soporte profesional, con tokens de marca, tema claro/oscuro/sistema, rail de navegación, lista y chat rediseñados, panel de contacto plegable y búsqueda de conversaciones por nombre o teléfono en el servidor.

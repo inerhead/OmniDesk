@@ -11,13 +11,20 @@ import { fetchConversation, fetchConversations, fetchTimeline } from './conversa
 export const conversationDetailKey = (actorId: string | undefined, conversationId: string) =>
   ['conversations', actorId, 'detail', conversationId] as const;
 
-export function useConversations(inbox: Inbox) {
+/** `q` ya normalizado (`normalizeSearch`); sin `q`, la bandeja completa. */
+export function useConversations(inbox: Inbox, q: string | undefined) {
   const { actor } = useCurrentActor();
   const connection = useConnectionStatus();
   return useInfiniteQuery({
-    queryKey: ['conversations', actor?.id, 'list', inbox],
-    queryFn: ({ pageParam }) => fetchConversations(actor!.id, inbox, pageParam),
+    queryKey: ['conversations', actor?.id, 'list', inbox, q ?? ''],
+    queryFn: ({ pageParam }) => fetchConversations(actor!.id, inbox, q, pageParam),
     enabled: actor !== null,
+    // Al escribir en el buscador se mantiene la lista anterior hasta tener resultados; al cambiar
+    // de bandeja o de actor, no: se ven los skeletons.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === actor?.id && previousQuery?.queryKey[3] === inbox
+        ? previous
+        : undefined,
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     refetchInterval: backupPollingInterval(connection),

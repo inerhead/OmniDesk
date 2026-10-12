@@ -81,13 +81,13 @@ El simulador corre en el host (Node 24 + pnpm) y llama a `http://localhost:${GAT
 
 ### Ver el tiempo real
 
-Con la bandeja abierta en <http://localhost:8080/conversations>, lanza `pnpm simulate --live`: cada mensaje nuevo aparece en la lista y en el chat abierto en ≤ 1 s, sin recargar. El badge del header muestra **En vivo** mientras el socket (`/api/realtime`) está conectado.
+Con la bandeja abierta en <http://localhost:8080/conversations>, lanza `pnpm simulate --live`: cada mensaje nuevo aparece en la lista y en el chat abierto en ≤ 1 s, sin recargar. El punto de conexión (abajo en el rail; en móvil, en la barra inferior) está verde, con el tooltip **En vivo**, mientras el socket (`/api/realtime`) está conectado. Si estás leyendo más arriba en el historial, el chat no salta: aparece **1 mensaje nuevo** y, al pulsarlo, baja al final.
 
-Para ver el respaldo, detén el API con `docker compose stop api`: el badge pasa a **Reconectando…** y la lista se refresca como máximo cada 15 s. Al levantarlo de nuevo, el badge vuelve a **En vivo** y aparecen los mensajes que llegaron mientras tanto.
+Para ver el respaldo, detén el API con `docker compose stop api`: el punto pasa a ámbar (**Reconectando…**) y la lista se refresca como máximo cada 15 s. Al levantarlo de nuevo, vuelve a verde (**En vivo**) y aparecen los mensajes que llegaron mientras tanto.
 
 ### Asignar una conversación y suspender la IA
 
-Hasta que exista el login, el header tiene un selector **Actuar como** con los miembros demo: **Sup. Demo** (supervisor, ve las 4 bandejas), **Laura** y **Mateo** (agentes, sin la pestaña "Todas"). La elección se guarda en el navegador y la web la envía en la cabecera `X-Demo-Member-Id` (solo con `DEMO_MODE=true`).
+Hasta que exista el login, el avatar de abajo del rail (en móvil, en la barra inferior) abre el menú **Actuar como** con los miembros demo: **Sup. Demo** (supervisor, ve las 4 bandejas), **Laura** y **Mateo** (agentes, sin la pestaña "Todas"). La elección se guarda en el navegador y la web la envía en la cabecera `X-Demo-Member-Id` (solo con `DEMO_MODE=true`).
 
 1. Abre la bandeja como Sup. Demo y lanza `pnpm simulate --live`.
 2. Abre una conversación de la pestaña **IA** y elige **Asignar a… → Laura**.
@@ -117,6 +117,14 @@ docker compose up -d api              # recrea el API con la nueva variable
 Al enviar un mensaje, el API reintenta con esperas de 1, 2, 4, 8 y 16 s (≈ 31 s) y lo deja en rojo con **No enviado · Reintentar**. Vuelve a poner `SIMULATED_PROVIDER_FAILURE_RATE=0`, recrea el API y pulsa **Reintentar**: el mensaje pasa a ✓.
 
 Las pruebas e2e del API usan una base aparte (`<base>_e2e`), así que no tocan estos datos.
+
+### Interfaz: layout, tema y búsqueda
+
+- **Layout.** En escritorio (≥ 768 px) hay un rail a la izquierda con **Conversaciones** y **Estado** y, abajo, el punto de conexión, el menú de tema, **Instalar app** y **Actuar como**. Luego van la lista y el chat. En ≥ 1280 px se suma el **panel de contacto** como tercera columna; se pliega con el botón de la cabecera del chat y el navegador recuerda si estaba abierto (`omnidesk:contact-panel`). Por debajo de 1280 px, el mismo botón lo abre como hoja lateral (se cierra con Esc o tocando fuera). En móvil, el rail pasa a una barra inferior que se oculta al abrir un chat.
+- **Tema.** El menú de tema ofrece **Claro**, **Oscuro** y **Sistema** (el valor por defecto). La elección se guarda por dispositivo en `localStorage` (`omnidesk:theme`) y un script inline de `index.html` la aplica antes del primer render, sin parpadeo. Con **Sistema**, el tema sigue al sistema operativo sin recargar.
+- **Búsqueda.** El buscador de la lista filtra por nombre del contacto o por teléfono dentro de la bandeja activa. Se aplica en el servidor (`GET /api/v1/conversations?q=`) tras 300 ms sin teclear, y el término queda en la URL (`/conversations?inbox=all&q=juan`). Si el término tiene 3 dígitos o más, también busca en el teléfono, ignorando espacios, `+`, `-` y paréntesis: `300 123` encuentra `+573001234567`.
+- **Chat.** El historial se separa por días (**Hoy**, **Ayer**, "lunes, 5 de octubre"). Los mensajes seguidos del mismo emisor con menos de 5 min entre sí comparten un solo encabezado. Los colores identifican al emisor: cliente en gris a la izquierda, IA en índigo claro con icono de bot y agente en el color de marca.
+- **Tipografía.** Inter va empaquetada con la app (`@fontsource-variable/inter`) y el service worker la precachea: no hay peticiones a dominios externos y funciona sin conexión.
 
 ## Probar la PWA
 

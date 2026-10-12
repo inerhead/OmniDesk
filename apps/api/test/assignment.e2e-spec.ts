@@ -501,6 +501,111 @@ describe('Asignación y control de IA (e2e)', () => {
     });
   });
 
+  describe('búsqueda (q)', () => {
+    /** Inbound de un contacto nuevo con nombre propio; un token único aísla cada ejecución. */
+    const inboundNamed = async (displayName: string, from = phone()) =>
+      (
+        await http()
+          .post('/api/v1/integrations/messages/inbound')
+          .set('Authorization', `Bearer ${E2E_DEMO_KEY}`)
+          .send({
+            externalMessageId: randomUUID(),
+            from: { externalId: from, displayName },
+            text: 'Hola',
+            sentAt: new Date().toISOString(),
+          })
+          .expect(201)
+      ).body as { conversationId: string; controlVersion: number };
+
+    const search = async (actor: string, inbox: Inbox, q: string) => {
+      const res = await get(actor, '/api/v1/conversations')
+        .query({ inbox, q, limit: 100 })
+        .expect(200);
+      return ListConversationsResponseSchema.parse(res.body).items;
+    };
+
+    it('busca por nombre parcial sin distinguir mayúsculas', async () => {
+      const token = randomUUID().slice(0, 8);
+      const juana = await inboundNamed(`Juana ${token}`);
+      await inboundNamed(`Pedro ${token}`);
+
+      const items = await search(owner, 'all', `UANA ${token}`);
+      const ids = items.map((item) => item.id);
+
+      expect(ids).toContain(juana.conversationId);
+      expect(items.every((item) => item.contact.displayName?.toLowerCase().includes('juana'))).toBe(
+        true,
+      );
+    });
+
+    it('busca por teléfono con espacios', async () => {
+      const from = phone();
+      const conversation = await inboundNamed('Sin nombre útil', from);
+      const digits = `${from.slice(3, 6)} ${from.slice(6)}`;
+
+      const items = await search(owner, 'all', digits);
+
+      expect(items.map((item) => item.id)).toContain(conversation.conversationId);
+      expect(items.every((item) => item.contact.externalId.includes(from.slice(3)))).toBe(true);
+    });
+
+    it('un término sin coincidencias devuelve una lista vacía', async () => {
+      expect(await search(owner, 'all', `nadie-${randomUUID()}`)).toEqual([]);
+    });
+
+    it('q de 1 carácter responde 400', async () => {
+      await get(owner, '/api/v1/conversations').query({ inbox: 'all', q: 'a' }).expect(400);
+    });
+
+    it('respeta la bandeja: una conversación asignada no aparece en ai', async () => {
+      const token = randomUUID().slice(0, 8);
+      const conversation = await inboundNamed(`Bandeja ${token}`);
+      await assign(owner, conversation.conversationId, laura, conversation.controlVersion).expect(
+        200,
+      );
+
+      expect(await search(owner, 'ai', token)).toEqual([]);
+      expect((await search(owner, 'all', token)).map((item) => item.id)).toEqual([
+        conversation.conversationId,
+      ]);
+    });
+
+    it('Mateo nunca encuentra conversaciones asignadas a Laura', async () => {
+      const token = randomUUID().slice(0, 8);
+      const conversation = await inboundNamed(`Privada ${token}`);
+      await assign(owner, conversation.conversationId, laura, conversation.controlVersion).expect(
+        200,
+      );
+      await command(
+        laura,
+        conversation.conversationId,
+        'close',
+        await version(conversation.conversationId),
+      ).expect(200);
+
+      for (const inbox of ['ai', 'mine', 'closed'] as const) {
+        expect(await search(mateo, inbox, token)).toEqual([]);
+      }
+      expect((await search(laura, 'closed', token)).map((item) => item.id)).toEqual([
+        conversation.conversationId,
+      ]);
+    });
+
+    it('createdAt aparece en la lista y en el detalle', async () => {
+      const token = randomUUID().slice(0, 8);
+      const conversation = await inboundNamed(`Fecha ${token}`);
+
+      const [item] = await search(owner, 'ai', token);
+      const detail = await get(
+        owner,
+        `/api/v1/conversations/${conversation.conversationId}`,
+      ).expect(200);
+
+      expect(item?.createdAt).toEqual(expect.any(String));
+      expect(ConversationSummarySchema.parse(detail.body).createdAt).toBe(item?.createdAt);
+    });
+  });
+
   it('documenta los endpoints nuevos en Swagger', async () => {
     const res = await http().get('/api/docs-json').expect(200);
 

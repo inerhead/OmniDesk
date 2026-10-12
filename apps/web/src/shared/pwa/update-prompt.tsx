@@ -22,7 +22,7 @@ export function UpdatePrompt() {
   return (
     <div
       role="status"
-      className="bg-card text-card-foreground fixed inset-x-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-50 mx-auto flex max-w-md items-center justify-between gap-3 rounded-lg border p-3 shadow-lg"
+      className="bg-card text-card-foreground fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] md:bottom-[calc(1rem+env(safe-area-inset-bottom))] z-50 mx-auto flex max-w-md items-center justify-between gap-3 rounded-lg border p-3 shadow-lg"
     >
       <span className="text-sm font-medium">Nueva versión disponible</span>
       <div className="flex gap-2">

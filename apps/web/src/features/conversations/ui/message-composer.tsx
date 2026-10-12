@@ -45,13 +45,13 @@ export function MessageComposer({
 
   return (
     <form
-      className="bg-background shrink-0 border-t px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:px-6"
+      className="bg-background shrink-0 border-t px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-6"
       onSubmit={(event) => {
         event.preventDefault();
         submit();
       }}
     >
-      <div className="flex items-end gap-2">
+      <div className="border-input bg-muted/40 focus-within:border-ring focus-within:ring-ring/50 flex items-end gap-2 rounded-3xl border py-1 pr-1 pl-4 transition-[color,box-shadow] focus-within:ring-[3px] dark:bg-input/30">
         <textarea
           ref={textareaRef}
           value={text}
@@ -59,11 +59,17 @@ export function MessageComposer({
           maxLength={MAX_MESSAGE_LENGTH}
           aria-label="Escribe un mensaje"
           placeholder="Escribe un mensaje…"
-          className="border-input bg-background focus-visible:ring-ring/50 max-h-40 min-h-9 flex-1 resize-none rounded-md border px-3 py-2 text-base outline-none focus-visible:ring-[3px] md:text-sm"
+          className="placeholder:text-muted-foreground max-h-40 min-h-9 flex-1 resize-none bg-transparent py-2 text-base outline-none md:text-sm"
           onChange={(event) => setText(event.target.value)}
           onKeyDown={onKeyDown}
         />
-        <Button type="submit" size="sm" className="h-9" disabled={!canSend} aria-label="Enviar">
+        <Button
+          type="submit"
+          size="icon"
+          className="rounded-full"
+          disabled={!canSend}
+          aria-label="Enviar"
+        >
           <SendHorizontal aria-hidden />
         </Button>
       </div>

@@ -1,7 +1,7 @@
 import type { Inbox } from '@omnidesk/contracts';
 import type { ActorContext } from '../../../shared/application/request-context';
 import { canViewInbox, isManager } from '../domain/conversation-policy';
-import type { ConversationFilter } from './ports/conversation-read-model';
+import type { ConversationFilter, ConversationSearch } from './ports/conversation-read-model';
 
 export class InboxForbiddenError extends Error {
   constructor() {
@@ -11,13 +11,30 @@ export class InboxForbiddenError extends Error {
 }
 
 /**
+ * Búsqueda de la bandeja (docs/specs/06): por nombre y, si `q` tiene 3 dígitos o más tras quitar
+ * espacios, `+`, `-` y paréntesis, también por teléfono con esos dígitos. `q` vacío = sin filtro.
+ */
+export function conversationSearch(q: string | undefined): ConversationSearch | undefined {
+  const name = q?.trim();
+  if (!name) return undefined;
+  const digits = name.replace(/\D/g, '');
+  return digits.length >= 3 ? { name, phoneDigits: digits } : { name };
+}
+
+/**
  * Filtro de cada bandeja (docs/specs/04). Lanza `InboxForbiddenError` si el rol no puede verla.
  * - ai: abiertas sin agente · mine: abiertas asignadas al actor · all: abiertas (OWNER/ADMIN)
  * - closed: cerradas; un AGENT solo las que tienen su `assignedAgentId`.
+ * `q` se combina con `AND` con la bandeja y los permisos.
  */
-export function inboxFilter(actor: ActorContext, inbox: Inbox): ConversationFilter {
+export function inboxFilter(actor: ActorContext, inbox: Inbox, q?: string): ConversationFilter {
   if (!canViewInbox(actor, inbox)) throw new InboxForbiddenError();
+  const search = conversationSearch(q);
+  const filter = byInbox(actor, inbox);
+  return search ? { ...filter, search } : filter;
+}
 
+function byInbox(actor: ActorContext, inbox: Inbox): ConversationFilter {
   switch (inbox) {
     case 'ai':
       return { status: 'OPEN', assignedAgentId: null };

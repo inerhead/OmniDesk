@@ -69,7 +69,11 @@ import {
 } from './conversations.dto';
 
 function toSummaryDto(summary: ConversationSummary): ConversationSummaryResponse {
-  return { ...summary, lastMessageAt: summary.lastMessageAt.toISOString() };
+  return {
+    ...summary,
+    lastMessageAt: summary.lastMessageAt.toISOString(),
+    createdAt: summary.createdAt.toISOString(),
+  };
 }
 
 function toMessageDto(message: Message): MessageResponse {
@@ -125,6 +129,7 @@ export class ConversationsController {
         query.inbox,
         query.cursor,
         query.limit,
+        query.q,
       );
       return { items: page.items.map(toSummaryDto), nextCursor: page.nextCursor };
     } catch (error) {

@@ -28,6 +28,8 @@ export const ListConversationsQuerySchema = z.object({
   inbox: InboxSchema.default('ai'),
   cursor: z.string().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(30),
+  /** Nombre del contacto o teléfono; se recorta. Vacío = sin filtro. */
+  q: z.string().trim().min(2).max(100).optional(),
 });
 export type ListConversationsQuery = z.infer<typeof ListConversationsQuerySchema>;
 
@@ -52,6 +54,8 @@ export const ConversationSummarySchema = z.object({
   controlVersion: z.int().min(0),
   lastMessageAt: z.iso.datetime(),
   lastMessagePreview: z.string(),
+  /** Inicio de la conversación. */
+  createdAt: z.iso.datetime(),
 });
 export type ConversationSummary = z.infer<typeof ConversationSummarySchema>;
 

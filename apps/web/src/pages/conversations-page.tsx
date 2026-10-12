@@ -3,7 +3,7 @@ import { ConversationList } from '@/features/conversations/ui/conversation-list'
 import { cn } from '@/shared/lib/utils';
 
 /**
- * Escritorio (≥ md): lista y chat en dos paneles.
+ * Escritorio (≥ md): lista y chat en dos paneles (el panel de contacto lo añade el chat en ≥ xl).
  * Móvil: la lista ocupa la pantalla; al abrir una conversación, el chat la reemplaza.
  */
 export function ConversationsPage() {
@@ -13,7 +13,7 @@ export function ConversationsPage() {
     <div className="flex h-full min-h-0">
       <aside
         className={cn(
-          'min-h-0 w-full flex-col overflow-y-auto md:flex md:w-80 md:shrink-0 md:border-r lg:w-96',
+          'min-h-0 w-full flex-col md:flex md:w-80 md:shrink-0 md:border-r lg:w-96',
           conversationId ? 'hidden' : 'flex',
         )}
         aria-label="Conversaciones"

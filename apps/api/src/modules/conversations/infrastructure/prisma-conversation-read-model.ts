@@ -6,6 +6,7 @@ import type {
   ConversationFilter,
   ConversationPosition,
   ConversationReadModel,
+  ConversationSearch,
   ConversationSummaryView,
 } from '../application/ports/conversation-read-model';
 import type { Conversation } from '../domain/conversation';
@@ -19,6 +20,7 @@ const summarySelect = {
   channelId: true,
   lastMessageAt: true,
   lastMessagePreview: true,
+  createdAt: true,
   assignedAgent: { select: { id: true, displayName: true } },
   channel: { select: { id: true, name: true, type: true } },
   contact: {
@@ -45,6 +47,15 @@ function toSummaryView({ channelId, contact, ...row }: SummaryRow): Conversation
   };
 }
 
+function searchWhere({ name, phoneDigits }: ConversationSearch): Prisma.ContactWhereInput {
+  return {
+    OR: [
+      { displayName: { contains: name, mode: 'insensitive' } },
+      ...(phoneDigits ? [{ identities: { some: { externalId: { contains: phoneDigits } } } }] : []),
+    ],
+  };
+}
+
 @Injectable()
 export class PrismaConversationReadModel implements ConversationReadModel {
   constructor(private readonly db: PrismaDb) {}
@@ -60,6 +71,7 @@ export class PrismaConversationReadModel implements ConversationReadModel {
         tenantId,
         status: filter.status,
         ...(filter.assignedAgentId !== undefined && { assignedAgentId: filter.assignedAgentId }),
+        ...(filter.search && { contact: searchWhere(filter.search) }),
         ...(after && {
           OR: [
             { lastMessageAt: { lt: after.lastMessageAt } },

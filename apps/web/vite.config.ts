@@ -44,8 +44,9 @@ export default defineConfig(({ mode }) => {
           ],
         },
         workbox: {
-          // Solo el app shell. Las respuestas del API nunca se cachean (sin runtimeCaching).
-          globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
+          // Solo el app shell (incluida la fuente Inter, para que funcione sin conexión).
+          // Las respuestas del API nunca se cachean (sin runtimeCaching).
+          globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest,woff2}'],
           navigateFallback: '/index.html',
           navigateFallbackDenylist: [/^\/api\//],
           cleanupOutdatedCaches: true,

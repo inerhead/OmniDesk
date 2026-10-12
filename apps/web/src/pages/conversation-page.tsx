@@ -1,6 +1,7 @@
 import { MessageSquare } from 'lucide-react';
 import { useParams } from 'react-router';
 import { ChatView } from '@/features/conversations/ui/chat-view';
+import { EmptyState } from '@/shared/ui/empty-state';
 
 export function ConversationPage() {
   const { conversationId } = useParams();
@@ -12,9 +13,12 @@ export function ConversationPage() {
 /** Panel derecho en escritorio cuando no hay conversación abierta. */
 export function ConversationPlaceholder() {
   return (
-    <div className="text-muted-foreground flex h-full flex-col items-center justify-center gap-2">
-      <MessageSquare className="size-8" aria-hidden />
-      <p className="text-sm">Selecciona una conversación</p>
+    <div className="bg-muted/30 flex h-full items-center justify-center">
+      <EmptyState
+        icon={MessageSquare}
+        title="Selecciona una conversación"
+        description="Elige una conversación de la lista para ver el historial y responder."
+      />
     </div>
   );
 }

@@ -291,7 +291,12 @@ Humanos e IA comparten así el mismo ciclo: **registrar intención (`PENDING`) �
 - La paginación del historial usa cursor por `sequence`.
 - Bandejas iniciales: IA/general, Mis conversaciones, Todas y Cerradas.
 - **Por defecto**, un `AGENT` ve las conversaciones sin asignar (IA) y las suyas. Las bandejas "Todas" y las conversaciones asignadas a otros agentes son solo para `OWNER` y `ADMIN`.
-- En escritorio, vista responsive de tres áreas: bandejas, conversaciones y chat. En móvil, la navegación se adapta.
+- Layout (SPEC 06), con aspecto de herramienta de soporte profesional:
+  - **Rail** vertical de 64 px (≥ md) con los destinos (Conversaciones, Estado) y, abajo, el estado de conexión, el tema, instalar app y el usuario. En móvil pasa a una **barra inferior** que se oculta con un chat abierto.
+  - **Lista**: buscador (nombre o teléfono, en el servidor y dentro de la bandeja activa) y bandejas como control segmentado.
+  - **Chat**: separadores por día, burbujas agrupadas por emisor y eventos como píldoras.
+  - **Panel de contacto** de solo lectura: tercera columna plegable en ≥ xl y hoja lateral por debajo.
+- Tema Claro / Oscuro / Sistema por dispositivo (clase `.dark` en `<html>`). Tokens de diseño con el color de marca índigo y la tipografía Inter empaquetada, disponible sin conexión.
 - PWA instalable desde el incremento 0:
   - En iPhone: Safari → Compartir → "Añadir a pantalla de inicio". La app muestra esta instrucción.
   - En Android y escritorio: botón "Instalar app" (`beforeinstallprompt`).
@@ -310,7 +315,7 @@ Prefijo común: `/api/v1`. Los esquemas de cada contrato viven en `@omnidesk/con
 | `POST /integrations/messages/inbound` | Registrar mensaje recibido. Devuelve conversación, `aiAllowed` y `controlVersion` | 2 |
 | `POST /integrations/messages/outbound` | Registrar intención de respuesta de la IA (`PENDING`). Devuelve `sendAllowed` | 2 |
 | `POST /integrations/messages/status` | Actualizar entrega, lectura o error | 2 |
-| `GET /conversations?inbox=&cursor=` | Conversaciones autorizadas por bandeja | 3 |
+| `GET /conversations?inbox=&cursor=&q=` | Conversaciones autorizadas por bandeja; `q` busca por nombre o teléfono del contacto | 3 |
 | `GET /conversations/:id/messages?cursor=` | Historial paginado | 3 |
 | `POST /conversations/:id/assign` | Asignar o reasignar agente y suspender la IA | 4 |
 | `POST /conversations/:id/release` | Liberar y habilitar la IA | 4 |

@@ -1,16 +1,26 @@
 import type { Message } from '@omnidesk/contracts';
-import { AlertCircle, Check, CheckCheck, Clock } from 'lucide-react';
+import { AlertCircle, Bot, Check, CheckCheck, Clock } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { formatMessageTime } from '../model/format-time';
-import { toBubbleView, type DeliveryIcon } from '../model/to-bubble-view';
+import { toBubbleView, type BubbleView, type DeliveryIcon } from '../model/to-bubble-view';
 
 const toneClass = {
-  customer: 'bg-muted text-foreground rounded-bl-sm',
-  ai: 'bg-primary text-primary-foreground rounded-br-sm',
-  agent: 'bg-success text-success-foreground rounded-br-sm',
+  customer: 'bg-bubble-customer text-bubble-customer-foreground',
+  ai: 'bg-bubble-ai text-bubble-ai-foreground',
+  agent: 'bg-bubble-agent text-bubble-agent-foreground',
 } as const;
 
-function DeliveryTick({ icon }: { icon: DeliveryIcon }) {
+/** Cola visual: la esquina del lado del emisor se afila en el último mensaje del grupo. */
+const tailClass = { start: 'rounded-bl-md', end: 'rounded-br-md' } as const;
+
+/** El azul de "Leído" se ajusta a cada fondo para mantener el contraste. */
+const readClass = {
+  customer: 'text-info',
+  ai: 'text-info',
+  agent: 'text-sky-200',
+} as const;
+
+function DeliveryTick({ icon, tone }: { icon: DeliveryIcon; tone: BubbleView['tone'] }) {
   switch (icon) {
     case 'pending':
       return <Clock className="size-3" aria-label="Pendiente de envío" />;
@@ -19,7 +29,7 @@ function DeliveryTick({ icon }: { icon: DeliveryIcon }) {
     case 'delivered':
       return <CheckCheck className="size-3.5" aria-label="Entregado" />;
     case 'read':
-      return <CheckCheck className="size-3.5 text-sky-400" aria-label="Leído" />;
+      return <CheckCheck className={cn('size-3.5', readClass[tone])} aria-label="Leído" />;
     case 'failed':
       return <AlertCircle className="text-destructive size-3.5" aria-label="No enviado" />;
   }
@@ -27,29 +37,53 @@ function DeliveryTick({ icon }: { icon: DeliveryIcon }) {
 
 export function MessageBubble({
   message,
+  contactName,
+  showAuthor = true,
+  isLastOfGroup = true,
   onRetry,
   retrying = false,
 }: {
   message: Message;
+  /** Encabezado de los mensajes del cliente. */
+  contactName: string;
+  /** Primer mensaje del grupo: lleva el encabezado de autor. */
+  showAuthor?: boolean;
+  /** Último mensaje del grupo: lleva la cola. */
+  isLastOfGroup?: boolean;
   /** Solo lo recibe quien puede reenviar (el agente asignado). */
   onRetry?: (messageId: string) => void;
   retrying?: boolean;
 }) {
   const view = toBubbleView(message);
   const failed = view.deliveryIcon === 'failed';
+  const author = view.tone === 'customer' ? contactName : view.label;
   return (
-    <li className={cn('flex flex-col', view.align === 'end' ? 'items-end' : 'items-start')}>
+    <li
+      className={cn(
+        'flex flex-col',
+        view.align === 'end' ? 'items-end' : 'items-start',
+        showAuthor ? 'mt-3' : 'mt-0.5',
+      )}
+    >
+      {showAuthor && author && (
+        <span className="text-muted-foreground mb-1 flex items-center gap-1 px-1 text-xs font-medium">
+          {view.tone === 'ai' && <Bot className="size-3.5" aria-hidden />}
+          {author}
+        </span>
+      )}
       <div
         className={cn(
-          'flex max-w-[80%] flex-col gap-1 rounded-2xl px-3 py-2 shadow-xs',
+          'flex max-w-[85%] flex-col gap-0.5 rounded-2xl px-3 py-2 md:max-w-[70%]',
           toneClass[view.tone],
+          isLastOfGroup && tailClass[view.align],
         )}
       >
-        {view.label && <span className="text-xs font-semibold opacity-80">{view.label}</span>}
         <p className="text-sm break-words whitespace-pre-wrap">{message.text}</p>
-        <span className="flex items-center justify-end gap-1 text-[11px] opacity-70">
+        <span className="flex items-center justify-end gap-1 text-[11px] opacity-75">
           <time dateTime={message.createdAt}>{formatMessageTime(message.createdAt)}</time>
-          {view.deliveryIcon && !failed && <DeliveryTick icon={view.deliveryIcon} />}
+          {view.deliveryIcon && !failed && (
+            <DeliveryTick icon={view.deliveryIcon} tone={view.tone} />
+          )}
         </span>
       </div>
       {failed && (

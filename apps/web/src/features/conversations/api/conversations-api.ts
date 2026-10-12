@@ -19,9 +19,10 @@ const asActor = (actorId: string) => ({ headers: { [DEMO_MEMBER_HEADER]: actorId
 export async function fetchConversations(
   actorId: string,
   inbox: Inbox,
+  q: string | undefined,
   cursor?: string,
 ): Promise<ListConversationsResponse> {
-  const query = new URLSearchParams({ inbox, ...(cursor && { cursor }) });
+  const query = new URLSearchParams({ inbox, ...(q && { q }), ...(cursor && { cursor }) });
   const { status, body } = await getJson(`/api/v1/conversations?${query}`, asActor(actorId));
   if (status !== 200) throw new ApiHttpError(status);
   return ListConversationsResponseSchema.parse(body);

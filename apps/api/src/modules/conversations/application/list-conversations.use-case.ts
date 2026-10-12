@@ -24,8 +24,9 @@ export class ListConversationsUseCase {
     inbox: Inbox,
     cursor: string | undefined,
     limit: number,
+    q?: string,
   ): Promise<ConversationPage> {
-    const filter = inboxFilter(actor, inbox);
+    const filter = inboxFilter(actor, inbox, q);
     const after = cursor ? decodeConversationCursor(cursor) : null;
     const rows = await this.readModel.listSummaries(actor.tenantId, filter, after, limit + 1);
 

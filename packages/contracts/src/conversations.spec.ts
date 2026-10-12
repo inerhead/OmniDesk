@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AssignConversationRequestSchema,
   ConversationCommandRequestSchema,
+  ConversationSummarySchema,
   ListConversationsQuerySchema,
   ListMessagesQuerySchema,
   ListTimelineResponseSchema,
@@ -19,6 +20,42 @@ describe('ListConversationsQuerySchema', () => {
   it('rechaza limit fuera de rango', () => {
     expect(ListConversationsQuerySchema.safeParse({ limit: '0' }).success).toBe(false);
     expect(ListConversationsQuerySchema.safeParse({ limit: '101' }).success).toBe(false);
+  });
+});
+
+describe('ListConversationsQuerySchema q', () => {
+  it('es opcional y se recorta', () => {
+    expect(ListConversationsQuerySchema.parse({}).q).toBeUndefined();
+    expect(ListConversationsQuerySchema.parse({ q: '  jua ' }).q).toBe('jua');
+  });
+
+  it('exige entre 2 y 100 caracteres tras recortar', () => {
+    expect(ListConversationsQuerySchema.safeParse({ q: 'a' }).success).toBe(false);
+    expect(ListConversationsQuerySchema.safeParse({ q: ' a ' }).success).toBe(false);
+    expect(ListConversationsQuerySchema.safeParse({ q: 'a'.repeat(101) }).success).toBe(false);
+    expect(ListConversationsQuerySchema.safeParse({ q: '300 123' }).success).toBe(true);
+  });
+});
+
+describe('ConversationSummarySchema', () => {
+  const summary = {
+    id: '0199c0de-0000-7000-8000-000000000001',
+    status: 'OPEN',
+    aiActive: true,
+    contact: { id: '0199c0de-0000-7000-8000-000000000002', displayName: null, externalId: '+57' },
+    channel: { id: '0199c0de-0000-7000-8000-000000000003', name: 'WA', type: 'WHATSAPP' },
+    assignedAgent: null,
+    controlVersion: 0,
+    lastMessageAt: '2026-10-12T10:00:00.000Z',
+    lastMessagePreview: 'Hola',
+    createdAt: '2026-10-12T09:00:00.000Z',
+  };
+
+  it('exige createdAt', () => {
+    expect(ConversationSummarySchema.safeParse(summary).success).toBe(true);
+    expect(ConversationSummarySchema.safeParse({ ...summary, createdAt: undefined }).success).toBe(
+      false,
+    );
   });
 });
 

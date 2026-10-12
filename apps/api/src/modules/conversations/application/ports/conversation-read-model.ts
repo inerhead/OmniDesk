@@ -16,6 +16,7 @@ export interface ConversationSummaryView {
   channel: { id: string; name: string; type: 'WHATSAPP' };
   lastMessageAt: Date;
   lastMessagePreview: string;
+  createdAt: Date;
 }
 
 export interface ConversationPosition {
@@ -23,10 +24,20 @@ export interface ConversationPosition {
   id: string;
 }
 
-/** Filtro de una bandeja. `assignedAgentId`: `null` = sin asignar; sin definir = cualquiera. */
+/** Búsqueda por nombre del contacto (`ILIKE`) o, si hay `phoneDigits`, también por teléfono. */
+export interface ConversationSearch {
+  name: string;
+  phoneDigits?: string;
+}
+
+/**
+ * Filtro de una bandeja. `assignedAgentId`: `null` = sin asignar; sin definir = cualquiera.
+ * `search` se combina con `AND` con el resto.
+ */
 export interface ConversationFilter {
   status: ConversationStatus;
   assignedAgentId?: string | null;
+  search?: ConversationSearch;
 }
 
 /** Evento ya resuelto con los nombres de actor y destino, para la línea de tiempo. */

@@ -1,56 +1,51 @@
 import type { Inbox } from '@omnidesk/contracts';
+import {
+  Archive,
+  Bot,
+  Inbox as InboxIcon,
+  SearchX,
+  UserRound,
+  type LucideIcon,
+} from 'lucide-react';
 import { NavLink, useLocation, useSearchParams } from 'react-router';
 import { useCurrentActor } from '@/features/actor/api/use-actor';
 import { cn } from '@/shared/lib/utils';
-import { Badge } from '@/shared/ui/badge';
+import { Avatar } from '@/shared/ui/avatar';
 import { Button } from '@/shared/ui/button';
+import { EmptyState } from '@/shared/ui/empty-state';
+import { Skeleton } from '@/shared/ui/skeleton';
 import { useConversations } from '../api/use-conversations';
-import { formatConversationTime } from '../model/format-time';
+import { formatListTime } from '../model/format-time';
 import { EMPTY_INBOX_MESSAGE, parseInbox, visibleInboxes } from '../model/inbox';
+import { normalizeSearch } from '../model/search';
 import { contactLabel } from '../model/to-bubble-view';
+import { ConversationSearch } from './conversation-search';
 import { InboxTabs } from './inbox-tabs';
+import { StatusChip } from './status-chip';
 
-function initials(name: string): string {
-  const letters = name.match(/\p{L}/gu) ?? [];
-  const words = name.split(/\s+/).filter((word) => /\p{L}/u.test(word));
-  return (
-    words.length >= 2 ? `${words[0]![0]}${words[1]![0]}` : letters.slice(0, 2).join('') || '#'
-  ).toUpperCase();
-}
+const EMPTY_INBOX_ICON: Record<Inbox, LucideIcon> = {
+  ai: Bot,
+  mine: UserRound,
+  all: InboxIcon,
+  closed: Archive,
+};
 
 function ListSkeleton() {
   return (
     <ul aria-busy="true" aria-label="Cargando conversaciones">
       {Array.from({ length: 6 }, (_, index) => (
-        <li key={index} className="flex animate-pulse gap-3 border-b px-4 py-3">
-          <div className="bg-muted size-10 shrink-0 rounded-full" />
+        <li key={index} className="flex gap-3 px-4 py-3">
+          <Skeleton className="size-10 shrink-0 rounded-full" />
           <div className="flex flex-1 flex-col gap-2 py-1">
-            <div className="bg-muted h-3 w-1/2 rounded" />
-            <div className="bg-muted h-3 w-4/5 rounded" />
+            <div className="flex justify-between gap-4">
+              <Skeleton className="h-3.5 w-1/2" />
+              <Skeleton className="h-3 w-10" />
+            </div>
+            <Skeleton className="h-3 w-4/5" />
           </div>
         </li>
       ))}
     </ul>
-  );
-}
-
-/** Quién atiende: la IA, el agente asignado o "Cerrada". */
-function AttendedBy({
-  conversation,
-}: {
-  conversation: { status: 'OPEN' | 'CLOSED'; assignedAgent: { displayName: string } | null };
-}) {
-  if (conversation.status === 'CLOSED') {
-    return (
-      <Badge variant="outline">
-        Cerrada{conversation.assignedAgent && ` · ${conversation.assignedAgent.displayName}`}
-      </Badge>
-    );
-  }
-  return conversation.assignedAgent ? (
-    <Badge variant="warning">{conversation.assignedAgent.displayName}</Badge>
-  ) : (
-    <Badge variant="secondary">IA</Badge>
   );
 }
 
@@ -59,33 +54,38 @@ export function ConversationList() {
   const [searchParams] = useSearchParams();
   const { search } = useLocation();
   const inbox = actor ? parseInbox(searchParams.get('inbox'), actor.role) : 'ai';
-  const conversations = useConversations(inbox);
+  const q = normalizeSearch(searchParams.get('q') ?? '');
+  const conversations = useConversations(inbox, q);
 
   if (actorLoading) return <ListSkeleton />;
 
   if (actorError) {
     return (
-      <div className="flex flex-col items-center gap-3 px-4 py-10 text-center">
-        <p className="text-sm font-medium">No se pudieron cargar los miembros</p>
-        <Button size="sm" variant="outline" onClick={retry}>
-          Reintentar
-        </Button>
-      </div>
+      <EmptyState
+        title="No se pudieron cargar los miembros"
+        action={
+          <Button size="sm" variant="outline" onClick={retry}>
+            Reintentar
+          </Button>
+        }
+      />
     );
   }
 
   if (!actor) {
-    return (
-      <p className="text-muted-foreground px-4 py-10 text-center text-sm">
-        Elige con quién actuar para ver la bandeja
-      </p>
-    );
+    return <EmptyState icon={UserRound} title="Elige con quién actuar para ver la bandeja" />;
   }
 
   return (
-    <div className="flex flex-col">
-      <InboxTabs inboxes={visibleInboxes(actor.role)} active={inbox} />
-      <ListBody conversations={conversations} inbox={inbox} search={search} />
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="bg-background flex shrink-0 flex-col gap-3 border-b px-4 pt-4 pb-3">
+        <h1 className="text-lg font-semibold tracking-tight">Conversaciones</h1>
+        <ConversationSearch />
+        <InboxTabs inboxes={visibleInboxes(actor.role)} active={inbox} q={q} />
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <ListBody conversations={conversations} inbox={inbox} q={q} search={search} />
+      </div>
     </div>
   );
 }
@@ -93,43 +93,55 @@ export function ConversationList() {
 function ListBody({
   conversations,
   inbox,
+  q,
   search,
 }: {
   conversations: ReturnType<typeof useConversations>;
   inbox: Inbox;
+  q: string | undefined;
   search: string;
 }) {
   if (conversations.isPending) return <ListSkeleton />;
 
   if (conversations.isError && !conversations.data) {
     return (
-      <div className="flex flex-col items-center gap-3 px-4 py-10 text-center">
-        <p className="text-sm font-medium">No se pudieron cargar las conversaciones</p>
-        <Button size="sm" variant="outline" onClick={() => void conversations.refetch()}>
-          Reintentar
-        </Button>
-      </div>
+      <EmptyState
+        title="No se pudieron cargar las conversaciones"
+        action={
+          <Button size="sm" variant="outline" onClick={() => void conversations.refetch()}>
+            Reintentar
+          </Button>
+        }
+      />
     );
   }
 
   const items = conversations.data.pages.flatMap((page) => page.items);
   if (items.length === 0) {
-    return (
-      <p className="text-muted-foreground px-4 py-10 text-center text-sm">
-        {EMPTY_INBOX_MESSAGE[inbox]}
-        {inbox === 'ai' && (
-          <>
-            {' '}
-            Ejecuta <code className="bg-muted rounded px-1 py-0.5">pnpm simulate</code>.
-          </>
-        )}
-      </p>
+    return q ? (
+      <EmptyState
+        icon={SearchX}
+        title={`Sin resultados para «${q}»`}
+        description="Busca por nombre del contacto o por teléfono."
+      />
+    ) : (
+      <EmptyState
+        icon={EMPTY_INBOX_ICON[inbox]}
+        title={EMPTY_INBOX_MESSAGE[inbox]}
+        description={
+          inbox === 'ai' && (
+            <>
+              Ejecuta <code className="bg-muted rounded px-1 py-0.5">pnpm simulate</code>.
+            </>
+          )
+        }
+      />
     );
   }
 
   return (
     <>
-      <ul>
+      <ul className="flex flex-col gap-0.5 p-2" aria-busy={conversations.isPlaceholderData}>
         {items.map((conversation) => {
           const name = contactLabel(conversation.contact);
           return (
@@ -138,32 +150,33 @@ function ListBody({
                 to={{ pathname: `/conversations/${conversation.id}`, search }}
                 className={({ isActive }) =>
                   cn(
-                    'flex gap-3 border-b px-4 py-3 transition-colors',
-                    isActive ? 'bg-accent' : 'hover:bg-accent/50',
+                    'focus-visible:ring-ring/50 flex gap-3 rounded-lg px-3 py-2.5 transition-colors outline-none focus-visible:ring-[3px]',
+                    isActive
+                      ? 'bg-primary/10 dark:bg-primary/15'
+                      : 'hover:bg-accent hover:text-accent-foreground',
                   )
                 }
               >
-                <span className="bg-primary text-primary-foreground flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold">
-                  {initials(name)}
-                </span>
+                <Avatar
+                  id={conversation.contact.id}
+                  name={conversation.contact.displayName}
+                  fallback={conversation.contact.externalId}
+                />
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="flex items-baseline justify-between gap-2">
-                    <span className="truncate font-medium">{name}</span>
+                    <span className="truncate text-sm font-semibold">{name}</span>
                     <time
                       className="text-muted-foreground shrink-0 text-xs"
                       dateTime={conversation.lastMessageAt}
                     >
-                      {formatConversationTime(conversation.lastMessageAt)}
+                      {formatListTime(conversation.lastMessageAt)}
                     </time>
                   </span>
-                  <span className="text-muted-foreground truncate text-sm">
-                    {conversation.lastMessagePreview}
-                  </span>
-                  <span className="flex items-center gap-2">
-                    <AttendedBy conversation={conversation} />
-                    <span className="text-muted-foreground truncate text-xs">
-                      {conversation.channel.name}
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="text-muted-foreground truncate text-sm">
+                      {conversation.lastMessagePreview}
                     </span>
+                    <StatusChip conversation={conversation} />
                   </span>
                 </span>
               </NavLink>
@@ -172,7 +185,7 @@ function ListBody({
         })}
       </ul>
       {conversations.hasNextPage && (
-        <div className="p-3">
+        <div className="px-4 pb-4">
           <Button
             size="sm"
             variant="outline"

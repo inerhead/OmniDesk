@@ -1,48 +1,28 @@
-import { NavLink, Outlet } from 'react-router';
-import { ActorSelector } from '@/features/actor/ui/actor-selector';
-import { cn } from '@/shared/lib/utils';
-import { InstallPrompt } from '@/shared/pwa/install-prompt';
+import { Outlet, useMatch } from 'react-router';
 import { OfflineBanner } from '@/shared/pwa/offline-banner';
 import { UpdatePrompt } from '@/shared/pwa/update-prompt';
-import { ConnectionBadge } from '@/shared/realtime/connection-badge';
+import { BottomNav } from './bottom-nav';
+import { NavRail } from './nav-rail';
 
-const navLinkClass = ({ isActive }: { isActive: boolean }) =>
-  cn(
-    'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-    isActive ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:text-foreground',
-  );
-
+/**
+ * Escritorio (≥ md): rail a la izquierda y la página a la derecha.
+ * Móvil: la página arriba y la barra inferior, que se oculta con un chat abierto para dejar todo
+ * el alto al composer.
+ */
 export function AppLayout() {
+  const inChat = useMatch('/conversations/:conversationId') !== null;
+
   return (
-    <div className="flex h-dvh flex-col">
-      <OfflineBanner />
-      <header className="shrink-0 border-b">
-        <div className="flex min-h-14 flex-wrap items-center justify-between gap-2 px-4 py-2">
-          <div className="flex items-center gap-4">
-            <span className="flex items-center gap-2 font-semibold">
-              <img src="/logo.svg" alt="" className="size-6" />
-              OmniDesk
-            </span>
-            <nav className="flex items-center gap-1" aria-label="Principal">
-              <NavLink to="/conversations" className={navLinkClass}>
-                Conversaciones
-              </NavLink>
-              <NavLink to="/status" className={navLinkClass}>
-                Estado
-              </NavLink>
-            </nav>
-          </div>
-          <div className="flex items-center gap-2">
-            <ActorSelector />
-            <ConnectionBadge />
-            <InstallPrompt />
-          </div>
-        </div>
-      </header>
-      {/* Cada página controla su propio scroll: la bandeja usa dos paneles con scroll independiente. */}
-      <main className="min-h-0 flex-1 overflow-hidden">
-        <Outlet />
-      </main>
+    <div className="flex h-dvh">
+      <NavRail />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <OfflineBanner />
+        {/* Cada página controla su propio scroll: la bandeja usa paneles con scroll independiente. */}
+        <main className="min-h-0 flex-1 overflow-hidden">
+          <Outlet />
+        </main>
+        {!inChat && <BottomNav />}
+      </div>
       <UpdatePrompt />
     </div>
   );

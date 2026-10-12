@@ -1,13 +1,21 @@
+import { Compass } from 'lucide-react';
 import { Link } from 'react-router';
 import { Button } from '@/shared/ui/button';
+import { EmptyState } from '@/shared/ui/empty-state';
 
 export function NotFoundPage() {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-4 px-4 text-center">
-      <h1 className="text-2xl font-semibold tracking-tight">Página no encontrada</h1>
-      <Button asChild variant="outline">
-        <Link to="/conversations">Ir a conversaciones</Link>
-      </Button>
+    <div className="flex h-full items-center justify-center">
+      <EmptyState
+        icon={Compass}
+        title={<span className="text-2xl font-semibold tracking-tight">Página no encontrada</span>}
+        description="La dirección no existe o ya no está disponible."
+        action={
+          <Button asChild variant="outline">
+            <Link to="/conversations">Ir a conversaciones</Link>
+          </Button>
+        }
+      />
     </div>
   );
 }

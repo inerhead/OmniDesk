@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ActorContext } from '../../../shared/application/request-context';
-import { InboxForbiddenError, inboxFilter } from './inbox-filter';
+import { conversationSearch, InboxForbiddenError, inboxFilter } from './inbox-filter';
 
 const owner: ActorContext = { tenantId: 't1', memberId: 'owner', role: 'OWNER' };
 const laura: ActorContext = { tenantId: 't1', memberId: 'laura', role: 'AGENT' };
@@ -26,5 +26,39 @@ describe('inboxFilter', () => {
   it('closed: todas las cerradas para OWNER/ADMIN y solo las suyas para un AGENT', () => {
     expect(inboxFilter(owner, 'closed')).toEqual({ status: 'CLOSED' });
     expect(inboxFilter(laura, 'closed')).toEqual({ status: 'CLOSED', assignedAgentId: 'laura' });
+  });
+});
+
+describe('conversationSearch', () => {
+  it('sin q o vacío no filtra', () => {
+    expect(conversationSearch(undefined)).toBeUndefined();
+    expect(conversationSearch('   ')).toBeUndefined();
+  });
+
+  it('un término sin dígitos busca solo por nombre', () => {
+    expect(conversationSearch(' jua ')).toEqual({ name: 'jua' });
+  });
+
+  it('3 dígitos o más tras quitar espacios, +, - y paréntesis buscan también por teléfono', () => {
+    expect(conversationSearch('300 123')).toEqual({ name: '300 123', phoneDigits: '300123' });
+    expect(conversationSearch('+57 (300)-123')).toEqual({
+      name: '+57 (300)-123',
+      phoneDigits: '57300123',
+    });
+  });
+
+  it('menos de 3 dígitos no busca por teléfono', () => {
+    expect(conversationSearch('ana 12')).toEqual({ name: 'ana 12' });
+  });
+});
+
+describe('inboxFilter con q', () => {
+  it('combina la búsqueda con la bandeja y los permisos', () => {
+    expect(inboxFilter(laura, 'closed', 'jua')).toEqual({
+      status: 'CLOSED',
+      assignedAgentId: 'laura',
+      search: { name: 'jua' },
+    });
+    expect(() => inboxFilter(laura, 'all', 'jua')).toThrow(InboxForbiddenError);
   });
 });

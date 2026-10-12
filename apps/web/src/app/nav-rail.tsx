@@ -1,0 +1,46 @@
+import { NavLink } from 'react-router';
+import { ActorSelector } from '@/features/actor/ui/actor-selector';
+import { cn } from '@/shared/lib/utils';
+import { InstallPrompt } from '@/shared/pwa/install-prompt';
+import { ConnectionBadge } from '@/shared/realtime/connection-badge';
+import { ThemeMenu } from '@/shared/theme/theme-menu';
+import { Tooltip } from '@/shared/ui/tooltip';
+import { NAV_ITEMS } from './nav-items';
+
+/** Rail vertical de 64 px (≥ md): destinos arriba; conexión, tema, instalar y usuario abajo. */
+export function NavRail() {
+  return (
+    <nav
+      aria-label="Principal"
+      className="bg-sidebar text-sidebar-foreground hidden w-16 shrink-0 flex-col items-center gap-2 border-r py-3 md:flex"
+    >
+      <img src="/logo.svg" alt="OmniDesk" className="mb-2 size-8" />
+      {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+        <Tooltip key={to} content={label} side="right">
+          <NavLink
+            to={to}
+            aria-label={label}
+            className={({ isActive }) =>
+              cn(
+                'focus-visible:ring-ring/50 flex size-10 items-center justify-center rounded-lg transition-colors outline-none focus-visible:ring-[3px]',
+                isActive
+                  ? 'bg-primary/12 text-primary dark:bg-primary/20'
+                  : 'hover:bg-accent hover:text-accent-foreground',
+              )
+            }
+          >
+            <Icon className="size-5" aria-hidden />
+          </NavLink>
+        </Tooltip>
+      ))}
+      <div className="mt-auto flex flex-col items-center gap-1">
+        <ConnectionBadge />
+        <ThemeMenu />
+        <InstallPrompt />
+        <div className="mt-1">
+          <ActorSelector />
+        </div>
+      </div>
+    </nav>
+  );
+}

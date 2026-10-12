@@ -11,6 +11,14 @@ export class ApiUnavailableError extends Error {
   }
 }
 
+/** El API respondió con un estado inesperado. */
+export class ApiHttpError extends Error {
+  constructor(readonly status: number) {
+    super(`HTTP ${status}`);
+    this.name = 'ApiHttpError';
+  }
+}
+
 export interface ApiResponse {
   status: number;
   body: unknown;

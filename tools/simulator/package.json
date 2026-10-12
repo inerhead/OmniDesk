@@ -1,0 +1,22 @@
+{
+  "name": "@omnidesk/simulator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file-if-exists=../../.env src/index.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@omnidesk/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@omnidesk/eslint-config": "workspace:*",
+    "@omnidesk/tsconfig": "workspace:*",
+    "@types/node": "26.6.4",
+    "typescript": "6.0.3",
+    "vitest": "5.0.3"
+  }
+}

@@ -6,7 +6,7 @@ import { useOnlineStatus } from '@/shared/pwa/use-online-status';
 
 const HEALTH_REFRESH_MS = 10_000;
 
-export function HomePage() {
+export function StatusPage() {
   const online = useOnlineStatus();
   const health = useQuery({
     queryKey: ['health'],
@@ -22,9 +22,11 @@ export function HomePage() {
     : toStatusView(health.isError ? null : (health.data ?? null), online);
 
   return (
-    <section className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold tracking-tight">OmniDesk</h1>
-      <HealthCard view={view} />
-    </section>
+    <div className="h-full overflow-y-auto">
+      <section className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6">
+        <h1 className="text-2xl font-semibold tracking-tight">Estado del sistema</h1>
+        <HealthCard view={view} />
+      </section>
+    </div>
   );
 }

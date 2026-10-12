@@ -27,6 +27,11 @@ function setupSwagger(app: NestExpressApplication): void {
   const config = new DocumentBuilder()
     .setTitle('OmniDesk API')
     .setVersion(app.get<string>(APP_VERSION))
+    .addBearerAuth({
+      type: 'http',
+      scheme: 'bearer',
+      description: 'API key del canal (integraciones)',
+    })
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, cleanupOpenApiDoc(document), {

@@ -7,14 +7,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
 import { DATABASE_HEALTH_PORT } from '../src/modules/health/application/ports/database-health.port';
-import { parseEnv } from '../src/shared/config/env';
+import { testEnv } from './support/test-env';
 
-// Requiere DATABASE_URL apuntando al Postgres de Docker Compose.
-const env = parseEnv({
-  ...process.env,
-  LOG_LEVEL: 'warn',
-  CORS_ORIGINS: 'http://localhost:8080,http://localhost:5173',
-});
+// Requiere DATABASE_URL apuntando al Postgres de Docker Compose (se usa la base `_e2e`).
+const env = testEnv();
 
 async function createApp(databaseUp?: boolean): Promise<NestExpressApplication> {
   let builder = Test.createTestingModule({ imports: [AppModule.forRoot(env)] });

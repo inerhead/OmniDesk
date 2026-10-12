@@ -66,6 +66,21 @@ docker compose exec api pnpm --filter @omnidesk/api db:migrate   # crea y aplica
 
 El código fuente se monta en los contenedores: los cambios en `apps/*/src` se recargan solos. Si cambias dependencias (`package.json`), reconstruye con `docker compose build`.
 
+## Datos de ejemplo
+
+Con `DEMO_MODE=true` (el valor de `.env.example`), el API crea al arrancar un tenant demo, el canal **WhatsApp Demo** y su credencial (`DEMO_CHANNEL_API_KEY`). La bandeja de <http://localhost:8080/conversations> lee ese tenant sin login. `DEMO_MODE=true` está prohibido con `NODE_ENV=production`.
+
+El simulador envía conversaciones por los mismos endpoints de integración que usará n8n:
+
+```bash
+pnpm simulate          # crea 5 conversaciones de ejemplo; repetirlo no duplica nada
+pnpm simulate --live   # un mensaje nuevo cada 4 s (cliente + IA) hasta Ctrl+C
+```
+
+El simulador corre en el host (Node 24 + pnpm) y llama a `http://localhost:${GATEWAY_HOST_PORT}`. Para otra URL, define `SIMULATOR_API_URL`.
+
+Las pruebas e2e del API usan una base aparte (`<base>_e2e`), así que no tocan estos datos.
+
 ## Probar la PWA
 
 El service worker está desactivado en `vite dev`. Para probar la instalación se usa el build de producción:

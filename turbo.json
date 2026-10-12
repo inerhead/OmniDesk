@@ -6,7 +6,11 @@
     "DATABASE_URL",
     "LOG_LEVEL",
     "CORS_ORIGINS",
-    "CHOKIDAR_USEPOLLING"
+    "CHOKIDAR_USEPOLLING",
+    "DEMO_MODE",
+    "DEMO_CHANNEL_API_KEY",
+    "SIMULATOR_API_URL",
+    "GATEWAY_HOST_PORT"
   ],
   "tasks": {
     "build": {

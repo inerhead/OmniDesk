@@ -1,5 +1,10 @@
 import { DynamicModule, Module } from '@nestjs/common';
+import { APP_PIPE } from '@nestjs/core';
+import { ZodValidationPipe } from 'nestjs-zod';
+import { ConversationsModule } from './modules/conversations/conversations.module';
+import { DemoModule } from './modules/demo/demo.module';
 import { HealthModule } from './modules/health/health.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { ConfigModule } from './shared/config/config.module';
 import type { Env } from './shared/config/env';
 import { PrismaModule } from './shared/infrastructure/prisma/prisma.module';
@@ -10,7 +15,17 @@ export class AppModule {
   static forRoot(env: Env): DynamicModule {
     return {
       module: AppModule,
-      imports: [ConfigModule.forRoot(env), LoggingModule, PrismaModule, HealthModule],
+      imports: [
+        ConfigModule.forRoot(env),
+        LoggingModule,
+        PrismaModule,
+        HealthModule,
+        DemoModule,
+        ConversationsModule,
+        IntegrationsModule,
+      ],
+      // Valida con zod todo cuerpo y query tipados con DTOs de nestjs-zod (400 si no cumplen).
+      providers: [{ provide: APP_PIPE, useClass: ZodValidationPipe }],
     };
   }
 }

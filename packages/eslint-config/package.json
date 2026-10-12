@@ -6,7 +6,8 @@
   "exports": {
     "./base": "./base.js",
     "./nest": "./nest.js",
-    "./react": "./react.js"
+    "./react": "./react.js",
+    "./node": "./node.js"
   },
   "dependencies": {
     "@eslint/js": "10.0.1",

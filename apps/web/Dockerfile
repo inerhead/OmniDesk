@@ -13,6 +13,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY packages/ packages/
 COPY apps/web/ apps/web/
 COPY apps/api/package.json apps/api/package.json
+COPY tools/simulator/package.json tools/simulator/package.json
 RUN pnpm install --frozen-lockfile --filter "@omnidesk/web..."
 EXPOSE 5173 4173
 CMD ["pnpm", "exec", "turbo", "run", "dev", "--filter=@omnidesk/web..."]

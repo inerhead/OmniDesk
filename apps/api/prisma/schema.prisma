@@ -1,11 +1,180 @@
-// Sin modelos de dominio en el SPEC 01. Tenant, User, etc. llegan con el incremento 1.
+// Modelo de la bandeja de conversaciones (SPEC 02).
+// Todas las tablas de negocio llevan tenant_id: el tenant se resuelve siempre en el servidor.
 
 generator client {
-  provider     = "prisma-client"
-  output       = "../src/generated/prisma"
-  moduleFormat = "cjs"
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  moduleFormat    = "cjs"
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+enum ChannelType {
+  WHATSAPP
+}
+
+enum ChannelProvider {
+  N8N
+  CUSTOM
+}
+
+enum ConversationStatus {
+  OPEN
+  CLOSED
+}
+
+enum SenderType {
+  CUSTOMER
+  AI
+  AGENT
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageStatus {
+  RECEIVED
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+model Tenant {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  slug      String   @unique
+  name      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  channels      Channel[]
+  credentials   IntegrationCredential[]
+  contacts      Contact[]
+  identities    ContactIdentity[]
+  conversations Conversation[]
+  messages      Message[]
+
+  @@map("tenants")
+}
+
+model Channel {
+  id         String          @id @default(uuid(7)) @db.Uuid
+  tenantId   String          @map("tenant_id") @db.Uuid
+  name       String
+  type       ChannelType
+  provider   ChannelProvider
+  /// Id del número en el proveedor.
+  externalId String          @map("external_id")
+  createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant        Tenant                  @relation(fields: [tenantId], references: [id])
+  credentials   IntegrationCredential[]
+  identities    ContactIdentity[]
+  conversations Conversation[]
+  messages      Message[]
+
+  @@unique([tenantId, externalId])
+  @@map("channels")
+}
+
+model IntegrationCredential {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  channelId String    @map("channel_id") @db.Uuid
+  /// sha256 hex de la API key; la key nunca se guarda en claro.
+  keyHash   String    @unique @map("key_hash")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  channel Channel @relation(fields: [channelId], references: [id])
+
+  @@map("integration_credentials")
+}
+
+model Contact {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  displayName String?  @map("display_name")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant        Tenant            @relation(fields: [tenantId], references: [id])
+  identities    ContactIdentity[]
+  conversations Conversation[]
+
+  @@index([tenantId])
+  @@map("contacts")
+}
+
+model ContactIdentity {
+  id         String @id @default(uuid(7)) @db.Uuid
+  tenantId   String @map("tenant_id") @db.Uuid
+  contactId  String @map("contact_id") @db.Uuid
+  channelId  String @map("channel_id") @db.Uuid
+  /// Teléfono E.164, p. ej. "+573001234567".
+  externalId String @map("external_id")
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  contact Contact @relation(fields: [contactId], references: [id])
+  channel Channel @relation(fields: [channelId], references: [id])
+
+  @@unique([channelId, externalId])
+  @@map("contact_identities")
+}
+
+model Conversation {
+  id                 String             @id @default(uuid(7)) @db.Uuid
+  tenantId           String             @map("tenant_id") @db.Uuid
+  channelId          String             @map("channel_id") @db.Uuid
+  contactId          String             @map("contact_id") @db.Uuid
+  status             ConversationStatus @default(OPEN)
+  /// Siempre null en el SPEC 02; la relación con miembros llega con identidad.
+  assignedAgentId    String?            @map("assigned_agent_id") @db.Uuid
+  controlVersion     Int                @default(0) @map("control_version")
+  lastSequence       Int                @default(0) @map("last_sequence")
+  lastMessageAt      DateTime           @map("last_message_at") @db.Timestamptz(3)
+  lastMessagePreview String             @map("last_message_preview")
+  createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  channel  Channel   @relation(fields: [channelId], references: [id])
+  contact  Contact   @relation(fields: [contactId], references: [id])
+  messages Message[]
+
+  @@index([tenantId, lastMessageAt(sort: Desc), id(sort: Desc)])
+  /// Una sola conversación abierta por contacto y canal.
+  @@unique([channelId, contactId], map: "conversations_one_open_per_contact", where: raw("status = 'OPEN'"))
+  @@map("conversations")
+}
+
+model Message {
+  id                String           @id @default(uuid(7)) @db.Uuid
+  tenantId          String           @map("tenant_id") @db.Uuid
+  channelId         String           @map("channel_id") @db.Uuid
+  conversationId    String           @map("conversation_id") @db.Uuid
+  sequence          Int
+  direction         MessageDirection
+  senderType        SenderType       @map("sender_type")
+  text              String
+  status            MessageStatus
+  /// Id del proveedor (mensajes entrantes).
+  externalId        String?          @map("external_id")
+  /// Clave de idempotencia (respuestas de IA).
+  idempotencyKey    String?          @map("idempotency_key")
+  providerTimestamp DateTime?        @map("provider_timestamp") @db.Timestamptz(3)
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  channel      Channel      @relation(fields: [channelId], references: [id])
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+
+  @@unique([conversationId, sequence])
+  @@unique([channelId, externalId])
+  @@unique([conversationId, idempotencyKey])
+  @@map("messages")
 }

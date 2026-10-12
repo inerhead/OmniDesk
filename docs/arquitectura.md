@@ -1,6 +1,6 @@
 # OmniDesk — Arquitectura y plan MVP incremental
 
-> **Versión:** 0.3
+> **Versión:** 0.4
 > **Fecha:** 2026-10-12
 > **Sustituye a:** `OmniDesk_Plan_MVP_Arquitectura.docx` (v0.1, 2026-10-11), que queda como histórico.
 > **Estado:** documento base de planificación. Cada incremento se detalla en su propio spec dentro de `specs/` antes de implementarse.
@@ -10,6 +10,15 @@ Plataforma SaaS multiempresa para supervisar conversaciones atendidas por IA y p
 ---
 
 ## 0. Historial de cambios
+
+### v0.4 (respecto a v0.3)
+
+| # | Cambio | Motivo |
+| --- | --- | --- |
+| 1 | Se **reordena el roadmap**: la bandeja (ingesta + supervisión de solo lectura) pasa antes que identidad, y el tiempo real se separa en su propio incremento. | Tener funcionalidad del producto visible cuanto antes (SPEC 02). |
+| 2 | `Message` vive en el módulo `conversations`, no en `messaging`. | La `sequence` exige bloquear la conversación en la misma transacción. `messaging` queda para el puerto `MessagingProvider`. |
+| 3 | Nuevo módulo `demo`: tenant demo sembrado al arrancar y lectura sin login, solo con `DEMO_MODE=true` (prohibido en producción). | Ver la bandeja antes de que exista el login, sin abrir datos personales. |
+| 4 | Nuevo paquete `tools/simulator` (`pnpm simulate`). | Ejercita los contratos de integración reales sin depender de n8n. |
 
 ### v0.3 (respecto a v0.2)
 
@@ -212,13 +221,14 @@ omnidesk/
 | --- | --- | --- |
 | `health` | Estado del API y sus dependencias. Plantilla de referencia de capas. | 0 |
 | `identity` | Usuarios, login Google, sesión | 1 |
-| `tenancy` | Tenant, TenantMember, Invitation, roles, `TenantContext` | 1 |
-| `channels` | Channel, IntegrationCredential, configuración de proveedor por canal | 2 |
-| `contacts` | Contact, ContactIdentity | 2 |
-| `conversations` | Conversation, asignación, control de IA, ConversationEvent | 2–4 |
-| `messaging` | Message, estados de entrega, puerto `MessagingProvider` | 2, 6 |
-| `integrations` | Endpoints de integración, Inbox, normalizadores, adaptador n8n | 2, 6 |
-| `realtime` | Gateway Socket.IO, dispatcher del Outbox | 3 |
+| `tenancy` | Tenant (inc. 1 de bandeja); TenantMember, Invitation, roles (identidad) | 1, 3 |
+| `channels` | Channel, IntegrationCredential, guard de credencial de canal | 1 |
+| `contacts` | Contact, ContactIdentity | 1 |
+| `conversations` | Conversation y Message (sequence, resumen), control de IA, lectura de la bandeja; luego asignación y ConversationEvent | 1, 4 |
+| `demo` | Tenant demo sembrado al arrancar y `DemoTenantGuard` (solo `DEMO_MODE=true`). Se retira cuando la web usa sesión | 1 |
+| `integrations` | Endpoints `inbound`/`outbound`; luego `status`, Inbox, normalizadores y adaptador n8n | 1, 6 |
+| `messaging` | Estados de entrega y puerto `MessagingProvider` | 6 |
+| `realtime` | Gateway Socket.IO, dispatcher del Outbox | 2 |
 
 ## 7. Entidades principales
 
@@ -338,9 +348,9 @@ Cada incremento se especifica en `specs/NN-*.md` justo antes de implementarlo. S
 | Inc. | Spec | Nombre | Resultado verificable |
 | --- | --- | --- | --- |
 | 0 | SPEC 01 | Walking skeleton local | `docker compose up` levanta Postgres, API, web y gateway. La PWA, separada del API, muestra la salud del API y de la DB. Es **instalable** en escritorio y, vía túnel HTTPS, en un celular. Ya están fijados el monorepo, los contratos, las capas, CORS, los logs y Swagger. |
-| 1 | — | Identidad y tenancy | Google Login, alta de empresa, invitaciones, roles, membresías y `TenantContext` |
-| 2 | — | Ingesta | Credenciales de integración, Channel, Contact, Conversation, `inbound`/`outbound`/`status` con `controlVersion` y deduplicación. Se prueba con n8n local en Compose. |
-| 3 | — | Supervisión | Bandejas, historial paginado y tiempo real (Outbox + Socket.IO) |
+| 1 | SPEC 02 | Bandeja de conversaciones | Ingesta `inbound`/`outbound` de IA con `controlVersion` y deduplicación; modelo con `tenantId`; lista de conversaciones y chat responsive de solo lectura (polling 5 s); tenant demo (`DEMO_MODE`) y simulador `pnpm simulate`. |
+| 2 | SPEC 03 | Tiempo real | Outbox + Socket.IO con rooms por tenant y conversación; la bandeja se actualiza en vivo y se elimina el polling. |
+| 3 | — | Identidad y tenancy | Google Login, alta de empresa, invitaciones, roles, membresías. La sesión reemplaza al tenant demo. |
 | 4 | — | Asignación | `assign`/`release`/`close`/`reopen` con eventos y control de IA |
 | 5 | — | Despliegue | Railway con dos servicios independientes: la web como sitio estático (`app.<dominio>`) y el API con imagen de producción (`api.<dominio>`). Incluye migraciones, secretos, dominios y conexión con n8n y WhatsApp reales. Puede adelantarse si se necesita una demo pública. |
 | 6 | — | Atención humana | `MessagingProvider` + adaptador n8n, dispatcher del Outbox con reintentos y estados de entrega |

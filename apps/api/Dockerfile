@@ -17,6 +17,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY packages/ packages/
 COPY apps/api/ apps/api/
 COPY apps/web/package.json apps/web/package.json
+COPY tools/simulator/package.json tools/simulator/package.json
 RUN pnpm install --frozen-lockfile --filter "@omnidesk/api..."
 EXPOSE 5001
 # Las migraciones corren antes que el API: sin esta guarda, Prisma fallaría con un mensaje que no nombra la variable.

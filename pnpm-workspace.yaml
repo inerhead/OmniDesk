@@ -1,6 +1,7 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+  - 'tools/*'
 
 # pnpm bloquea los scripts de instalación por defecto; solo se permiten estos.
 allowBuilds:

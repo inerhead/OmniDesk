@@ -30,3 +30,34 @@ describe('parseEnv', () => {
     expect(() => parseEnv({ ...valid, CORS_ORIGINS: 'no-es-url' })).toThrowError(/CORS_ORIGINS/);
   });
 });
+
+describe('parseEnv — modo demo', () => {
+  const key = 'dev-demo-channel-key-change-me';
+
+  it('DEMO_MODE es false por defecto', () => {
+    expect(parseEnv(valid).DEMO_MODE).toBe(false);
+  });
+
+  it('acepta DEMO_MODE=true con una key válida', () => {
+    const env = parseEnv({ ...valid, DEMO_MODE: 'true', DEMO_CHANNEL_API_KEY: key });
+
+    expect(env.DEMO_MODE).toBe(true);
+    expect(env.DEMO_CHANNEL_API_KEY).toBe(key);
+  });
+
+  it('exige DEMO_CHANNEL_API_KEY con DEMO_MODE=true', () => {
+    expect(() => parseEnv({ ...valid, DEMO_MODE: 'true' })).toThrowError(/DEMO_CHANNEL_API_KEY/);
+  });
+
+  it('rechaza una key de menos de 24 caracteres', () => {
+    expect(() =>
+      parseEnv({ ...valid, DEMO_MODE: 'true', DEMO_CHANNEL_API_KEY: 'corta' }),
+    ).toThrowError(/DEMO_CHANNEL_API_KEY/);
+  });
+
+  it('rechaza DEMO_MODE=true en producción nombrando DEMO_MODE', () => {
+    expect(() =>
+      parseEnv({ ...valid, NODE_ENV: 'production', DEMO_MODE: 'true', DEMO_CHANNEL_API_KEY: key }),
+    ).toThrowError(/DEMO_MODE: DEMO_MODE=true no está permitido/);
+  });
+});

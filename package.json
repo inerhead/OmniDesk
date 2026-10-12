@@ -12,7 +12,8 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "simulate": "turbo run build --filter=@omnidesk/contracts --output-logs=errors-only && pnpm --filter @omnidesk/simulator start"
   },
   "devDependencies": {
     "@types/node": "26.6.4",

@@ -17,7 +17,7 @@ export class DemoSeedService implements OnApplicationBootstrap {
     if (!this.env.DEMO_MODE || !this.env.DEMO_CHANNEL_API_KEY) return;
     try {
       await this.seedDemo.execute(sha256Hex(this.env.DEMO_CHANNEL_API_KEY));
-      this.logger.log('Datos demo listos (tenant "demo", canal "WhatsApp Demo")');
+      this.logger.log('Datos demo listos (tenant "demo", 3 miembros, canal "WhatsApp Demo")');
     } catch (error) {
       // Sin base de datos al arrancar, el API sigue vivo y el health lo reporta.
       this.logger.warn(`No se pudieron sembrar los datos demo: ${String(error)}`);

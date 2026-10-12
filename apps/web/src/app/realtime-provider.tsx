@@ -12,7 +12,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       connectRealtime(env.VITE_API_URL || window.location.origin, {
         onEvent: (event) => {
           void queryClient.invalidateQueries({ queryKey: ['conversations'] });
-          void queryClient.invalidateQueries({ queryKey: ['messages', event.conversationId] });
+          void queryClient.invalidateQueries({ queryKey: ['timeline', event.conversationId] });
         },
         onResync: () => void queryClient.invalidateQueries(),
       }),

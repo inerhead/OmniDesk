@@ -5,6 +5,7 @@ import { ConversationsModule } from './modules/conversations/conversations.modul
 import { DemoModule } from './modules/demo/demo.module';
 import { HealthModule } from './modules/health/health.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
+import { MembersModule } from './modules/members/members.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { ConfigModule } from './shared/config/config.module';
 import type { Env } from './shared/config/env';
@@ -22,6 +23,7 @@ export class AppModule {
         PrismaModule,
         HealthModule,
         DemoModule,
+        MembersModule,
         ConversationsModule,
         IntegrationsModule,
         RealtimeModule,

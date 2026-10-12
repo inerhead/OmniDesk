@@ -8,7 +8,7 @@ import {
 } from '../../../shared/application/transaction-runner.port';
 import { decideAiReply } from '../domain/conversation';
 import { aiReply } from '../domain/message';
-import { enqueueMessageChanged } from './enqueue-conversation-changed';
+import { enqueueConversationChanged } from './enqueue-conversation-changed';
 import {
   CONVERSATION_REPOSITORY,
   type ConversationRepository,
@@ -66,7 +66,13 @@ export class RegisterAiReplyUseCase {
       aiReply(input.text, input.idempotencyKey),
       now,
     );
-    await enqueueMessageChanged(this.outbox, integration.tenantId, conversation.id, now);
+    await enqueueConversationChanged(
+      this.outbox,
+      integration.tenantId,
+      conversation.id,
+      'message',
+      now,
+    );
     return { kind: 'accepted', messageId: message.id };
   }
 }

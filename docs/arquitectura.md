@@ -256,13 +256,15 @@ Todas las entidades de negocio llevan `tenantId`. Los índices compuestos empiez
 | Asignar / tomar | `assignedAgentId = <agente>`, IA deshabilitada, `controlVersion + 1` |
 | Reasignar | Cambia el responsable, la IA sigue deshabilitada, `controlVersion + 1` |
 | Liberar a IA | `assignedAgentId = null`, IA habilitada, `controlVersion + 1` |
-| Cerrar | `status = CLOSED`, IA deshabilitada, `controlVersion + 1` |
+| Cerrar | `status = CLOSED`, IA deshabilitada, **se conserva `assignedAgentId`** (la bandeja "Cerradas" de un agente es un filtro simple), `controlVersion + 1` |
 | Mensaje entrante en conversación cerrada | **Por defecto:** se reabre (`OPEN`), `assignedAgentId = null` (vuelve a la IA), evento `REOPENED`, `controlVersion + 1` |
-| Reabrir manualmente | `status = OPEN` y se conserva `assignedAgentId = null`, `controlVersion + 1` |
+| Reabrir manualmente | `status = OPEN` y `assignedAgentId = null` (vuelve a la IA), evento `REOPENED` con actor, `controlVersion + 1` |
 
 - El modo de atención se **deriva**: la IA atiende solo si `status = OPEN` y `assignedAgentId = null`. No hay una columna `handlingMode` duplicada.
 - Cada comando es una operación atómica del backend. Bloquea la fila de la conversación, valida permisos y pertenencia al tenant, cambia el estado, escribe `ConversationEvent` y `OutboxEvent`, e incrementa `controlVersion`.
 - Se asignan conversaciones individuales, no canales completos.
+- Permisos (SPEC 04): OWNER/ADMIN pueden todo; un AGENT solo toma conversaciones sin asignar y libera, cierra o reabre las suyas. Un AGENT no ve las conversaciones asignadas a otros (`404`, no `403`, para no revelar que existen). La política es una función pura (`can`) y el API siempre decide; la web solo la usa para mostrar u ocultar botones.
+- Mensajes y eventos de asignación comparten el contador `lastSequence`: el historial es una sola línea de tiempo (`GET /conversations/:id/timeline`).
 
 ## 9. Protocolo de control de IA
 
@@ -351,7 +353,7 @@ Cada incremento se especifica en `specs/NN-*.md` justo antes de implementarlo. S
 | 1 | SPEC 02 | Bandeja de conversaciones | Ingesta `inbound`/`outbound` de IA con `controlVersion` y deduplicación; modelo con `tenantId`; lista de conversaciones y chat responsive de solo lectura (polling 5 s); tenant demo (`DEMO_MODE`) y simulador `pnpm simulate`. |
 | 2 | SPEC 03 | Tiempo real | **Implementado.** Outbox transaccional + dispatcher (cada 500 ms, `FOR UPDATE SKIP LOCKED`) y Socket.IO en `/api/realtime` con un room por tenant. Los eventos son ligeros (`conversationId` + `reason`) y la web invalida sus queries. Latencia objetivo ≤ 1 s; el polling de 5 s se elimina y queda un respaldo de 15 s solo mientras el socket está caído. Rooms por conversación llegan con identidad. |
 | 3 | — | Identidad y tenancy | Google Login, alta de empresa, invitaciones, roles, membresías. La sesión reemplaza al tenant demo. |
-| 4 | — | Asignación | `assign`/`release`/`close`/`reopen` con eventos y control de IA |
+| 4 | SPEC 04 | Asignación | **Implementado.** `assign`/`release`/`close`/`reopen` con `controlVersion`, eventos en el historial y permisos por rol (`TenantMember`, actor demo con `X-Demo-Member-Id`). Bandejas IA/Mías/Todas/Cerradas, reapertura automática por un inbound y suspensión inmediata de la IA. |
 | 5 | — | Despliegue | Railway con dos servicios independientes: la web como sitio estático (`app.<dominio>`) y el API con imagen de producción (`api.<dominio>`). Incluye migraciones, secretos, dominios y conexión con n8n y WhatsApp reales. Puede adelantarse si se necesita una demo pública. |
 | 6 | — | Atención humana | `MessagingProvider` + adaptador n8n, dispatcher del Outbox con reintentos y estados de entrega |
 | 7 | — | Robustez | E2E con Playwright (también en viewport móvil), rate limiting, evaluación de RLS, métricas, política de retención y notificaciones Web Push (requieren la PWA instalada en iOS) |

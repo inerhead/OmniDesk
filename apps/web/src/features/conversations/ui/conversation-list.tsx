@@ -1,9 +1,14 @@
-import { NavLink } from 'react-router';
+import type { Inbox } from '@omnidesk/contracts';
+import { NavLink, useLocation, useSearchParams } from 'react-router';
+import { useCurrentActor } from '@/features/actor/api/use-actor';
 import { cn } from '@/shared/lib/utils';
+import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { useConversations } from '../api/use-conversations';
 import { formatConversationTime } from '../model/format-time';
+import { EMPTY_INBOX_MESSAGE, parseInbox, visibleInboxes } from '../model/inbox';
 import { contactLabel } from '../model/to-bubble-view';
+import { InboxTabs } from './inbox-tabs';
 
 function initials(name: string): string {
   const letters = name.match(/\p{L}/gu) ?? [];
@@ -29,9 +34,71 @@ function ListSkeleton() {
   );
 }
 
-export function ConversationList() {
-  const conversations = useConversations();
+/** Quién atiende: la IA, el agente asignado o "Cerrada". */
+function AttendedBy({
+  conversation,
+}: {
+  conversation: { status: 'OPEN' | 'CLOSED'; assignedAgent: { displayName: string } | null };
+}) {
+  if (conversation.status === 'CLOSED') {
+    return (
+      <Badge variant="outline">
+        Cerrada{conversation.assignedAgent && ` · ${conversation.assignedAgent.displayName}`}
+      </Badge>
+    );
+  }
+  return conversation.assignedAgent ? (
+    <Badge variant="warning">{conversation.assignedAgent.displayName}</Badge>
+  ) : (
+    <Badge variant="secondary">IA</Badge>
+  );
+}
 
+export function ConversationList() {
+  const { actor, isLoading: actorLoading, isError: actorError, retry } = useCurrentActor();
+  const [searchParams] = useSearchParams();
+  const { search } = useLocation();
+  const inbox = actor ? parseInbox(searchParams.get('inbox'), actor.role) : 'ai';
+  const conversations = useConversations(inbox);
+
+  if (actorLoading) return <ListSkeleton />;
+
+  if (actorError) {
+    return (
+      <div className="flex flex-col items-center gap-3 px-4 py-10 text-center">
+        <p className="text-sm font-medium">No se pudieron cargar los miembros</p>
+        <Button size="sm" variant="outline" onClick={retry}>
+          Reintentar
+        </Button>
+      </div>
+    );
+  }
+
+  if (!actor) {
+    return (
+      <p className="text-muted-foreground px-4 py-10 text-center text-sm">
+        Elige con quién actuar para ver la bandeja
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col">
+      <InboxTabs inboxes={visibleInboxes(actor.role)} active={inbox} />
+      <ListBody conversations={conversations} inbox={inbox} search={search} />
+    </div>
+  );
+}
+
+function ListBody({
+  conversations,
+  inbox,
+  search,
+}: {
+  conversations: ReturnType<typeof useConversations>;
+  inbox: Inbox;
+  search: string;
+}) {
   if (conversations.isPending) return <ListSkeleton />;
 
   if (conversations.isError && !conversations.data) {
@@ -49,21 +116,26 @@ export function ConversationList() {
   if (items.length === 0) {
     return (
       <p className="text-muted-foreground px-4 py-10 text-center text-sm">
-        Aún no hay conversaciones. Ejecuta{' '}
-        <code className="bg-muted rounded px-1 py-0.5">pnpm simulate</code>.
+        {EMPTY_INBOX_MESSAGE[inbox]}
+        {inbox === 'ai' && (
+          <>
+            {' '}
+            Ejecuta <code className="bg-muted rounded px-1 py-0.5">pnpm simulate</code>.
+          </>
+        )}
       </p>
     );
   }
 
   return (
-    <div className="flex flex-col">
+    <>
       <ul>
         {items.map((conversation) => {
           const name = contactLabel(conversation.contact);
           return (
             <li key={conversation.id}>
               <NavLink
-                to={`/conversations/${conversation.id}`}
+                to={{ pathname: `/conversations/${conversation.id}`, search }}
                 className={({ isActive }) =>
                   cn(
                     'flex gap-3 border-b px-4 py-3 transition-colors',
@@ -87,7 +159,12 @@ export function ConversationList() {
                   <span className="text-muted-foreground truncate text-sm">
                     {conversation.lastMessagePreview}
                   </span>
-                  <span className="text-muted-foreground text-xs">{conversation.channel.name}</span>
+                  <span className="flex items-center gap-2">
+                    <AttendedBy conversation={conversation} />
+                    <span className="text-muted-foreground truncate text-xs">
+                      {conversation.channel.name}
+                    </span>
+                  </span>
                 </span>
               </NavLink>
             </li>
@@ -107,6 +184,6 @@ export function ConversationList() {
           </Button>
         </div>
       )}
-    </div>
+    </>
   );
 }

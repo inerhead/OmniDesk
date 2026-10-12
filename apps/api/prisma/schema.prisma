@@ -1,4 +1,4 @@
-// Modelo de la bandeja de conversaciones (SPEC 02).
+// Modelo de la bandeja de conversaciones (SPEC 02), tiempo real (SPEC 03) y asignación (SPEC 04).
 // Todas las tablas de negocio llevan tenant_id: el tenant se resuelve siempre en el servidor.
 
 generator client {
@@ -37,6 +37,19 @@ enum MessageDirection {
   OUTBOUND
 }
 
+enum MemberRole {
+  OWNER
+  ADMIN
+  AGENT
+}
+
+enum ConversationEventType {
+  ASSIGNED
+  RELEASED
+  CLOSED
+  REOPENED
+}
+
 enum MessageStatus {
   RECEIVED
   PENDING
@@ -58,6 +71,8 @@ model Tenant {
   identities    ContactIdentity[]
   conversations Conversation[]
   messages      Message[]
+  members       TenantMember[]
+  events        ConversationEvent[]
 
   @@map("tenants")
 }
@@ -133,7 +148,6 @@ model Conversation {
   channelId          String             @map("channel_id") @db.Uuid
   contactId          String             @map("contact_id") @db.Uuid
   status             ConversationStatus @default(OPEN)
-  /// Siempre null en el SPEC 02; la relación con miembros llega con identidad.
   assignedAgentId    String?            @map("assigned_agent_id") @db.Uuid
   controlVersion     Int                @default(0) @map("control_version")
   lastSequence       Int                @default(0) @map("last_sequence")
@@ -141,14 +155,16 @@ model Conversation {
   lastMessagePreview String             @map("last_message_preview")
   createdAt          DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  tenant   Tenant    @relation(fields: [tenantId], references: [id])
-  channel  Channel   @relation(fields: [channelId], references: [id])
-  contact  Contact   @relation(fields: [contactId], references: [id])
-  messages Message[]
+  tenant        Tenant              @relation(fields: [tenantId], references: [id])
+  channel       Channel             @relation(fields: [channelId], references: [id])
+  contact       Contact             @relation(fields: [contactId], references: [id])
+  messages      Message[]
+  events        ConversationEvent[]
+  assignedAgent TenantMember?       @relation(fields: [assignedAgentId], references: [id], onDelete: Restrict)
 
-  @@index([tenantId, lastMessageAt(sort: Desc), id(sort: Desc)])
   /// Una sola conversación abierta por contacto y canal.
   @@unique([channelId, contactId], map: "conversations_one_open_per_contact", where: raw("status = 'OPEN'"))
+  @@index([tenantId, lastMessageAt(sort: Desc), id(sort: Desc)])
   @@map("conversations")
 }
 
@@ -177,6 +193,45 @@ model Message {
   @@unique([channelId, externalId])
   @@unique([conversationId, idempotencyKey])
   @@map("messages")
+}
+
+model TenantMember {
+  id          String     @id @default(uuid(7)) @db.Uuid
+  tenantId    String     @map("tenant_id") @db.Uuid
+  displayName String     @map("display_name")
+  email       String
+  role        MemberRole
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant                Tenant              @relation(fields: [tenantId], references: [id])
+  assignedConversations Conversation[]
+  actedEvents           ConversationEvent[] @relation("EventActor")
+  targetedEvents        ConversationEvent[] @relation("EventTarget")
+
+  @@unique([tenantId, email])
+  @@map("tenant_members")
+}
+
+model ConversationEvent {
+  id             String                @id @default(uuid(7)) @db.Uuid
+  tenantId       String                @map("tenant_id") @db.Uuid
+  conversationId String                @map("conversation_id") @db.Uuid
+  /// Comparte el contador `lastSequence` con los mensajes: una sola línea de tiempo.
+  sequence       Int
+  type           ConversationEventType
+  /// null = sistema (reapertura por inbound).
+  actorMemberId  String?               @map("actor_member_id") @db.Uuid
+  /// Agente asignado en ASSIGNED.
+  targetMemberId String?               @map("target_member_id") @db.Uuid
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  conversation Conversation  @relation(fields: [conversationId], references: [id])
+  actor        TenantMember? @relation("EventActor", fields: [actorMemberId], references: [id], onDelete: Restrict)
+  target       TenantMember? @relation("EventTarget", fields: [targetMemberId], references: [id], onDelete: Restrict)
+
+  @@unique([conversationId, sequence])
+  @@map("conversation_events")
 }
 
 model OutboxEvent {

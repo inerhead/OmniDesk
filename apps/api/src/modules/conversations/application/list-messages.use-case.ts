@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { TenantContext } from '../../../shared/application/request-context';
+import type { ActorContext } from '../../../shared/application/request-context';
+import { can } from '../domain/conversation-policy';
 import type { Message } from '../domain/message';
 import {
   CONVERSATION_READ_MODEL,
@@ -17,14 +18,15 @@ export interface MessagePage {
 export class ListMessagesUseCase {
   constructor(@Inject(CONVERSATION_READ_MODEL) private readonly readModel: ConversationReadModel) {}
 
-  /** `null` si la conversación no existe en el tenant. */
+  /** `null` si la conversación no existe en el tenant o el actor no puede verla. */
   async execute(
-    tenant: TenantContext,
+    actor: ActorContext,
     conversationId: string,
     before: number | undefined,
     limit: number,
   ): Promise<MessagePage | null> {
-    if (!(await this.readModel.conversationExists(tenant.tenantId, conversationId))) return null;
+    const access = await this.readModel.findAccess(actor.tenantId, conversationId);
+    if (!access || !can(actor, 'view', access)) return null;
 
     const rows = await this.readModel.listMessagesDescending(
       conversationId,

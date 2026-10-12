@@ -6,6 +6,8 @@ import type {
   NewConversation,
 } from '../application/ports/conversation.repository';
 import { appendMessage, type Conversation } from '../domain/conversation';
+import type { ConversationEvent, NewConversationEvent } from '../domain/conversation-event';
+import type { ConversationState } from '../domain/conversation-transitions';
 import type { Message, NewMessage } from '../domain/message';
 
 const conversationSelect = {
@@ -56,6 +58,14 @@ export class PrismaConversationRepository implements ConversationRepository {
     });
   }
 
+  findLatestClosed(channelId: string, contactId: string): Promise<Conversation | null> {
+    return this.db.client.conversation.findFirst({
+      where: { channelId, contactId, status: 'CLOSED' },
+      orderBy: [{ lastMessageAt: 'desc' }, { id: 'desc' }],
+      select: conversationSelect,
+    });
+  }
+
   async createOpen(data: NewConversation): Promise<Conversation> {
     try {
       return await this.db.client.conversation.create({
@@ -101,6 +111,49 @@ export class PrismaConversationRepository implements ConversationRepository {
     } catch (error) {
       rethrowUniqueConflict(error);
     }
+  }
+
+  applyTransition(conversation: Conversation, next: ConversationState): Promise<Conversation> {
+    return this.db.client.conversation.update({
+      where: { id: conversation.id },
+      data: {
+        status: next.status,
+        assignedAgentId: next.assignedAgentId,
+        controlVersion: { increment: 1 },
+      },
+      select: conversationSelect,
+    });
+  }
+
+  async appendEvent(
+    conversation: Conversation,
+    event: NewConversationEvent,
+    at: Date,
+  ): Promise<ConversationEvent> {
+    // Igual que en los mensajes, el incremento lo hace la base: nunca hay dos con la misma sequence.
+    const { lastSequence } = await this.db.client.conversation.update({
+      where: { id: conversation.id },
+      data: { lastSequence: { increment: 1 } },
+      select: { lastSequence: true },
+    });
+    return this.db.client.conversationEvent.create({
+      data: {
+        tenantId: conversation.tenantId,
+        conversationId: conversation.id,
+        sequence: lastSequence,
+        createdAt: at,
+        ...event,
+      },
+      select: {
+        id: true,
+        conversationId: true,
+        sequence: true,
+        type: true,
+        actorMemberId: true,
+        targetMemberId: true,
+        createdAt: true,
+      },
+    });
   }
 
   findMessageByExternalId(channelId: string, externalId: string): Promise<Message | null> {

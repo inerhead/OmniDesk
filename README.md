@@ -85,6 +85,18 @@ Con la bandeja abierta en <http://localhost:8080/conversations>, lanza `pnpm sim
 
 Para ver el respaldo, detén el API con `docker compose stop api`: el badge pasa a **Reconectando…** y la lista se refresca como máximo cada 15 s. Al levantarlo de nuevo, el badge vuelve a **En vivo** y aparecen los mensajes que llegaron mientras tanto.
 
+### Asignar una conversación y suspender la IA
+
+Hasta que exista el login, el header tiene un selector **Actuar como** con los miembros demo: **Sup. Demo** (supervisor, ve las 4 bandejas), **Laura** y **Mateo** (agentes, sin la pestaña "Todas"). La elección se guarda en el navegador y la web la envía en la cabecera `X-Demo-Member-Id` (solo con `DEMO_MODE=true`).
+
+1. Abre la bandeja como Sup. Demo y lanza `pnpm simulate --live`.
+2. Abre una conversación de la pestaña **IA** y elige **Asignar a… → Laura**.
+3. La conversación sale de "IA" y aparece en **Mías** de Laura (ábrela como Laura en otra pestaña). El historial muestra "Sup. Demo asignó la conversación a Laura".
+4. Los siguientes mensajes del cliente en esa conversación ya no reciben respuesta de la IA: el simulador respeta `aiAllowed` y, si una respuesta ya iba en camino, el API la rechaza con `409 CONTROL_CHANGED`.
+5. Laura puede **Liberar a IA**, **Cerrar** o **Reabrir**. Si el cliente escribe en una conversación cerrada, se reabre sola y vuelve a la IA.
+
+Si dos pestañas pulsan **Tomar** casi a la vez, una gana y la otra muestra "La conversación cambió. Se actualizó con el estado actual".
+
 Las pruebas e2e del API usan una base aparte (`<base>_e2e`), así que no tocan estos datos.
 
 ## Probar la PWA

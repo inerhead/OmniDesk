@@ -9,8 +9,8 @@ export const CONVERSATION_CHANGED_EVENT = 'conversation.changed';
 export const RealtimeEventSchema = z.object({
   type: z.literal('conversation.changed'),
   conversationId: z.uuid(),
-  /** 'message' (SPEC 03); el SPEC 04 añade 'assignment' y el SPEC 05 'delivery'. */
-  reason: z.enum(['message']),
+  /** 'message' (SPEC 03) y 'assignment' (SPEC 04); el SPEC 05 añade 'delivery'. */
+  reason: z.enum(['message', 'assignment']),
   occurredAt: z.iso.datetime(),
 });
 export type RealtimeEvent = z.infer<typeof RealtimeEventSchema>;

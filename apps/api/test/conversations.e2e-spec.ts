@@ -3,6 +3,7 @@ import { randomInt, randomUUID } from 'node:crypto';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import {
+  DEMO_MEMBER_HEADER,
   InboundMessageResponseSchema,
   ListConversationsResponseSchema,
   ListMessagesResponseSchema,
@@ -39,6 +40,10 @@ describe('Bandeja de conversaciones (e2e)', () => {
   let prisma: PrismaService;
   const otherKey = `e2e-other-key-${randomUUID()}`;
   const http = () => request(app.getHttpServer());
+  let supervisorId: string;
+
+  /** Lectura de la web: actúa como el supervisor demo (ve todas las bandejas). */
+  const read = (path: string) => http().get(path).set(DEMO_MEMBER_HEADER, supervisorId);
 
   const inbound = (body: object, key = E2E_DEMO_KEY) =>
     http()
@@ -55,6 +60,11 @@ describe('Bandeja de conversaciones (e2e)', () => {
   beforeAll(async () => {
     app = await createApp();
     prisma = app.get(PrismaService);
+    supervisorId = (
+      await prisma.tenantMember.findFirstOrThrow({
+        where: { role: 'OWNER', tenant: { slug: 'demo' } },
+      })
+    ).id;
 
     // Segundo tenant con su propio canal y credencial, para probar el aislamiento.
     const tenant = await prisma.tenant.create({
@@ -190,7 +200,7 @@ describe('Bandeja de conversaciones (e2e)', () => {
       const older = (await inbound(inboundBody(phone()))).body.conversationId;
       const newer = (await inbound(inboundBody(phone()))).body.conversationId;
 
-      const res = await http().get('/api/v1/conversations').expect(200);
+      const res = await read('/api/v1/conversations').expect(200);
       const page = ListConversationsResponseSchema.parse(res.body);
 
       const ids = page.items.map((item) => item.id);
@@ -208,8 +218,7 @@ describe('Bandeja de conversaciones (e2e)', () => {
       const seen: string[] = [];
       let cursor: string | null = null;
       do {
-        const res = await http()
-          .get('/api/v1/conversations')
+        const res = await read('/api/v1/conversations')
           .query(cursor ? { cursor, limit: 30 } : { limit: 30 })
           .expect(200);
         const page = ListConversationsResponseSchema.parse(res.body);
@@ -230,8 +239,7 @@ describe('Bandeja de conversaciones (e2e)', () => {
 
       const latest = ListMessagesResponseSchema.parse(
         (
-          await http()
-            .get(`/api/v1/conversations/${conversationId}/messages`)
+          await read(`/api/v1/conversations/${conversationId}/messages`)
             .query({ limit: 3 })
             .expect(200)
         ).body,
@@ -241,8 +249,7 @@ describe('Bandeja de conversaciones (e2e)', () => {
 
       const older = ListMessagesResponseSchema.parse(
         (
-          await http()
-            .get(`/api/v1/conversations/${conversationId}/messages`)
+          await read(`/api/v1/conversations/${conversationId}/messages`)
             .query({ limit: 3, before: latest.prevCursor })
             .expect(200)
         ).body,
@@ -255,14 +262,14 @@ describe('Bandeja de conversaciones (e2e)', () => {
       const foreign = (await inbound(inboundBody(phone()), otherKey).expect(201)).body
         .conversationId;
 
-      await http().get(`/api/v1/conversations/${foreign}/messages`).expect(404);
+      await read(`/api/v1/conversations/${foreign}/messages`).expect(404);
 
       let cursor: string | null = null;
       const seen: string[] = [];
       do {
-        const res = await http()
-          .get('/api/v1/conversations')
-          .query(cursor ? { cursor, limit: 100 } : { limit: 100 });
+        const res = await read('/api/v1/conversations').query(
+          cursor ? { cursor, limit: 100 } : { limit: 100 },
+        );
         const page = ListConversationsResponseSchema.parse(res.body);
         seen.push(...page.items.map((item) => item.id));
         cursor = page.nextCursor;
@@ -271,12 +278,12 @@ describe('Bandeja de conversaciones (e2e)', () => {
     });
 
     it('responde 400 ante un cursor inválido y 404 ante una conversación inexistente', async () => {
-      await http().get('/api/v1/conversations').query({ cursor: 'basura' }).expect(400);
-      await http().get(`/api/v1/conversations/${randomUUID()}/messages`).expect(404);
+      await read('/api/v1/conversations').query({ cursor: 'basura' }).expect(400);
+      await read(`/api/v1/conversations/${randomUUID()}/messages`).expect(404);
     });
 
     it('documenta los 4 endpoints nuevos en Swagger', async () => {
-      const res = await http().get('/api/docs-json').expect(200);
+      const res = await read('/api/docs-json').expect(200);
 
       expect(Object.keys(res.body.paths)).toEqual(
         expect.arrayContaining([

@@ -1,16 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { TenantContext } from '../../../shared/application/request-context';
-import { isAiActive } from '../domain/conversation';
+import type { Inbox } from '@omnidesk/contracts';
+import type { ActorContext } from '../../../shared/application/request-context';
 import { decodeConversationCursor, encodeConversationCursor } from './conversation-cursor';
+import { toConversationSummary, type ConversationSummary } from './conversation-summary';
+import { inboxFilter } from './inbox-filter';
 import {
   CONVERSATION_READ_MODEL,
   type ConversationReadModel,
-  type ConversationSummaryView,
 } from './ports/conversation-read-model';
-
-export interface ConversationSummary extends Omit<ConversationSummaryView, 'assignedAgentId'> {
-  aiActive: boolean;
-}
 
 export interface ConversationPage {
   items: ConversationSummary[];
@@ -21,22 +18,21 @@ export interface ConversationPage {
 export class ListConversationsUseCase {
   constructor(@Inject(CONVERSATION_READ_MODEL) private readonly readModel: ConversationReadModel) {}
 
-  /** Lanza `InvalidCursorError` si el cursor no es válido. */
+  /** Lanza `InvalidCursorError` si el cursor no es válido e `InboxForbiddenError` si el rol no ve la bandeja. */
   async execute(
-    tenant: TenantContext,
+    actor: ActorContext,
+    inbox: Inbox,
     cursor: string | undefined,
     limit: number,
   ): Promise<ConversationPage> {
+    const filter = inboxFilter(actor, inbox);
     const after = cursor ? decodeConversationCursor(cursor) : null;
-    const rows = await this.readModel.listSummaries(tenant.tenantId, after, limit + 1);
+    const rows = await this.readModel.listSummaries(actor.tenantId, filter, after, limit + 1);
 
     const page = rows.slice(0, limit);
     const last = page.at(-1);
     return {
-      items: page.map(({ assignedAgentId, ...summary }) => ({
-        ...summary,
-        aiActive: isAiActive({ status: summary.status, assignedAgentId }),
-      })),
+      items: page.map(toConversationSummary),
       nextCursor: rows.length > limit && last ? encodeConversationCursor(last) : null,
     };
   }

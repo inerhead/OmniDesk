@@ -24,22 +24,52 @@ export interface ApiResponse {
   body: unknown;
 }
 
-/** GET contra el API (`${VITE_API_URL}/api/v1/...`) con timeout y `x-request-id` por petición. */
-export async function getJson(path: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<ApiResponse> {
+export interface RequestOptions {
+  timeoutMs?: number;
+  headers?: Record<string, string>;
+}
+
+async function requestJson(
+  method: 'GET' | 'POST',
+  path: string,
+  body: unknown,
+  { timeoutMs = DEFAULT_TIMEOUT_MS, headers = {} }: RequestOptions,
+): Promise<ApiResponse> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const res = await fetch(`${env.VITE_API_URL}${path}`, {
-      headers: { accept: 'application/json', 'x-request-id': newRequestId() },
+      method,
+      headers: {
+        accept: 'application/json',
+        'x-request-id': newRequestId(),
+        ...(body !== undefined && { 'content-type': 'application/json' }),
+        ...headers,
+      },
+      ...(body !== undefined && { body: JSON.stringify(body) }),
       credentials: 'include',
       signal: controller.signal,
     });
-    const body: unknown = await res.json().catch(() => null);
-    return { status: res.status, body };
+    const json: unknown = await res.json().catch(() => null);
+    return { status: res.status, body: json };
   } catch (error) {
     throw new ApiUnavailableError(error);
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** GET contra el API (`${VITE_API_URL}/api/v1/...`) con timeout y `x-request-id` por petición. */
+export function getJson(path: string, options: RequestOptions = {}): Promise<ApiResponse> {
+  return requestJson('GET', path, undefined, options);
+}
+
+/** POST con cuerpo JSON. Igual que `getJson`, devuelve el estado y el cuerpo sin interpretarlos. */
+export function postJson(
+  path: string,
+  body: unknown,
+  options: RequestOptions = {},
+): Promise<ApiResponse> {
+  return requestJson('POST', path, body, options);
 }

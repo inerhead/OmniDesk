@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from 'react-router';
+import { ActorSelector } from '@/features/actor/ui/actor-selector';
 import { cn } from '@/shared/lib/utils';
 import { InstallPrompt } from '@/shared/pwa/install-prompt';
 import { OfflineBanner } from '@/shared/pwa/offline-banner';
@@ -32,6 +33,7 @@ export function AppLayout() {
             </nav>
           </div>
           <div className="flex items-center gap-2">
+            <ActorSelector />
             <ConnectionBadge />
             <InstallPrompt />
           </div>

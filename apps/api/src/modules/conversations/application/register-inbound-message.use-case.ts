@@ -11,8 +11,9 @@ import {
   type ContactRepository,
 } from '../../contacts/application/ports/contact.repository';
 import { isAiActive, toPreview, type Conversation } from '../domain/conversation';
+import { decideTransition } from '../domain/conversation-transitions';
 import { customerMessage } from '../domain/message';
-import { enqueueMessageChanged } from './enqueue-conversation-changed';
+import { enqueueConversationChanged } from './enqueue-conversation-changed';
 import {
   CONVERSATION_REPOSITORY,
   type ConversationRepository,
@@ -72,23 +73,61 @@ export class RegisterInboundMessageUseCase {
     );
 
     const now = new Date();
-    const conversation =
-      (await this.conversations.findOpen(integration.channelId, contact.id)) ??
-      (await this.conversations.createOpen({
-        tenantId: integration.tenantId,
-        channelId: integration.channelId,
-        contactId: contact.id,
-        at: now,
-        preview: toPreview(input.text),
-      }));
+    const conversation = await this.conversationFor(integration, contact.id, input.text, now);
 
     const message = await this.conversations.appendMessage(
       conversation,
       customerMessage(input.text, input.externalMessageId, input.sentAt),
       now,
     );
-    await enqueueMessageChanged(this.outbox, integration.tenantId, conversation.id, now);
+    await enqueueConversationChanged(
+      this.outbox,
+      integration.tenantId,
+      conversation.id,
+      'message',
+      now,
+    );
     return toResult(conversation, message.id, false);
+  }
+
+  /** La conversación abierta del contacto; si estaba cerrada la reabre, y si no existe crea una. */
+  private async conversationFor(
+    integration: IntegrationContext,
+    contactId: string,
+    text: string,
+    now: Date,
+  ): Promise<Conversation> {
+    const open = await this.conversations.findOpen(integration.channelId, contactId);
+    if (open) return open;
+
+    const closed = await this.conversations.findLatestClosed(integration.channelId, contactId);
+    if (closed) return this.reopen(closed, now);
+
+    return this.conversations.createOpen({
+      tenantId: integration.tenantId,
+      channelId: integration.channelId,
+      contactId,
+      at: now,
+      preview: toPreview(text),
+    });
+  }
+
+  /** Reapertura automática por un mensaje del cliente: vuelve a la IA y registra `REOPENED` sin actor. */
+  private async reopen(closed: Conversation, now: Date): Promise<Conversation> {
+    // Con la fila bloqueada, dos mensajes simultáneos no reabren dos veces.
+    const locked = await this.conversations.findByIdForUpdate(closed.tenantId, closed.id);
+    if (!locked) throw new Error(`Conversación ${closed.id} no encontrada`);
+
+    const transition = decideTransition(locked, { type: 'reopen' });
+    if (!transition.ok) return locked; // otra transacción ya la reabrió
+
+    const reopened = await this.conversations.applyTransition(locked, transition.next);
+    await this.conversations.appendEvent(
+      reopened,
+      { type: 'REOPENED', actorMemberId: null, targetMemberId: null },
+      now,
+    );
+    return reopened;
   }
 }
 

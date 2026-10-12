@@ -1,117 +1,14 @@
-import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { UniqueConflictError } from '../../../shared/application/errors';
-import type { OutboxPort } from '../../../shared/application/outbox.port';
-import type { TransactionRunner } from '../../../shared/application/transaction-runner.port';
-import type { ContactRepository } from '../../contacts/application/ports/contact.repository';
-import type { Contact } from '../../contacts/domain/contact';
-import { appendMessage, type Conversation } from '../domain/conversation';
-import type { Message, NewMessage } from '../domain/message';
-import type { ConversationRepository, NewConversation } from './ports/conversation.repository';
+import {
+  InMemoryContacts,
+  InMemoryConversations,
+  InMemoryOutbox,
+  noTransaction,
+} from '../testing/in-memory';
 import { RegisterAiReplyUseCase } from './register-ai-reply.use-case';
 import { RegisterInboundMessageUseCase } from './register-inbound-message.use-case';
 
 const integration = { tenantId: 't1', channelId: 'c1' };
-const noTransaction: TransactionRunner = { run: (work) => work() };
-
-class InMemoryOutbox implements OutboxPort {
-  readonly events: Parameters<OutboxPort['enqueue']>[0][] = [];
-
-  async enqueue(event: Parameters<OutboxPort['enqueue']>[0]) {
-    this.events.push(event);
-  }
-}
-
-class InMemoryContacts implements ContactRepository {
-  readonly byPhone = new Map<string, Contact>();
-
-  async findOrCreateByIdentity(
-    identity: { tenantId: string; externalId: string },
-    displayName?: string,
-  ) {
-    const found = this.byPhone.get(identity.externalId);
-    if (found) return found;
-    const contact = {
-      id: randomUUID(),
-      tenantId: identity.tenantId,
-      displayName: displayName ?? null,
-    };
-    this.byPhone.set(identity.externalId, contact);
-    return contact;
-  }
-}
-
-class InMemoryConversations implements ConversationRepository {
-  readonly conversations: Conversation[] = [];
-  readonly messages: (Message & NewMessage & { channelId: string })[] = [];
-  /** Simula que otra transacción creó la conversación a la vez la próxima vez que se llame a createOpen. */
-  raceOnNextCreate = false;
-
-  async findById(tenantId: string, id: string) {
-    return this.conversations.find((c) => c.id === id && c.tenantId === tenantId) ?? null;
-  }
-
-  findByIdForUpdate(tenantId: string, id: string) {
-    return this.findById(tenantId, id);
-  }
-
-  async findOpen(channelId: string, contactId: string) {
-    return (
-      this.conversations.find(
-        (c) => c.channelId === channelId && c.contactId === contactId && c.status === 'OPEN',
-      ) ?? null
-    );
-  }
-
-  async createOpen(data: NewConversation) {
-    const conversation: Conversation = {
-      id: randomUUID(),
-      tenantId: data.tenantId,
-      channelId: data.channelId,
-      contactId: data.contactId,
-      status: 'OPEN',
-      assignedAgentId: null,
-      controlVersion: 0,
-      lastSequence: 0,
-      lastMessageAt: data.at,
-      lastMessagePreview: data.preview,
-    };
-    this.conversations.push(conversation);
-    if (this.raceOnNextCreate) {
-      this.raceOnNextCreate = false;
-      throw new UniqueConflictError('conversations_one_open_per_contact');
-    }
-    return conversation;
-  }
-
-  async appendMessage(conversation: Conversation, message: NewMessage, at: Date) {
-    Object.assign(conversation, appendMessage(conversation, message.text, at));
-    const stored = {
-      ...message,
-      id: randomUUID(),
-      channelId: conversation.channelId,
-      conversationId: conversation.id,
-      sequence: conversation.lastSequence,
-      createdAt: at,
-    };
-    this.messages.push(stored);
-    return stored;
-  }
-
-  async findMessageByExternalId(channelId: string, externalId: string) {
-    return (
-      this.messages.find((m) => m.channelId === channelId && m.externalId === externalId) ?? null
-    );
-  }
-
-  async findMessageByIdempotencyKey(conversationId: string, idempotencyKey: string) {
-    return (
-      this.messages.find(
-        (m) => m.conversationId === conversationId && m.idempotencyKey === idempotencyKey,
-      ) ?? null
-    );
-  }
-}
 
 const inbound = (externalMessageId: string, phone = '+573001234567') => ({
   externalMessageId,
@@ -180,6 +77,43 @@ describe('RegisterInboundMessageUseCase', () => {
     await useCase.execute(integration, inbound('m1'));
 
     expect(outbox.events).toHaveLength(1);
+  });
+
+  it('reabre una conversación cerrada: misma conversación, REOPENED sin actor y aiAllowed true', async () => {
+    const first = await useCase.execute(integration, inbound('m1'));
+    const conversation = conversations.conversations[0]!;
+    Object.assign(conversation, { status: 'CLOSED', assignedAgentId: 'laura', controlVersion: 3 });
+
+    const again = await useCase.execute(integration, inbound('m2'));
+
+    expect(again).toMatchObject({
+      conversationId: first.conversationId,
+      aiAllowed: true,
+      controlVersion: 4,
+      duplicate: false,
+    });
+    expect(conversations.conversations).toHaveLength(1);
+    expect(conversation).toMatchObject({ status: 'OPEN', assignedAgentId: null });
+    expect(conversations.events).toEqual([
+      expect.objectContaining({ type: 'REOPENED', actorMemberId: null, targetMemberId: null }),
+    ]);
+    // El evento va antes del mensaje que lo provocó, en la misma línea de tiempo.
+    expect(conversations.events[0]!.sequence).toBe(2);
+    expect(conversations.messages.at(-1)!.sequence).toBe(3);
+  });
+
+  it('con la conversación asignada devuelve aiAllowed false y el controlVersion vigente', async () => {
+    const first = await useCase.execute(integration, inbound('m1'));
+    Object.assign(conversations.conversations[0]!, { assignedAgentId: 'laura', controlVersion: 1 });
+
+    const again = await useCase.execute(integration, inbound('m2'));
+
+    expect(again).toMatchObject({
+      conversationId: first.conversationId,
+      aiAllowed: false,
+      controlVersion: 1,
+    });
+    expect(conversations.events).toHaveLength(0);
   });
 
   it('reintenta una vez si otra transacción creó la conversación a la vez', async () => {

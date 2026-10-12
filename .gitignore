@@ -31,3 +31,4 @@ coverage/
 
 # código generado
 apps/api/src/generated/
+node_modules

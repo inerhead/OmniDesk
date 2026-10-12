@@ -11,6 +11,13 @@ import { resolveRequestId } from './request-id';
         pinoHttp: {
           level: env.LOG_LEVEL,
           genReqId: resolveRequestId,
+          // Nunca se registran credenciales: API keys de canal, firma HMAC y cookies de sesión.
+          redact: [
+            'req.headers.authorization',
+            'req.headers.cookie',
+            'req.headers["x-omnidesk-signature"]',
+            'res.headers["set-cookie"]',
+          ],
         },
       }),
     }),

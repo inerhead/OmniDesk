@@ -112,7 +112,10 @@ describe('Atención humana (e2e)', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule.forRoot(testEnv())],
     }).compile();
-    app = moduleRef.createNestApplication<NestExpressApplication>({ bufferLogs: true });
+    app = moduleRef.createNestApplication<NestExpressApplication>({
+      bufferLogs: true,
+      rawBody: true,
+    });
     configureApp(app, testEnv());
     await app.init();
     prisma = app.get(PrismaService);

@@ -15,6 +15,22 @@ const basePath = z
   .string()
   .regex(/^(\/[A-Za-z0-9._~-]+)*$/, 'Debe empezar por "/" y no terminar en "/" (p. ej. /omnidesk)');
 
+/** 32 bytes en base64 (`openssl rand -base64 32`): clave AES-256-GCM de los secretos de canal. */
+const secretsKey = z
+  .string()
+  .transform((value) => Buffer.from(value, 'base64'))
+  .refine((key) => key.length === 32, 'Debe ser de 32 bytes en base64 (openssl rand -base64 32)');
+
+const csvOfHosts = z
+  .string()
+  .default('')
+  .transform((value) =>
+    value
+      .split(',')
+      .map((item) => item.trim().toLowerCase())
+      .filter((item) => item.length > 0),
+  );
+
 const booleanString = z
   .enum(['true', 'false'])
   .default('false')
@@ -31,9 +47,7 @@ export const EnvSchema = z
     DEMO_MODE: booleanString,
     /** API key del canal demo; se guarda hasheada. */
     DEMO_CHANNEL_API_KEY: z.string().min(24).optional(),
-    /** Adaptador de mensajería saliente; hoy solo existe el simulado. */
-    MESSAGING_PROVIDER: z.enum(['simulated']).default('simulated'),
-    /** Probabilidad (0 a 1) de que el proveedor simulado falle un envío. */
+    /** Probabilidad (0 a 1) de que el proveedor simulado (canales `SIMULATED`) falle un envío. */
     SIMULATED_PROVIDER_FAILURE_RATE: z.coerce.number().min(0).max(1).default(0),
     /** Cliente OAuth de Google. Sin él, el login con Google no está disponible (obligatorio en producción). */
     GOOGLE_CLIENT_ID: z.string().min(1).optional(),
@@ -49,6 +63,10 @@ export const EnvSchema = z
     TRUST_PROXY: z.coerce.number().int().min(0).default(1),
     /** Versión desplegada (commit corto o etiqueta). Sin ella, la de package.json. */
     APP_VERSION: z.preprocess((value) => value || undefined, z.string().optional()),
+    /** Clave de cifrado de los secretos HMAC de los canales (distinta por entorno). Obligatoria en producción. */
+    CHANNEL_SECRETS_KEY: z.preprocess((value) => value || undefined, secretsKey.optional()),
+    /** Hosts a los que se admite un `webhookUrl` por `http://` o con IP privada (p. ej. "n8n"). */
+    N8N_WEBHOOK_ALLOWED_HOSTS: csvOfHosts,
     /** Cookie de sesión solo por HTTPS. Obligatorio en producción. */
     SESSION_COOKIE_SECURE: booleanString,
   })
@@ -72,6 +90,13 @@ export const EnvSchema = z
         ctx.addIssue({
           code: 'custom',
           path: ['GOOGLE_CLIENT_ID'],
+          message: 'Es obligatoria con NODE_ENV=production',
+        });
+      }
+      if (!env.CHANNEL_SECRETS_KEY) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['CHANNEL_SECRETS_KEY'],
           message: 'Es obligatoria con NODE_ENV=production',
         });
       }

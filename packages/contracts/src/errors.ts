@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-/** Códigos de error de identidad, empresas e invitaciones (SPEC 07). */
+/** Códigos de error con significado para el cliente (SPEC 07: identidad; SPEC 09: canales y firma). */
 export const ApiErrorCodeSchema = z.enum([
   'UNAUTHENTICATED',
   'NO_ACTIVE_TENANT',
@@ -9,6 +9,9 @@ export const ApiErrorCodeSchema = z.enum([
   'INVITATION_EMAIL_MISMATCH',
   'SLUG_TAKEN',
   'ALREADY_MEMBER',
+  'INVALID_SIGNATURE',
+  'INVALID_WEBHOOK_URL',
+  'CHANNEL_EXTERNAL_ID_TAKEN',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCodeSchema>;
 

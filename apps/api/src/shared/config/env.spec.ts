@@ -63,11 +63,8 @@ describe('parseEnv — modo demo', () => {
 });
 
 describe('parseEnv — mensajería saliente', () => {
-  it('usa el proveedor simulado y una tasa de fallo 0 por defecto', () => {
-    const env = parseEnv(valid);
-
-    expect(env.MESSAGING_PROVIDER).toBe('simulated');
-    expect(env.SIMULATED_PROVIDER_FAILURE_RATE).toBe(0);
+  it('usa una tasa de fallo 0 por defecto', () => {
+    expect(parseEnv(valid).SIMULATED_PROVIDER_FAILURE_RATE).toBe(0);
   });
 
   it('convierte la tasa de fallo a número', () => {
@@ -81,11 +78,43 @@ describe('parseEnv — mensajería saliente', () => {
       /SIMULATED_PROVIDER_FAILURE_RATE/,
     );
   });
+});
 
-  it('rechaza un proveedor que no sea simulated', () => {
-    expect(() => parseEnv({ ...valid, MESSAGING_PROVIDER: 'n8n' })).toThrowError(
-      /MESSAGING_PROVIDER/,
+describe('parseEnv — canales', () => {
+  const key = Buffer.alloc(32, 7).toString('base64');
+
+  it('CHANNEL_SECRETS_KEY es opcional fuera de producción y se decodifica a 32 bytes', () => {
+    expect(parseEnv(valid).CHANNEL_SECRETS_KEY).toBeUndefined();
+    expect(parseEnv({ ...valid, CHANNEL_SECRETS_KEY: '' }).CHANNEL_SECRETS_KEY).toBeUndefined();
+    expect(parseEnv({ ...valid, CHANNEL_SECRETS_KEY: key }).CHANNEL_SECRETS_KEY).toEqual(
+      Buffer.alloc(32, 7),
     );
+  });
+
+  it('rechaza una clave que no sea de 32 bytes', () => {
+    expect(() =>
+      parseEnv({ ...valid, CHANNEL_SECRETS_KEY: Buffer.alloc(16).toString('base64') }),
+    ).toThrowError(/CHANNEL_SECRETS_KEY/);
+  });
+
+  it('es obligatoria en producción', () => {
+    expect(() =>
+      parseEnv({
+        ...valid,
+        NODE_ENV: 'production',
+        GOOGLE_CLIENT_ID: 'id',
+        GOOGLE_CLIENT_SECRET: 'secret',
+        SESSION_COOKIE_SECURE: 'true',
+      }),
+    ).toThrowError(/CHANNEL_SECRETS_KEY/);
+  });
+
+  it('separa N8N_WEBHOOK_ALLOWED_HOSTS por comas, en minúsculas', () => {
+    expect(parseEnv(valid).N8N_WEBHOOK_ALLOWED_HOSTS).toEqual([]);
+    expect(
+      parseEnv({ ...valid, N8N_WEBHOOK_ALLOWED_HOSTS: 'n8n, N8N.gastromesa.com,' })
+        .N8N_WEBHOOK_ALLOWED_HOSTS,
+    ).toEqual(['n8n', 'n8n.gastromesa.com']);
   });
 });
 
@@ -120,6 +149,7 @@ describe('parseEnv — identidad', () => {
         GOOGLE_CLIENT_ID: 'id',
         GOOGLE_CLIENT_SECRET: 'secret',
         SESSION_COOKIE_SECURE: 'true',
+        CHANNEL_SECRETS_KEY: Buffer.alloc(32).toString('base64'),
       }).SESSION_COOKIE_SECURE,
     ).toBe(true);
   });

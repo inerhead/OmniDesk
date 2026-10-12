@@ -59,7 +59,7 @@ export class SimulatedMessagingProvider implements MessagingProvider, OnModuleDe
       this.tx
         .runDetached(() =>
           this.deliveryStatus.execute(
-            { tenantId: request.tenantId, channelId: request.channelId },
+            { tenantId: request.tenantId, channelId: request.channel.id },
             { messageId: request.messageId, providerMessageId, status, occurredAt: new Date() },
           ),
         )

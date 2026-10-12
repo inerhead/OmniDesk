@@ -18,7 +18,10 @@ enum ChannelType {
 }
 
 enum ChannelProvider {
+  /// Adaptador simulado (canal demo, desarrollo).
+  SIMULATED
   N8N
+  /// Se conserva, sin adaptador todavía.
   CUSTOM
 }
 
@@ -85,9 +88,18 @@ model Channel {
   name       String
   type       ChannelType
   provider   ChannelProvider
-  /// Id del número en el proveedor.
+  /// Id del número en el proveedor (phone_number_id de Meta).
   externalId String          @map("external_id")
+  /// Número público en E.164, para mostrar.
+  phoneNumber          String?   @map("phone_number")
+  webhookUrl           String?   @map("webhook_url")
+  /// AES-256-GCM: iv (12 B) || ciphertext || tag (16 B).
+  hmacSecretEnc        Bytes?    @map("hmac_secret_enc")
+  hmacSecretPrevEnc    Bytes?    @map("hmac_secret_prev_enc")
+  hmacSecretPrevUntil  DateTime? @map("hmac_secret_prev_until") @db.Timestamptz(3)
+  credentialsRotatedAt DateTime? @map("credentials_rotated_at") @db.Timestamptz(3)
   createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   tenant        Tenant                  @relation(fields: [tenantId], references: [id])
   credentials   IntegrationCredential[]
@@ -107,6 +119,8 @@ model IntegrationCredential {
   keyHash   String    @unique @map("key_hash")
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  /// Fin de la vigencia tras una rotación; null = vigente indefinidamente.
+  expiresAt DateTime? @map("expires_at") @db.Timestamptz(3)
 
   tenant  Tenant  @relation(fields: [tenantId], references: [id])
   channel Channel @relation(fields: [channelId], references: [id])

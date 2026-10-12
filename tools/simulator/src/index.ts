@@ -118,7 +118,7 @@ async function runLive(client: IntegrationClient): Promise<void> {
 
 async function main(): Promise<void> {
   const { apiUrl, apiKey } = config();
-  const client = new IntegrationClient(apiUrl, apiKey);
+  const client = new IntegrationClient(apiUrl, apiKey, process.env.SIMULATOR_HMAC_SECRET);
   console.log(`Simulador → ${apiUrl}\n`);
 
   if (process.argv.includes('--live')) await runLive(client);

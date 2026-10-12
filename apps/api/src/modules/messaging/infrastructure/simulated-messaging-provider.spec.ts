@@ -5,7 +5,14 @@ import { SimulatedMessagingProvider } from './simulated-messaging-provider';
 
 const request = {
   tenantId: 't1',
-  channelId: 'c1',
+  channel: {
+    id: 'c1',
+    provider: 'SIMULATED' as const,
+    externalId: 'demo-whatsapp',
+    webhookUrl: null,
+    hmacSecretEnc: null,
+  },
+  conversationId: '0199c0de-0000-7000-8000-0000000000aa',
   messageId: '0199c0de-0000-7000-8000-000000000001',
   to: '+573001110001',
   text: 'Hola',

@@ -1,4 +1,5 @@
 export * from './auth';
+export * from './channels';
 export * from './conversation-policy';
 export * from './conversations';
 export * from './errors';

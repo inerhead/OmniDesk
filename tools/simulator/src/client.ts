@@ -12,6 +12,7 @@ import {
   type InboundMessageResponse,
   type OutboundAiMessageRequest,
 } from '@omnidesk/contracts';
+import { createHmac } from 'node:crypto';
 
 export type AiReplyOutcome = { sent: true; messageId: string } | { sent: false; reason: string };
 
@@ -19,10 +20,13 @@ export type AiReplyOutcome = { sent: true; messageId: string } | { sent: false; 
 export class IntegrationClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
+  /** Secreto HMAC del canal: si existe, firma cada petición (`X-OmniDesk-Signature`). */
+  private readonly hmacSecret: string | undefined;
 
-  constructor(baseUrl: string, apiKey: string) {
+  constructor(baseUrl: string, apiKey: string, hmacSecret?: string) {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
     this.apiKey = apiKey;
+    this.hmacSecret = hmacSecret || undefined;
   }
 
   async sendInbound(request: InboundMessageRequest): Promise<InboundMessageResponse> {
@@ -64,14 +68,26 @@ export class IntegrationClient {
   }
 
   private post(path: string, body: unknown): Promise<Response> {
-    return fetch(`${this.baseUrl}${path}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
-      body: JSON.stringify(body),
-    });
+    const raw = JSON.stringify(body);
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+      authorization: `Bearer ${this.apiKey}`,
+    };
+    if (this.hmacSecret) headers['x-omnidesk-signature'] = signPayload(this.hmacSecret, raw);
+    return fetch(`${this.baseUrl}${path}`, { method: 'POST', headers, body: raw });
   }
 }
 
 async function httpError(res: Response): Promise<Error> {
   return new Error(`HTTP ${res.status} ${res.url}: ${await res.text()}`);
+}
+
+/** `t=<unix_segundos>,v1=<hex(HMAC_SHA256(secreto, t + "." + cuerpo))>` (docs/integracion-n8n.md). */
+export function signPayload(
+  secret: string,
+  rawBody: string,
+  nowSec = Math.floor(Date.now() / 1000),
+) {
+  const v1 = createHmac('sha256', secret).update(`${nowSec}.${rawBody}`).digest('hex');
+  return `t=${nowSec},v1=${v1}`;
 }

@@ -21,6 +21,8 @@ async function bootstrap(): Promise<void> {
   const env = loadEnvOrExit();
   const app = await NestFactory.create<NestExpressApplication>(AppModule.forRoot(env), {
     bufferLogs: true,
+    // `req.rawBody`: la firma HMAC de las integraciones se verifica sobre los bytes recibidos.
+    rawBody: true,
   });
   configureApp(app, env);
   await app.listen(env.API_PORT, '0.0.0.0');

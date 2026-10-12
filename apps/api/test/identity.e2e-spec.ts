@@ -25,7 +25,10 @@ async function createApp(overrides: Record<string, string> = {}): Promise<NestEx
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule.forRoot(testEnv(overrides))],
   }).compile();
-  const app = moduleRef.createNestApplication<NestExpressApplication>({ bufferLogs: true });
+  const app = moduleRef.createNestApplication<NestExpressApplication>({
+    bufferLogs: true,
+    rawBody: true,
+  });
   configureApp(app, testEnv(overrides));
   await app.init();
   return app;

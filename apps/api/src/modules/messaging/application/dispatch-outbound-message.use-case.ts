@@ -2,7 +2,11 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { FindOutboundForSendUseCase } from '../../conversations/application/find-outbound-for-send.use-case';
 import { SendRequestedPayloadSchema } from '../../conversations/application/enqueue-send-requested';
 import { UpdateDeliveryStatusUseCase } from '../../conversations/application/update-delivery-status.use-case';
-import { MESSAGING_PROVIDER, type MessagingProvider } from './ports/messaging-provider.port';
+import {
+  ChannelNotConfiguredError,
+  MESSAGING_PROVIDER_REGISTRY,
+  type MessagingProviderRegistry,
+} from './ports/messaging-provider.port';
 
 /**
  * Entrega al proveedor un mensaje saliente (`message.send_requested`). Lo llama el dispatcher
@@ -15,10 +19,13 @@ export class DispatchOutboundMessageUseCase {
   constructor(
     private readonly findOutbound: FindOutboundForSendUseCase,
     private readonly deliveryStatus: UpdateDeliveryStatusUseCase,
-    @Inject(MESSAGING_PROVIDER) private readonly provider: MessagingProvider,
+    @Inject(MESSAGING_PROVIDER_REGISTRY) private readonly providers: MessagingProviderRegistry,
   ) {}
 
-  /** Envía el mensaje y lo marca `SENT`. Lanza si el proveedor falla. */
+  /**
+   * Envía el mensaje por el adaptador de su canal y lo marca `SENT`. Lanza si el proveedor falla
+   * (el dispatcher reintenta). Si el canal no puede enviar, el mensaje queda `FAILED` sin reintentos.
+   */
   async send(tenantId: string, payload: unknown): Promise<void> {
     const { messageId } = SendRequestedPayloadSchema.parse(payload);
     const outbound = await this.findOutbound.execute(tenantId, messageId);
@@ -30,13 +37,25 @@ export class DispatchOutboundMessageUseCase {
     const { message } = outbound;
     if (message.status !== 'PENDING') return;
 
-    const { providerMessageId } = await this.provider.send({
-      tenantId,
-      channelId: message.channelId,
-      messageId: message.id,
-      to: outbound.to,
-      text: message.text,
-    });
+    const resolved = await this.providers.resolve(tenantId, message.channelId);
+    if (!resolved) throw new Error(`Canal ${message.channelId} no encontrado`);
+
+    let providerMessageId: string;
+    try {
+      ({ providerMessageId } = await resolved.provider.send({
+        tenantId,
+        channel: resolved.channel,
+        conversationId: message.conversationId,
+        messageId: message.id,
+        to: outbound.to,
+        text: message.text,
+      }));
+    } catch (error) {
+      if (!(error instanceof ChannelNotConfiguredError)) throw error;
+      this.logger.warn(`Mensaje ${message.id}: ${error.message}`);
+      await this.fail(tenantId, payload, error.reason);
+      return;
+    }
     await this.deliveryStatus.applyInternal(
       { tenantId, channelId: message.channelId },
       { messageId: message.id, providerMessageId, status: 'SENT', occurredAt: new Date() },

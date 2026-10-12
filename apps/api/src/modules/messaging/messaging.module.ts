@@ -1,18 +1,19 @@
 import { Module } from '@nestjs/common';
+import { ChannelsModule } from '../channels/channels.module';
 import { ConversationsModule } from '../conversations/conversations.module';
 import { DispatchOutboundMessageUseCase } from './application/dispatch-outbound-message.use-case';
-import { MESSAGING_PROVIDER } from './application/ports/messaging-provider.port';
+import { MESSAGING_PROVIDER_REGISTRY } from './application/ports/messaging-provider.port';
+import { ChannelMessagingProviderRegistry } from './infrastructure/messaging-provider-registry';
+import { N8nMessagingProvider } from './infrastructure/n8n-messaging-provider';
 import { SimulatedMessagingProvider } from './infrastructure/simulated-messaging-provider';
 
-/**
- * Hoy hay un único adaptador (`MESSAGING_PROVIDER=simulated`). Con dos, la selección pasa a
- * `Channel.provider` (arquitectura §13).
- */
+/** Envío saliente: un adaptador por `Channel.provider` (arquitectura §13), elegido por el registro. */
 @Module({
-  imports: [ConversationsModule],
+  imports: [ConversationsModule, ChannelsModule],
   providers: [
     SimulatedMessagingProvider,
-    { provide: MESSAGING_PROVIDER, useExisting: SimulatedMessagingProvider },
+    N8nMessagingProvider,
+    { provide: MESSAGING_PROVIDER_REGISTRY, useClass: ChannelMessagingProviderRegistry },
     DispatchOutboundMessageUseCase,
   ],
   exports: [DispatchOutboundMessageUseCase],

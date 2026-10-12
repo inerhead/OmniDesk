@@ -21,7 +21,10 @@ async function createApp(databaseUp?: boolean, appEnv: Env = env): Promise<NestE
       .useValue({ ping: async () => databaseUp });
   }
   const moduleRef = await builder.compile();
-  const app = moduleRef.createNestApplication<NestExpressApplication>({ bufferLogs: true });
+  const app = moduleRef.createNestApplication<NestExpressApplication>({
+    bufferLogs: true,
+    rawBody: true,
+  });
   configureApp(app, appEnv);
   await app.init();
   return app;

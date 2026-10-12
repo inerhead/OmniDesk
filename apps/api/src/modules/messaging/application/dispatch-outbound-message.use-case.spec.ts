@@ -9,7 +9,13 @@ import {
 } from '../../conversations/testing/in-memory';
 import { agentMessage } from '../../conversations/domain/message';
 import { DispatchOutboundMessageUseCase } from './dispatch-outbound-message.use-case';
-import type { MessagingProvider, SendMessageRequest } from './ports/messaging-provider.port';
+import type { ChannelForSend } from '../../channels/application/ports/channel.repository';
+import {
+  ChannelNotConfiguredError,
+  type MessagingProvider,
+  type MessagingProviderRegistry,
+  type SendMessageRequest,
+} from './ports/messaging-provider.port';
 
 class FakeProvider implements MessagingProvider {
   readonly requests: SendMessageRequest[] = [];
@@ -19,6 +25,23 @@ class FakeProvider implements MessagingProvider {
     this.requests.push(request);
     if (this.error) throw this.error;
     return { providerMessageId: `prov-${request.messageId}` };
+  }
+}
+
+const channel: ChannelForSend = {
+  id: 'c1',
+  provider: 'N8N',
+  externalId: 'pnid-1',
+  webhookUrl: 'https://n8n.example.com/webhook/send',
+  hmacSecretEnc: new Uint8Array([1]),
+};
+
+/** Registro de un solo canal (`c1`) con el proveedor falso. */
+class FakeRegistry implements MessagingProviderRegistry {
+  constructor(private readonly provider: MessagingProvider) {}
+
+  async resolve(_tenantId: string, channelId: string) {
+    return channelId === channel.id ? { provider: this.provider, channel } : null;
   }
 }
 
@@ -39,7 +62,7 @@ describe('DispatchOutboundMessageUseCase', () => {
         new InMemoryEventInbox(),
         new InMemoryOutbox(),
       ),
-      provider,
+      new FakeRegistry(provider),
     );
     const conversation = await conversations.createOpen({
       tenantId: 't1',
@@ -62,7 +85,14 @@ describe('DispatchOutboundMessageUseCase', () => {
     await useCase.send('t1', { messageId });
 
     expect(provider.requests).toEqual([
-      { tenantId: 't1', channelId: 'c1', messageId, to: '+573001110001', text: 'Hola' },
+      {
+        tenantId: 't1',
+        channel,
+        conversationId: conversations.messages[0]!.conversationId,
+        messageId,
+        to: '+573001110001',
+        text: 'Hola',
+      },
     ]);
     expect(conversations.messages[0]).toMatchObject({
       status: 'SENT',
@@ -75,6 +105,17 @@ describe('DispatchOutboundMessageUseCase', () => {
 
     await expect(useCase.send('t1', { messageId })).rejects.toThrow('proveedor caído');
     expect(conversations.messages[0]!.status).toBe('PENDING');
+  });
+
+  it('un canal sin configurar deja el mensaje FAILED (CHANNEL_NOT_CONFIGURED) sin lanzar', async () => {
+    provider.error = new ChannelNotConfiguredError('sin secreto');
+
+    await useCase.send('t1', { messageId });
+
+    expect(conversations.messages[0]).toMatchObject({
+      status: 'FAILED',
+      failureReason: 'CHANNEL_NOT_CONFIGURED',
+    });
   });
 
   it('no reenvía un mensaje que ya no está PENDING', async () => {

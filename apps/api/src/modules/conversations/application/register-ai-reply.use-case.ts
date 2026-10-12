@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { IntegrationContext } from '../../../shared/application/request-context';
+import { OUTBOX_PORT, type OutboxPort } from '../../../shared/application/outbox.port';
 import { retryOnConflict } from '../../../shared/application/retry-on-conflict';
 import {
   TRANSACTION_RUNNER,
@@ -7,6 +8,7 @@ import {
 } from '../../../shared/application/transaction-runner.port';
 import { decideAiReply } from '../domain/conversation';
 import { aiReply } from '../domain/message';
+import { enqueueMessageChanged } from './enqueue-conversation-changed';
 import {
   CONVERSATION_REPOSITORY,
   type ConversationRepository,
@@ -30,6 +32,7 @@ export class RegisterAiReplyUseCase {
   constructor(
     @Inject(TRANSACTION_RUNNER) private readonly tx: TransactionRunner,
     @Inject(CONVERSATION_REPOSITORY) private readonly conversations: ConversationRepository,
+    @Inject(OUTBOX_PORT) private readonly outbox: OutboxPort,
   ) {}
 
   execute(integration: IntegrationContext, input: AiReplyInput): Promise<AiReplyResult> {
@@ -57,11 +60,13 @@ export class RegisterAiReplyUseCase {
     const decision = decideAiReply(conversation, input.controlVersion);
     if (!decision.allowed) return { kind: 'rejected', reason: decision.reason };
 
+    const now = new Date();
     const message = await this.conversations.appendMessage(
       conversation,
       aiReply(input.text, input.idempotencyKey),
-      new Date(),
+      now,
     );
+    await enqueueMessageChanged(this.outbox, integration.tenantId, conversation.id, now);
     return { kind: 'accepted', messageId: message.id };
   }
 }

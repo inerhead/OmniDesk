@@ -178,3 +178,20 @@ model Message {
   @@unique([conversationId, idempotencyKey])
   @@map("messages")
 }
+
+model OutboxEvent {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  /// "conversation.changed" (SPEC 03); el SPEC 05 añade "message.send_requested".
+  type          String
+  payload       Json
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(3)
+  lastError     String?   @map("last_error")
+  publishedAt   DateTime? @map("published_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([nextAttemptAt], map: "outbox_events_pending", where: raw("published_at IS NULL"))
+  @@index([publishedAt])
+  @@map("outbox_events")
+}

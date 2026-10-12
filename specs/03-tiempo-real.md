@@ -1,6 +1,6 @@
 # SPEC 03 — Tiempo real: Outbox + Socket.IO
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:** SPEC 02
 > **Date:** 2026-10-12
 > **Objective:** Cada cambio en una conversación se publica, mediante un Outbox transaccional y Socket.IO, para que la bandeja y el chat se actualicen en menos de 1 s sin polling, con un indicador de conexión y un respaldo cuando el socket cae.

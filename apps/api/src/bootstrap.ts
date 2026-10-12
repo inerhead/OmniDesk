@@ -3,6 +3,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import { cleanupOpenApiDoc } from 'nestjs-zod';
+import { RealtimeIoAdapter } from './modules/realtime/infrastructure/realtime-io-adapter';
 import { APP_VERSION } from './shared/config/app-version';
 import type { Env } from './shared/config/env';
 import { REQUEST_ID_HEADER } from './shared/logging/request-id';
@@ -18,6 +19,7 @@ export function configureApp(app: NestExpressApplication, env: Env): void {
     credentials: true,
     exposedHeaders: [REQUEST_ID_HEADER],
   });
+  app.useWebSocketAdapter(new RealtimeIoAdapter(app, env));
   app.enableShutdownHooks();
   setupSwagger(app);
 }

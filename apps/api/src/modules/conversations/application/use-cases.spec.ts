@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { UniqueConflictError } from '../../../shared/application/errors';
+import type { OutboxPort } from '../../../shared/application/outbox.port';
 import type { TransactionRunner } from '../../../shared/application/transaction-runner.port';
 import type { ContactRepository } from '../../contacts/application/ports/contact.repository';
 import type { Contact } from '../../contacts/domain/contact';
@@ -12,6 +13,14 @@ import { RegisterInboundMessageUseCase } from './register-inbound-message.use-ca
 
 const integration = { tenantId: 't1', channelId: 'c1' };
 const noTransaction: TransactionRunner = { run: (work) => work() };
+
+class InMemoryOutbox implements OutboxPort {
+  readonly events: Parameters<OutboxPort['enqueue']>[0][] = [];
+
+  async enqueue(event: Parameters<OutboxPort['enqueue']>[0]) {
+    this.events.push(event);
+  }
+}
 
 class InMemoryContacts implements ContactRepository {
   readonly byPhone = new Map<string, Contact>();
@@ -113,14 +122,17 @@ const inbound = (externalMessageId: string, phone = '+573001234567') => ({
 
 describe('RegisterInboundMessageUseCase', () => {
   let conversations: InMemoryConversations;
+  let outbox: InMemoryOutbox;
   let useCase: RegisterInboundMessageUseCase;
 
   beforeEach(() => {
     conversations = new InMemoryConversations();
+    outbox = new InMemoryOutbox();
     useCase = new RegisterInboundMessageUseCase(
       noTransaction,
       conversations,
       new InMemoryContacts(),
+      outbox,
     );
   });
 
@@ -147,6 +159,29 @@ describe('RegisterInboundMessageUseCase', () => {
     expect(conversations.messages).toHaveLength(1);
   });
 
+  it('encola un conversation.changed por mensaje nuevo', async () => {
+    const first = await useCase.execute(integration, inbound('m1'));
+    await useCase.execute(integration, inbound('m2'));
+
+    expect(outbox.events).toHaveLength(2);
+    expect(outbox.events[0]).toMatchObject({
+      tenantId: 't1',
+      type: 'conversation.changed',
+      payload: {
+        type: 'conversation.changed',
+        conversationId: first.conversationId,
+        reason: 'message',
+      },
+    });
+  });
+
+  it('no encola nada para un duplicado', async () => {
+    await useCase.execute(integration, inbound('m1'));
+    await useCase.execute(integration, inbound('m1'));
+
+    expect(outbox.events).toHaveLength(1);
+  });
+
   it('reintenta una vez si otra transacción creó la conversación a la vez', async () => {
     conversations.raceOnNextCreate = true;
 
@@ -159,6 +194,7 @@ describe('RegisterInboundMessageUseCase', () => {
 
 describe('RegisterAiReplyUseCase', () => {
   let conversations: InMemoryConversations;
+  let outbox: InMemoryOutbox;
   let useCase: RegisterAiReplyUseCase;
   let conversationId: string;
 
@@ -168,9 +204,11 @@ describe('RegisterAiReplyUseCase', () => {
       noTransaction,
       conversations,
       new InMemoryContacts(),
+      new InMemoryOutbox(),
     );
     conversationId = (await inboundUseCase.execute(integration, inbound('m1'))).conversationId;
-    useCase = new RegisterAiReplyUseCase(noTransaction, conversations);
+    outbox = new InMemoryOutbox();
+    useCase = new RegisterAiReplyUseCase(noTransaction, conversations, outbox);
   });
 
   const reply = (overrides: object = {}) => ({
@@ -192,12 +230,24 @@ describe('RegisterAiReplyUseCase', () => {
     });
   });
 
-  it('es idempotente por idempotencyKey', async () => {
+  it('encola un conversation.changed al aceptar la respuesta', async () => {
+    await useCase.execute(integration, reply());
+
+    expect(outbox.events).toHaveLength(1);
+    expect(outbox.events[0]).toMatchObject({
+      tenantId: 't1',
+      type: 'conversation.changed',
+      payload: { conversationId, reason: 'message' },
+    });
+  });
+
+  it('es idempotente por idempotencyKey y no encola de nuevo', async () => {
     const first = await useCase.execute(integration, reply());
     const again = await useCase.execute(integration, reply());
 
     expect(again).toEqual(first);
     expect(conversations.messages).toHaveLength(2);
+    expect(outbox.events).toHaveLength(1);
   });
 
   it('rechaza con CONTROL_CHANGED si el controlVersion no coincide', async () => {
@@ -205,6 +255,7 @@ describe('RegisterAiReplyUseCase', () => {
       kind: 'rejected',
       reason: 'CONTROL_CHANGED',
     });
+    expect(outbox.events).toHaveLength(0);
   });
 
   it('no encuentra conversaciones de otro canal', async () => {

@@ -5,6 +5,7 @@ import { ConversationsModule } from './modules/conversations/conversations.modul
 import { DemoModule } from './modules/demo/demo.module';
 import { HealthModule } from './modules/health/health.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
+import { RealtimeModule } from './modules/realtime/realtime.module';
 import { ConfigModule } from './shared/config/config.module';
 import type { Env } from './shared/config/env';
 import { PrismaModule } from './shared/infrastructure/prisma/prisma.module';
@@ -23,6 +24,7 @@ export class AppModule {
         DemoModule,
         ConversationsModule,
         IntegrationsModule,
+        RealtimeModule,
       ],
       // Valida con zod todo cuerpo y query tipados con DTOs de nestjs-zod (400 si no cumplen).
       providers: [{ provide: APP_PIPE, useClass: ZodValidationPipe }],

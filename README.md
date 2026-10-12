@@ -79,6 +79,12 @@ pnpm simulate --live   # un mensaje nuevo cada 4 s (cliente + IA) hasta Ctrl+C
 
 El simulador corre en el host (Node 24 + pnpm) y llama a `http://localhost:${GATEWAY_HOST_PORT}`. Para otra URL, define `SIMULATOR_API_URL`.
 
+### Ver el tiempo real
+
+Con la bandeja abierta en <http://localhost:8080/conversations>, lanza `pnpm simulate --live`: cada mensaje nuevo aparece en la lista y en el chat abierto en ≤ 1 s, sin recargar. El badge del header muestra **En vivo** mientras el socket (`/api/realtime`) está conectado.
+
+Para ver el respaldo, detén el API con `docker compose stop api`: el badge pasa a **Reconectando…** y la lista se refresca como máximo cada 15 s. Al levantarlo de nuevo, el badge vuelve a **En vivo** y aparecen los mensajes que llegaron mientras tanto.
+
 Las pruebas e2e del API usan una base aparte (`<base>_e2e`), así que no tocan estos datos.
 
 ## Probar la PWA

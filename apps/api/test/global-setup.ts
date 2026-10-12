@@ -21,7 +21,7 @@ export default async function setup(): Promise<void> {
   const db = new Client({ connectionString: testUrl.toString() });
   await db.connect();
   await db.query(
-    'TRUNCATE messages, conversations, contact_identities, contacts, integration_credentials, channels, tenants CASCADE',
+    'TRUNCATE outbox_events, messages, conversations, contact_identities, contacts, integration_credentials, channels, tenants CASCADE',
   );
   await db.end();
 }

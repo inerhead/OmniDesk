@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { IntegrationContext } from '../../../shared/application/request-context';
+import { OUTBOX_PORT, type OutboxPort } from '../../../shared/application/outbox.port';
 import { retryOnConflict } from '../../../shared/application/retry-on-conflict';
 import {
   TRANSACTION_RUNNER,
@@ -11,6 +12,7 @@ import {
 } from '../../contacts/application/ports/contact.repository';
 import { isAiActive, toPreview, type Conversation } from '../domain/conversation';
 import { customerMessage } from '../domain/message';
+import { enqueueMessageChanged } from './enqueue-conversation-changed';
 import {
   CONVERSATION_REPOSITORY,
   type ConversationRepository,
@@ -37,6 +39,7 @@ export class RegisterInboundMessageUseCase {
     @Inject(TRANSACTION_RUNNER) private readonly tx: TransactionRunner,
     @Inject(CONVERSATION_REPOSITORY) private readonly conversations: ConversationRepository,
     @Inject(CONTACT_REPOSITORY) private readonly contacts: ContactRepository,
+    @Inject(OUTBOX_PORT) private readonly outbox: OutboxPort,
   ) {}
 
   execute(
@@ -84,6 +87,7 @@ export class RegisterInboundMessageUseCase {
       customerMessage(input.text, input.externalMessageId, input.sentAt),
       now,
     );
+    await enqueueMessageChanged(this.outbox, integration.tenantId, conversation.id, now);
     return toResult(conversation, message.id, false);
   }
 }

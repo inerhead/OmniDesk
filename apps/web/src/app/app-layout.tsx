@@ -3,6 +3,7 @@ import { cn } from '@/shared/lib/utils';
 import { InstallPrompt } from '@/shared/pwa/install-prompt';
 import { OfflineBanner } from '@/shared/pwa/offline-banner';
 import { UpdatePrompt } from '@/shared/pwa/update-prompt';
+import { ConnectionBadge } from '@/shared/realtime/connection-badge';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   cn(
@@ -30,7 +31,10 @@ export function AppLayout() {
               </NavLink>
             </nav>
           </div>
-          <InstallPrompt />
+          <div className="flex items-center gap-2">
+            <ConnectionBadge />
+            <InstallPrompt />
+          </div>
         </div>
       </header>
       {/* Cada página controla su propio scroll: la bandeja usa dos paneles con scroll independiente. */}

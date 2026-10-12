@@ -27,16 +27,32 @@ export interface ApiResponse {
 export interface RequestOptions {
   timeoutMs?: number;
   headers?: Record<string, string>;
+  /** Un `401` es una respuesta esperada (p. ej. `/me` en una pantalla pública): no cierra la sesión. */
+  allowUnauthorized?: boolean;
+}
+
+let onUnauthorized: (() => void) | null = null;
+
+/**
+ * Qué hacer ante un `401` en cualquier petición: la app limpia la caché, desconecta el socket y
+ * redirige a `/login?next=`. Devuelve la función que lo quita.
+ */
+export function setUnauthorizedHandler(handler: () => void): () => void {
+  onUnauthorized = handler;
+  return () => {
+    if (onUnauthorized === handler) onUnauthorized = null;
+  };
 }
 
 async function requestJson(
-  method: 'GET' | 'POST',
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   path: string,
   body: unknown,
-  { timeoutMs = DEFAULT_TIMEOUT_MS, headers = {} }: RequestOptions,
+  { timeoutMs = DEFAULT_TIMEOUT_MS, headers = {}, allowUnauthorized = false }: RequestOptions,
 ): Promise<ApiResponse> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let response: ApiResponse;
 
   try {
     const res = await fetch(`${env.VITE_API_URL}${path}`, {
@@ -52,12 +68,14 @@ async function requestJson(
       signal: controller.signal,
     });
     const json: unknown = await res.json().catch(() => null);
-    return { status: res.status, body: json };
+    response = { status: res.status, body: json };
   } catch (error) {
     throw new ApiUnavailableError(error);
   } finally {
     clearTimeout(timer);
   }
+  if (response.status === 401 && !allowUnauthorized) onUnauthorized?.();
+  return response;
 }
 
 /** GET contra el API (`${VITE_API_URL}/api/v1/...`) con timeout y `x-request-id` por petición. */
@@ -72,4 +90,18 @@ export function postJson(
   options: RequestOptions = {},
 ): Promise<ApiResponse> {
   return requestJson('POST', path, body, options);
+}
+
+/** PATCH con cuerpo JSON. */
+export function patchJson(
+  path: string,
+  body: unknown,
+  options: RequestOptions = {},
+): Promise<ApiResponse> {
+  return requestJson('PATCH', path, body, options);
+}
+
+/** DELETE sin cuerpo. */
+export function deleteJson(path: string, options: RequestOptions = {}): Promise<ApiResponse> {
+  return requestJson('DELETE', path, undefined, options);
 }

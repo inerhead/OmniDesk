@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowLeft, MessageSquareOff, PanelRight, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
-import { useCurrentActor } from '@/features/actor/api/use-actor';
+import { useCurrentActor } from '@/features/auth/api/use-current-actor';
 import { cn } from '@/shared/lib/utils';
 import { useMediaQuery, XL_QUERY } from '@/shared/lib/use-media-query';
 import { Avatar } from '@/shared/ui/avatar';

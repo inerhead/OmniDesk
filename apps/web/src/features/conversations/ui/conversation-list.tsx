@@ -8,7 +8,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { NavLink, useLocation, useSearchParams } from 'react-router';
-import { useCurrentActor } from '@/features/actor/api/use-actor';
+import { useCurrentActor } from '@/features/auth/api/use-current-actor';
 import { cn } from '@/shared/lib/utils';
 import { Avatar } from '@/shared/ui/avatar';
 import { Button } from '@/shared/ui/button';
@@ -62,7 +62,7 @@ export function ConversationList() {
   if (actorError) {
     return (
       <EmptyState
-        title="No se pudieron cargar los miembros"
+        title="No se pudo cargar tu sesión"
         action={
           <Button size="sm" variant="outline" onClick={retry}>
             Reintentar
@@ -73,7 +73,7 @@ export function ConversationList() {
   }
 
   if (!actor) {
-    return <EmptyState icon={UserRound} title="Elige con quién actuar para ver la bandeja" />;
+    return <EmptyState icon={UserRound} title="Elige una empresa para ver la bandeja" />;
   }
 
   return (

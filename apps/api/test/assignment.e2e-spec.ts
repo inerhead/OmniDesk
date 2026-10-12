@@ -4,7 +4,6 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import {
   ConversationSummarySchema,
-  DEMO_MEMBER_HEADER,
   ListConversationsResponseSchema,
   ListMembersResponseSchema,
   ListTimelineResponseSchema,
@@ -15,6 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
 import { PrismaService } from '../src/shared/infrastructure/prisma/prisma.service';
+import { devLogin, WEB_ORIGIN } from './support/session';
 import { E2E_DEMO_KEY, testEnv } from './support/test-env';
 
 const phone = () => `+57300${randomInt(1_000_000, 9_999_999)}`;
@@ -52,9 +52,11 @@ describe('Asignación y control de IA (e2e)', () => {
       .set('Authorization', `Bearer ${E2E_DEMO_KEY}`)
       .send(body);
 
-  const get = (actor: string, path: string) => http().get(path).set(DEMO_MEMBER_HEADER, actor);
+  /** Cookie de sesión de cada miembro demo (dev-login en `beforeAll`). */
+  const cookies = new Map<string, string>();
+  const get = (actor: string, path: string) => http().get(path).set('Cookie', cookies.get(actor)!);
   const post = (actor: string, path: string, body: object) =>
-    http().post(path).set(DEMO_MEMBER_HEADER, actor).send(body);
+    http().post(path).set('Cookie', cookies.get(actor)!).set('Origin', WEB_ORIGIN).send(body);
 
   const assign = (actor: string, id: string, memberId: string, controlVersion: number) =>
     post(actor, `/api/v1/conversations/${id}/assign`, { memberId, controlVersion });
@@ -97,6 +99,7 @@ describe('Asignación y control de IA (e2e)', () => {
     owner = await member('supervisor@demo.omnidesk.local');
     laura = await member('laura@demo.omnidesk.local');
     mateo = await member('mateo@demo.omnidesk.local');
+    for (const id of [owner, laura, mateo]) cookies.set(id, await devLogin(app, id));
 
     const otherTenant = await prisma.tenant.create({
       data: { slug: `otro-${randomUUID()}`, name: 'Otro tenant' },
@@ -131,16 +134,22 @@ describe('Asignación y control de IA (e2e)', () => {
     });
   });
 
-  describe('actor demo', () => {
-    it('responde 401 sin X-Demo-Member-Id', async () => {
+  describe('sesión', () => {
+    it('responde 401 UNAUTHENTICATED sin sesión', async () => {
       const res = await http().get('/api/v1/conversations').expect(401);
-      expect(res.body.message).toBe('Selecciona con quién actuar');
+      expect(res.body.code).toBe('UNAUTHENTICATED');
     });
 
-    it('responde 401 con un id desconocido, que no es uuid o de otro tenant', async () => {
-      await get(randomUUID(), '/api/v1/conversations').expect(401);
-      await get('laura', '/api/v1/conversations').expect(401);
-      await get(foreignMember, '/api/v1/conversations').expect(401);
+    it('la cabecera X-Demo-Member-Id ya no tiene efecto', async () => {
+      await http().get('/api/v1/conversations').set('X-Demo-Member-Id', owner).expect(401);
+    });
+
+    it('el login de desarrollo rechaza ids desconocidos y miembros de otro tenant', async () => {
+      const devLoginAs = (memberId: string) =>
+        http().post('/api/v1/auth/dev-login').set('Origin', WEB_ORIGIN).send({ memberId });
+      await devLoginAs(randomUUID()).expect(404);
+      await devLoginAs('laura').expect(400);
+      await devLoginAs(foreignMember).expect(404);
     });
 
     it('protege también los comandos', async () => {
@@ -148,6 +157,7 @@ describe('Asignación y control de IA (e2e)', () => {
 
       await http()
         .post(`/api/v1/conversations/${conversationId}/close`)
+        .set('Origin', WEB_ORIGIN)
         .send({ controlVersion: 0 })
         .expect(401);
     });

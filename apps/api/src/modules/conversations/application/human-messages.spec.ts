@@ -11,9 +11,9 @@ import { RetryFailedMessageUseCase } from './retry-failed-message.use-case';
 import { SendAgentMessageUseCase } from './send-agent-message.use-case';
 import { UpdateDeliveryStatusUseCase } from './update-delivery-status.use-case';
 
-const laura: ActorContext = { tenantId: 't1', memberId: 'laura', role: 'AGENT' };
-const mateo: ActorContext = { tenantId: 't1', memberId: 'mateo', role: 'AGENT' };
-const owner: ActorContext = { tenantId: 't1', memberId: 'owner', role: 'OWNER' };
+const laura: ActorContext = { userId: 'u-laura', tenantId: 't1', memberId: 'laura', role: 'AGENT' };
+const mateo: ActorContext = { userId: 'u-mateo', tenantId: 't1', memberId: 'mateo', role: 'AGENT' };
+const owner: ActorContext = { userId: 'u-owner', tenantId: 't1', memberId: 'owner', role: 'OWNER' };
 const integration = { tenantId: 't1', channelId: 'c1' };
 const CLIENT_ID = '0199c0de-0000-7000-8000-000000000001';
 

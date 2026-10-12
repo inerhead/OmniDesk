@@ -1,0 +1,43 @@
+import { Body, Controller, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import {
+  ApiConflictResponse,
+  ApiCreatedResponse,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
+import { CreateTenantRequestSchema, TenantSchema, type Tenant } from '@omnidesk/contracts';
+import { createZodDto } from 'nestjs-zod';
+import type { SessionContext } from '../../../../shared/application/request-context';
+import { apiError } from '../../../../shared/infrastructure/http/api-error';
+import { OriginGuard } from '../../../../shared/infrastructure/http/origin.guard';
+import { CurrentSession } from '../../../../shared/infrastructure/http/request-context.decorators';
+import { UserSessionGuard } from '../../../identity/infrastructure/http/session.guard';
+import { CreateTenantUseCase } from '../../application/create-tenant.use-case';
+
+class CreateTenantRequestDto extends createZodDto(CreateTenantRequestSchema) {}
+class TenantDto extends createZodDto(TenantSchema) {}
+
+@ApiTags('tenants')
+@ApiUnauthorizedResponse({ description: 'Sin sesión (`UNAUTHENTICATED`).' })
+@UseGuards(OriginGuard, UserSessionGuard)
+@Controller({ path: 'tenants', version: '1' })
+export class TenantsController {
+  constructor(private readonly createTenant: CreateTenantUseCase) {}
+
+  @Post()
+  @ApiCreatedResponse({ type: TenantDto.Output, description: 'Empresa creada y activa.' })
+  @ApiConflictResponse({ description: 'El slug ya existe (`SLUG_TAKEN`).' })
+  async create(
+    @CurrentSession() session: SessionContext,
+    @Body() body: CreateTenantRequestDto,
+  ): Promise<Tenant> {
+    const result = await this.createTenant.execute(session, body);
+    if (result.kind === 'slug-taken') {
+      throw apiError(HttpStatus.CONFLICT, 'SLUG_TAKEN', 'Ese identificador ya está en uso');
+    }
+    if (result.kind === 'user-not-found') {
+      throw apiError(HttpStatus.UNAUTHORIZED, 'UNAUTHENTICATED', 'Inicia sesión para continuar');
+    }
+    return result.tenant;
+  }
+}

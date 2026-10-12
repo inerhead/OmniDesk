@@ -15,6 +15,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
 import { PrismaService } from '../src/shared/infrastructure/prisma/prisma.service';
+import { devLogin, sessionFor } from './support/session';
 import { E2E_DEMO_KEY, testEnv } from './support/test-env';
 
 async function startApp(overrides: Record<string, string> = {}): Promise<NestExpressApplication> {
@@ -56,6 +57,8 @@ describe('Tiempo real: Outbox + Socket.IO (e2e)', () => {
   let app: NestExpressApplication;
   let prisma: PrismaService;
   const sockets: Socket[] = [];
+  /** Sesión del supervisor demo: el socket se une al room del tenant demo. */
+  let ownerCookie: string;
   const http = () => request(app.getHttpServer());
 
   const inbound = (body: object) =>
@@ -78,8 +81,12 @@ describe('Tiempo real: Outbox + Socket.IO (e2e)', () => {
       },
     });
 
-  const connect = (baseUrl = urlOf(app)): Socket => {
-    const socket = io(baseUrl, { path: REALTIME_PATH, reconnection: false });
+  const connect = (cookie: string | null = ownerCookie, baseUrl = urlOf(app)): Socket => {
+    const socket = io(baseUrl, {
+      path: REALTIME_PATH,
+      reconnection: false,
+      ...(cookie && { extraHeaders: { cookie } }),
+    });
     sockets.push(socket);
     return socket;
   };
@@ -102,6 +109,10 @@ describe('Tiempo real: Outbox + Socket.IO (e2e)', () => {
   beforeAll(async () => {
     app = await startApp();
     prisma = app.get(PrismaService);
+    const owner = await prisma.tenantMember.findFirstOrThrow({
+      where: { email: 'supervisor@demo.omnidesk.local' },
+    });
+    ownerCookie = await devLogin(app, owner.id);
   });
 
   afterEach(() => {
@@ -201,22 +212,55 @@ describe('Tiempo real: Outbox + Socket.IO (e2e)', () => {
     });
   });
 
-  describe('con DEMO_MODE=false', () => {
-    it('rechaza la conexión y no entrega eventos', async () => {
-      const closed = await startApp({ DEMO_MODE: 'false' });
-      try {
-        const socket = connect(urlOf(closed));
-        const error = new Promise<string>((resolve) => socket.once('error', resolve));
-        const disconnected = new Promise<void>((resolve) =>
-          socket.once('disconnect', () => resolve()),
-        );
+  describe('sesión en el handshake', () => {
+    const rejected = async (socket: Socket) => {
+      const error = new Promise<string>((resolve) => socket.once('error', resolve));
+      const disconnected = new Promise<void>((resolve) =>
+        socket.once('disconnect', () => resolve()),
+      );
+      const message = await error;
+      await disconnected;
+      expect(socket.connected).toBe(false);
+      return message;
+    };
 
-        expect(await error).toBe('Autenticación requerida');
-        await disconnected;
-        expect(socket.connected).toBe(false);
-      } finally {
-        await closed.close();
-      }
+    it('sin cookie rechaza la conexión', async () => {
+      expect(await rejected(connect(null))).toBe('Autenticación requerida');
+    });
+
+    it('con una cookie inválida rechaza la conexión', async () => {
+      expect(await rejected(connect('omnidesk_session=falsa'))).toBe('Autenticación requerida');
+    });
+
+    it('con sesión, recibe solo los eventos de su empresa activa', async () => {
+      const tenant = await prisma.tenant.create({
+        data: { slug: `rt-${randomUUID()}`, name: 'Otra empresa' },
+      });
+      const user = await prisma.user.create({
+        data: { email: `rt-${randomUUID()}@otra.local`, displayName: 'Ajena' },
+      });
+      await prisma.tenantMember.create({
+        data: {
+          tenantId: tenant.id,
+          userId: user.id,
+          email: user.email,
+          displayName: 'Ajena',
+          role: 'OWNER',
+        },
+      });
+      const foreign = connect(await sessionFor(app, user.id, tenant.id));
+      const demo = connect();
+      await Promise.all([connected(foreign), connected(demo)]);
+      await sleep(200);
+      let foreignEvents = 0;
+      foreign.on(CONVERSATION_CHANGED_EVENT, () => (foreignEvents += 1));
+      const received = nextEvent(demo);
+
+      const { conversationId } = (await inbound(inboundBody()).expect(201)).body;
+
+      expect(await received).toMatchObject({ conversationId });
+      await sleep(300);
+      expect(foreignEvents).toBe(0);
     });
   });
 });

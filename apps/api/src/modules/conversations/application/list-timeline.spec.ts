@@ -4,8 +4,8 @@ import type { Message } from '../domain/message';
 import { ListTimelineUseCase } from './list-timeline.use-case';
 import type { ConversationEventView, ConversationReadModel } from './ports/conversation-read-model';
 
-const owner: ActorContext = { tenantId: 't1', memberId: 'owner', role: 'OWNER' };
-const laura: ActorContext = { tenantId: 't1', memberId: 'laura', role: 'AGENT' };
+const owner: ActorContext = { userId: 'u-owner', tenantId: 't1', memberId: 'owner', role: 'OWNER' };
+const laura: ActorContext = { userId: 'u-laura', tenantId: 't1', memberId: 'laura', role: 'AGENT' };
 
 const message = (sequence: number): Message => ({
   id: `m${sequence}`,

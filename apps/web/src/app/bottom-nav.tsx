@@ -1,9 +1,8 @@
 import { NavLink } from 'react-router';
-import { ActorSelector } from '@/features/actor/ui/actor-selector';
+import { UserMenu } from '@/features/auth/ui/user-menu';
 import { cn } from '@/shared/lib/utils';
 import { InstallPrompt } from '@/shared/pwa/install-prompt';
 import { ConnectionBadge } from '@/shared/realtime/connection-badge';
-import { ThemeMenu } from '@/shared/theme/theme-menu';
 import { NAV_ITEMS } from './nav-items';
 
 /** Barra inferior en móvil (< md), con los mismos destinos que el rail. */
@@ -29,9 +28,8 @@ export function BottomNav() {
         </NavLink>
       ))}
       <ConnectionBadge side="top" />
-      <ThemeMenu side="top" />
       <InstallPrompt side="top" />
-      <ActorSelector side="top" />
+      <UserMenu side="top" />
     </nav>
   );
 }

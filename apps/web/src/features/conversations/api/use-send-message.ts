@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
-import { useCurrentActor } from '@/features/actor/api/use-actor';
 import { ApiUnavailableError } from '@/shared/api/http-client';
 import { newRequestId } from '@/shared/api/request-id';
 import { postAgentMessage, postRetryMessage, SendMessageError } from './conversations-api';
@@ -19,7 +18,6 @@ export function sendNoticeFor(error: unknown): string {
 /** Envía mensajes del agente y reintenta los fallidos; refresca el chat al terminar. */
 export function useSendMessage(conversationId: string) {
   const queryClient = useQueryClient();
-  const { actor } = useCurrentActor();
   const [notice, setNotice] = useState<string | null>(null);
   // Un mismo mensaje conserva su clientMessageId hasta enviarse: reintentar ante un error de red no lo duplica.
   const clientMessageId = useRef(newRequestId());
@@ -32,7 +30,7 @@ export function useSendMessage(conversationId: string) {
 
   const send = useMutation({
     mutationFn: (text: string) =>
-      postAgentMessage(actor!.id, conversationId, {
+      postAgentMessage(conversationId, {
         text,
         clientMessageId: clientMessageId.current,
       }),
@@ -49,7 +47,7 @@ export function useSendMessage(conversationId: string) {
   });
 
   const retry = useMutation({
-    mutationFn: (messageId: string) => postRetryMessage(actor!.id, conversationId, messageId),
+    mutationFn: (messageId: string) => postRetryMessage(conversationId, messageId),
     onSuccess: () => {
       setNotice(null);
       return refresh();

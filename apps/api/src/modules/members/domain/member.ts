@@ -8,4 +8,7 @@ export interface Member {
   role: MemberRole;
 }
 
-export type NewMember = Pick<Member, 'displayName' | 'email' | 'role'>;
+export type NewMember = Pick<Member, 'displayName' | 'email' | 'role'> & {
+  /** Usuario de la persona (SPEC 07). */
+  userId?: string;
+};

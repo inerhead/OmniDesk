@@ -1,7 +1,6 @@
 import {
   ConversationSummarySchema,
   ConversationCommandRejectedSchema,
-  DEMO_MEMBER_HEADER,
   ListConversationsResponseSchema,
   ListTimelineResponseSchema,
   SendAgentMessageResponseSchema,
@@ -13,29 +12,21 @@ import {
 } from '@omnidesk/contracts';
 import { ApiHttpError, getJson, postJson } from '@/shared/api/http-client';
 
-/** Hasta el spec de identidad, el API sabe quién actúa por esta cabecera. */
-const asActor = (actorId: string) => ({ headers: { [DEMO_MEMBER_HEADER]: actorId } });
-
 export async function fetchConversations(
-  actorId: string,
   inbox: Inbox,
   q: string | undefined,
   cursor?: string,
 ): Promise<ListConversationsResponse> {
   const query = new URLSearchParams({ inbox, ...(q && { q }), ...(cursor && { cursor }) });
-  const { status, body } = await getJson(`/api/v1/conversations?${query}`, asActor(actorId));
+  const { status, body } = await getJson(`/api/v1/conversations?${query}`);
   if (status !== 200) throw new ApiHttpError(status);
   return ListConversationsResponseSchema.parse(body);
 }
 
 /** Lanza `ApiHttpError(404)` si la conversación no existe o el actor no puede verla. */
-export async function fetchConversation(
-  actorId: string,
-  conversationId: string,
-): Promise<ConversationSummary> {
+export async function fetchConversation(conversationId: string): Promise<ConversationSummary> {
   const { status, body } = await getJson(
     `/api/v1/conversations/${encodeURIComponent(conversationId)}`,
-    asActor(actorId),
   );
   if (status !== 200) throw new ApiHttpError(status);
   return ConversationSummarySchema.parse(body);
@@ -43,14 +34,12 @@ export async function fetchConversation(
 
 /** Mensajes y eventos intercalados. Lanza `ApiHttpError(404)` si el actor no puede ver la conversación. */
 export async function fetchTimeline(
-  actorId: string,
   conversationId: string,
   before?: number,
 ): Promise<ListTimelineResponse> {
   const query = new URLSearchParams(before ? { before: String(before) } : {});
   const { status, body } = await getJson(
     `/api/v1/conversations/${encodeURIComponent(conversationId)}/timeline?${query}`,
-    asActor(actorId),
   );
   if (status !== 200) throw new ApiHttpError(status);
   return ListTimelineResponseSchema.parse(body);
@@ -70,7 +59,6 @@ export class ConversationCommandError extends ApiHttpError {
 }
 
 export async function postConversationCommand(
-  actorId: string,
   conversationId: string,
   command: ConversationCommandName,
   payload: { controlVersion: number; memberId?: string },
@@ -78,7 +66,6 @@ export async function postConversationCommand(
   const { status, body } = await postJson(
     `/api/v1/conversations/${encodeURIComponent(conversationId)}/${command}`,
     payload,
-    asActor(actorId),
   );
   if (status === 200) return ConversationSummarySchema.parse(body);
   const rejected = ConversationCommandRejectedSchema.safeParse(body);
@@ -98,14 +85,12 @@ export class SendMessageError extends ApiHttpError {
  * `clientMessageId`: repetir la petición tras un error de red no duplica el mensaje.
  */
 export async function postAgentMessage(
-  actorId: string,
   conversationId: string,
   payload: { text: string; clientMessageId: string },
 ): Promise<Message> {
   const { status, body } = await postJson(
     `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages`,
     payload,
-    asActor(actorId),
   );
   if (status === 200 || status === 201) return SendAgentMessageResponseSchema.parse(body);
   throw new SendMessageError(status);
@@ -113,14 +98,12 @@ export async function postAgentMessage(
 
 /** Devuelve un mensaje `FAILED` a `PENDING` para que el API lo envíe de nuevo. */
 export async function postRetryMessage(
-  actorId: string,
   conversationId: string,
   messageId: string,
 ): Promise<Message> {
   const { status, body } = await postJson(
     `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/retry`,
     undefined,
-    asActor(actorId),
   );
   if (status === 200) return SendAgentMessageResponseSchema.parse(body);
   throw new SendMessageError(status);

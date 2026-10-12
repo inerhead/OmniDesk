@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { ActorContext } from '../../../shared/application/request-context';
 import { conversationSearch, InboxForbiddenError, inboxFilter } from './inbox-filter';
 
-const owner: ActorContext = { tenantId: 't1', memberId: 'owner', role: 'OWNER' };
-const laura: ActorContext = { tenantId: 't1', memberId: 'laura', role: 'AGENT' };
+const owner: ActorContext = { userId: 'u-owner', tenantId: 't1', memberId: 'owner', role: 'OWNER' };
+const laura: ActorContext = { userId: 'u-laura', tenantId: 't1', memberId: 'laura', role: 'AGENT' };
 
 describe('inboxFilter', () => {
   it('ai: abiertas sin agente, para cualquier rol', () => {

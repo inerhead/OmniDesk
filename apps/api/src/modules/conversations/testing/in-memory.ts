@@ -196,16 +196,25 @@ export class InMemoryConversations implements ConversationRepository {
 
 export class InMemoryMembers implements MemberRepository {
   readonly members: Member[] = [];
+  readonly removed = new Map<string, Date>();
+  readonly userIds = new Map<string, string | null>();
+  ownerLocks = 0;
 
-  add(member: Partial<Member> & Pick<Member, 'id' | 'role'>): Member {
+  add(member: Partial<Member> & Pick<Member, 'id' | 'role'> & { userId?: string }): Member {
+    const { userId, ...rest } = member;
     const stored: Member = {
       tenantId: 't1',
       displayName: member.id,
       email: `${member.id}@demo.omnidesk.local`,
-      ...member,
+      ...rest,
     };
     this.members.push(stored);
+    this.userIds.set(stored.id, userId ?? null);
     return stored;
+  }
+
+  private active(tenantId: string) {
+    return this.members.filter((m) => m.tenantId === tenantId && !this.removed.has(m.id));
   }
 
   async upsertByEmail(tenantId: string, data: NewMember) {
@@ -213,11 +222,42 @@ export class InMemoryMembers implements MemberRepository {
   }
 
   async findById(tenantId: string, id: string) {
-    return this.members.find((m) => m.id === id && m.tenantId === tenantId) ?? null;
+    return this.active(tenantId).find((m) => m.id === id) ?? null;
   }
 
   async list(tenantId: string) {
-    return this.members.filter((m) => m.tenantId === tenantId);
+    return this.active(tenantId);
+  }
+
+  async findActiveByEmail(tenantId: string, email: string) {
+    return this.active(tenantId).find((m) => m.email === email.toLowerCase()) ?? null;
+  }
+
+  async admit(tenantId: string, data: Required<NewMember>) {
+    const existing = this.members.find((m) => m.tenantId === tenantId && m.email === data.email);
+    if (!existing) return this.add({ id: randomUUID(), tenantId, ...data });
+    Object.assign(existing, { displayName: data.displayName, role: data.role });
+    this.removed.delete(existing.id);
+    this.userIds.set(existing.id, data.userId);
+    return existing;
+  }
+
+  async lockOwners(tenantId: string) {
+    this.ownerLocks += 1;
+    return this.active(tenantId)
+      .filter((m) => m.role === 'OWNER')
+      .map((m) => m.id);
+  }
+
+  async updateRole(tenantId: string, id: string, role: Member['role']) {
+    const member = (await this.findById(tenantId, id))!;
+    member.role = role;
+    return member;
+  }
+
+  async markRemoved(tenantId: string, id: string, at: Date) {
+    this.removed.set(id, at);
+    return { userId: this.userIds.get(id) ?? null };
   }
 }
 

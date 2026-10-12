@@ -1,4 +1,4 @@
-/** Tenant resuelto en el servidor para una petición de la web (hoy: tenant demo; luego: sesión). */
+/** Tenant resuelto en el servidor para una petición de la web: la empresa activa de la sesión. */
 export interface TenantContext {
   tenantId: string;
 }
@@ -9,8 +9,16 @@ export interface IntegrationContext {
   channelId: string;
 }
 
-/** Miembro con el que actúa la petición (hoy: el que elige la web en modo demo; luego: la sesión). */
+/** Quién actúa: el usuario de la sesión y su membresía en la empresa activa (`SessionGuard`). */
 export interface ActorContext extends TenantContext {
+  userId: string;
   memberId: string;
   role: 'OWNER' | 'ADMIN' | 'AGENT';
+}
+
+/** Usuario de una sesión válida, tenga o no empresa activa (`/me`, alta de empresa, invitaciones). */
+export interface SessionContext {
+  sessionId: string;
+  userId: string;
+  activeTenantId: string | null;
 }

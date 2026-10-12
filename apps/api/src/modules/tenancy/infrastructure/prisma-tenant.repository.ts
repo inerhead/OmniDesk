@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { rethrowUniqueConflict } from '../../../shared/infrastructure/prisma/prisma-errors';
 import { PrismaDb } from '../../../shared/infrastructure/prisma/prisma-transaction-runner';
 import type { TenantRepository } from '../application/ports/tenant.repository';
 import type { Tenant } from '../domain/tenant';
@@ -20,5 +21,9 @@ export class PrismaTenantRepository implements TenantRepository {
       update: { name: data.name },
       select,
     });
+  }
+
+  create(data: { slug: string; name: string }): Promise<Tenant> {
+    return this.db.client.tenant.create({ data, select }).catch(rethrowUniqueConflict);
   }
 }

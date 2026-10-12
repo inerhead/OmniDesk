@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ContactsModule } from '../contacts/contacts.module';
-import { DemoModule } from '../demo/demo.module';
+import { IdentityModule } from '../identity/identity.module';
 import { MembersModule } from '../members/members.module';
 import { AssignConversationUseCase } from './application/assign-conversation.use-case';
 import { CloseConversationUseCase } from './application/close-conversation.use-case';
@@ -26,7 +26,7 @@ import { PrismaConversationReadModel } from './infrastructure/prisma-conversatio
 import { PrismaConversationRepository } from './infrastructure/prisma-conversation.repository';
 
 @Module({
-  imports: [ContactsModule, DemoModule, MembersModule],
+  imports: [ContactsModule, IdentityModule, MembersModule],
   controllers: [ConversationsController],
   providers: [
     { provide: CONVERSATION_REPOSITORY, useClass: PrismaConversationRepository },
@@ -49,6 +49,8 @@ import { PrismaConversationRepository } from './infrastructure/prisma-conversati
     FindOutboundForSendUseCase,
   ],
   exports: [
+    CONVERSATION_READ_MODEL,
+    ReleaseConversationUseCase,
     RegisterInboundMessageUseCase,
     RegisterAiReplyUseCase,
     UpdateDeliveryStatusUseCase,

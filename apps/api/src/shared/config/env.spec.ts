@@ -88,3 +88,37 @@ describe('parseEnv — mensajería saliente', () => {
     );
   });
 });
+
+describe('parseEnv — identidad', () => {
+  const production = { ...valid, NODE_ENV: 'production' };
+
+  it('usa las URLs locales por defecto y la cookie sin Secure', () => {
+    const env = parseEnv(valid);
+
+    expect(env.APP_URL).toBe('http://localhost:8080');
+    expect(env.GOOGLE_CALLBACK_URL).toBe('http://localhost:8080/api/v1/auth/google/callback');
+    expect(env.SESSION_COOKIE_SECURE).toBe(false);
+    expect(env.GOOGLE_CLIENT_ID).toBeUndefined();
+  });
+
+  it('exige GOOGLE_CLIENT_SECRET si hay GOOGLE_CLIENT_ID', () => {
+    expect(() => parseEnv({ ...valid, GOOGLE_CLIENT_ID: 'id' })).toThrowError(
+      /GOOGLE_CLIENT_SECRET/,
+    );
+  });
+
+  it('en producción exige el cliente de Google y la cookie Secure', () => {
+    expect(() => parseEnv(production)).toThrowError(/GOOGLE_CLIENT_ID/);
+    expect(() =>
+      parseEnv({ ...production, GOOGLE_CLIENT_ID: 'id', GOOGLE_CLIENT_SECRET: 'secret' }),
+    ).toThrowError(/SESSION_COOKIE_SECURE/);
+    expect(
+      parseEnv({
+        ...production,
+        GOOGLE_CLIENT_ID: 'id',
+        GOOGLE_CLIENT_SECRET: 'secret',
+        SESSION_COOKIE_SECURE: 'true',
+      }).SESSION_COOKIE_SECURE,
+    ).toBe(true);
+  });
+});

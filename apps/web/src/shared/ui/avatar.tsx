@@ -26,11 +26,14 @@ function Avatar({
   name,
   fallback,
   size = 'md',
+  imageUrl,
   className,
   ...props
 }: Omit<ComponentProps<typeof AvatarPrimitive.Root>, 'id'> & {
   id: string;
   name: string | null;
+  /** Foto (p. ej. la de Google); mientras carga o si falla, las iniciales. */
+  imageUrl?: string | null;
   /** Texto si no hay nombre (p. ej. el teléfono). */
   fallback: string;
   size?: keyof typeof SIZE_CLASS;
@@ -45,6 +48,14 @@ function Avatar({
       )}
       {...props}
     >
+      {imageUrl && (
+        <AvatarPrimitive.Image
+          src={imageUrl}
+          alt=""
+          referrerPolicy="no-referrer"
+          className="aspect-square size-full object-cover"
+        />
+      )}
       <AvatarPrimitive.Fallback
         aria-hidden
         className={cn(

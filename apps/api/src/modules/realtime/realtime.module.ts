@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { DemoModule } from '../demo/demo.module';
+import { IdentityModule } from '../identity/identity.module';
 import { DispatchOutboundMessageUseCase } from '../messaging/application/dispatch-outbound-message.use-case';
 import { MessagingModule } from '../messaging/messaging.module';
 import { OUTBOUND_MESSAGE_SENDER } from './application/ports/outbound-message-sender';
@@ -11,7 +11,7 @@ import { RealtimeGateway } from './infrastructure/realtime.gateway';
 import { SocketIoRealtimePublisher } from './infrastructure/socket-io-realtime-publisher';
 
 @Module({
-  imports: [DemoModule, MessagingModule],
+  imports: [IdentityModule, MessagingModule],
   providers: [
     RealtimeGateway,
     SocketIoRealtimePublisher,

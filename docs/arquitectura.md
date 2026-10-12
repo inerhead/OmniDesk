@@ -220,12 +220,14 @@ omnidesk/
 | Módulo | Responsabilidad | Incremento |
 | --- | --- | --- |
 | `health` | Estado del API y sus dependencias. Plantilla de referencia de capas. | 0 |
-| `identity` | Usuarios, login Google, sesión | 1 |
-| `tenancy` | Tenant (inc. 1 de bandeja); TenantMember, Invitation, roles (identidad) | 1, 3 |
+| `identity` | `User` y `Session` (cookie opaca, hash en Postgres, 30 días deslizantes), login Google y de desarrollo, `/me`, `SessionGuard` (también en el handshake de Socket.IO) | 3 |
+| `tenancy` | Tenant y alta de empresa en autoservicio (`POST /tenants`) | 1, 3 |
+| `members` | `TenantMember` (baja lógica con `removedAt`), lista de miembros | 4, 3 |
+| `team` | Invitaciones por enlace, cambio de rol y baja de miembros (libera sus conversaciones con `release`) | 3 |
 | `channels` | Channel, IntegrationCredential, guard de credencial de canal | 1 |
 | `contacts` | Contact, ContactIdentity | 1 |
 | `conversations` | Conversation y Message (sequence, resumen), control de IA, lectura de la bandeja; luego asignación y ConversationEvent | 1, 4 |
-| `demo` | Tenant demo sembrado al arrancar y `DemoTenantGuard` (solo `DEMO_MODE=true`). Se retira cuando la web usa sesión | 1 |
+| `demo` | Tenant demo sembrado al arrancar, con un `User` por miembro para el login de desarrollo (solo `DEMO_MODE=true`) | 1, 3 |
 | `integrations` | Endpoints `inbound`/`outbound`; luego `status`, Inbox, normalizadores y adaptador n8n | 1, 6 |
 | `messaging` | Estados de entrega y puerto `MessagingProvider` | 6 |
 | `realtime` | Gateway Socket.IO, dispatcher del Outbox | 2 |
@@ -310,8 +312,14 @@ Prefijo común: `/api/v1`. Los esquemas de cada contrato viven en `@omnidesk/con
 | Método y ruta | Función | Incremento |
 | --- | --- | --- |
 | `GET /health` | Estado del API y de la base de datos | 0 |
-| `GET /me` | Usuario actual y membresías | 1 |
-| `POST /tenants`, `POST /tenants/:id/invitations`, `POST /invitations/:token/accept` | Alta de empresa e invitaciones | 1 |
+| `GET /auth/google?next=`, `GET /auth/google/callback` | Login con Google (`next` en un `state` firmado) | 3 |
+| `POST /auth/dev-login`, `GET /auth/providers` | Login de desarrollo (solo `DEMO_MODE`) y botones de la pantalla de login | 3 |
+| `POST /auth/logout` | Revoca la sesión y borra la cookie | 3 |
+| `GET /me`, `POST /me/active-tenant` | Usuario, membresías y empresa activa; cambio de empresa | 3 |
+| `POST /tenants` | Alta de empresa; quien la crea queda OWNER | 3 |
+| `POST /invitations`, `GET /invitations`, `DELETE /invitations/:id` | Invitaciones por enlace de la empresa activa | 3 |
+| `GET /invitations/by-token/:token`, `POST /invitations/by-token/:token/accept` | Vista previa pública y aceptación (mismo email) | 3 |
+| `GET /members`, `PATCH /members/:id`, `DELETE /members/:id` | Miembros activos, cambio de rol (OWNER) y baja lógica | 3 |
 | `POST /integrations/messages/inbound` | Registrar mensaje recibido. Devuelve conversación, `aiAllowed` y `controlVersion` | 2 |
 | `POST /integrations/messages/outbound` | Registrar intención de respuesta de la IA (`PENDING`). Devuelve `sendAllowed` | 2 |
 | `POST /integrations/messages/status` | Actualizar entrega, lectura o error | 2 |
@@ -327,7 +335,8 @@ Prefijo común: `/api/v1`. Los esquemas de cada contrato viven en `@omnidesk/con
 - Cuando aplica, se verifica la firma HMAC en `X-OmniDesk-Signature` con timestamp.
 - El tenant y el canal se derivan de la credencial. Los eventos se deduplican por identificador externo.
 - Los comandos aceptan `Idempotency-Key`.
-- El frontend nunca puede elegir un `tenantId` ajeno.
+- El frontend nunca puede elegir un `tenantId` ajeno: las rutas de una empresa (`/conversations`, `/members`, `/invitations`) usan la empresa activa de la sesión, no `/tenants/:id/...`.
+- Las rutas de la web se autentican con la cookie de sesión (`401 UNAUTHENTICATED`; `403 NO_ACTIVE_TENANT` sin empresa activa). Los métodos que modifican datos exigen además un `Origin` de `CORS_ORIGINS` (CSRF, junto a `SameSite=Lax`).
 - CORS: el API solo acepta los orígenes de `CORS_ORIGINS`, con `credentials: true`. Cualquier otro origen no recibe `Access-Control-Allow-Origin`.
 
 ## 12. Seguridad, consistencia y fallos
@@ -357,8 +366,8 @@ Cada incremento se especifica en `specs/NN-*.md` justo antes de implementarlo. S
 | 0 | SPEC 01 | Walking skeleton local | `docker compose up` levanta Postgres, API, web y gateway. La PWA, separada del API, muestra la salud del API y de la DB. Es **instalable** en escritorio y, vía túnel HTTPS, en un celular. Ya están fijados el monorepo, los contratos, las capas, CORS, los logs y Swagger. |
 | 1 | SPEC 02 | Bandeja de conversaciones | Ingesta `inbound`/`outbound` de IA con `controlVersion` y deduplicación; modelo con `tenantId`; lista de conversaciones y chat responsive de solo lectura (polling 5 s); tenant demo (`DEMO_MODE`) y simulador `pnpm simulate`. |
 | 2 | SPEC 03 | Tiempo real | **Implementado.** Outbox transaccional + dispatcher (cada 500 ms, `FOR UPDATE SKIP LOCKED`) y Socket.IO en `/api/realtime` con un room por tenant. Los eventos son ligeros (`conversationId` + `reason`) y la web invalida sus queries. Latencia objetivo ≤ 1 s; el polling de 5 s se elimina y queda un respaldo de 15 s solo mientras el socket está caído. Rooms por conversación llegan con identidad. |
-| 3 | — | Identidad y tenancy | Google Login, alta de empresa, invitaciones, roles, membresías. La sesión reemplaza al tenant demo. |
-| 4 | SPEC 04 | Asignación | **Implementado.** `assign`/`release`/`close`/`reopen` con `controlVersion`, eventos en el historial y permisos por rol (`TenantMember`, actor demo con `X-Demo-Member-Id`). Bandejas IA/Mías/Todas/Cerradas, reapertura automática por un inbound y suspensión inmediata de la IA. |
+| 3 | SPEC 07 | Identidad y tenancy | **Implementado.** Google Login (Passport, página completa) y login de desarrollo con `DEMO_MODE`. Sesión opaca en Postgres (cookie `HttpOnly`, 30 días deslizantes) que reemplaza al actor demo en el API, Socket.IO y la web. Empresas en autoservicio con empresa activa por sesión, invitaciones por enlace (7 días, un solo uso, ligadas al email), roles OWNER/ADMIN/AGENT y baja lógica de miembros que devuelve sus conversaciones a la IA. |
+| 4 | SPEC 04 | Asignación | **Implementado.** `assign`/`release`/`close`/`reopen` con `controlVersion`, eventos en el historial y permisos por rol (`TenantMember`; el actor sale de la sesión desde SPEC 07). Bandejas IA/Mías/Todas/Cerradas, reapertura automática por un inbound y suspensión inmediata de la IA. |
 | 5 | — | Despliegue | Railway con dos servicios independientes: la web como sitio estático (`app.<dominio>`) y el API con imagen de producción (`api.<dominio>`). Incluye migraciones, secretos, dominios y conexión con n8n y WhatsApp reales. Puede adelantarse si se necesita una demo pública. |
 | 6 | SPEC 05 | Atención humana | **Completa el ciclo del MVP en local.** El agente asignado responde desde la PWA: el mensaje se registra `PENDING`, el dispatcher del Outbox lo envía por el puerto `MessagingProvider` (adaptador simulado) con reintentos de 1/2/4/8/16 s y los estados `SENT`/`DELIVERED`/`READ`/`FAILED` se ven en tiempo real, con reintento manual. `POST /integrations/messages/status` (deduplicado en `EventInbox`, transiciones monótonas) recibe los estados de las respuestas de IA. El adaptador n8n/WhatsApp real llega con la integración real, sin tocar el dominio. |
 | 7 | — | Robustez | E2E con Playwright (también en viewport móvil), rate limiting, evaluación de RLS, métricas, política de retención y notificaciones Web Push (requieren la PWA instalada en iOS) |

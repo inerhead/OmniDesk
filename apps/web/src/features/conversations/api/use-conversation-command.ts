@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { useCurrentActor } from '@/features/actor/api/use-actor';
+import { useCurrentActor } from '@/features/auth/api/use-current-actor';
 import {
   ConversationCommandError,
   postConversationCommand,
@@ -41,7 +41,7 @@ export function useConversationCommand(conversationId: string) {
 
   const mutation = useMutation({
     mutationFn: ({ command, controlVersion, memberId }: RunCommandInput) =>
-      postConversationCommand(actor!.id, conversationId, command, {
+      postConversationCommand(conversationId, command, {
         controlVersion,
         ...(memberId && { memberId }),
       }),

@@ -1,13 +1,12 @@
 import { NavLink } from 'react-router';
-import { ActorSelector } from '@/features/actor/ui/actor-selector';
+import { UserMenu } from '@/features/auth/ui/user-menu';
 import { cn } from '@/shared/lib/utils';
 import { InstallPrompt } from '@/shared/pwa/install-prompt';
 import { ConnectionBadge } from '@/shared/realtime/connection-badge';
-import { ThemeMenu } from '@/shared/theme/theme-menu';
 import { Tooltip } from '@/shared/ui/tooltip';
 import { NAV_ITEMS } from './nav-items';
 
-/** Rail vertical de 64 px (≥ md): destinos arriba; conexión, tema, instalar y usuario abajo. */
+/** Rail vertical de 64 px (≥ md): destinos arriba; conexión, instalar y usuario (empresa, tema, miembros) abajo. */
 export function NavRail() {
   return (
     <nav
@@ -35,10 +34,9 @@ export function NavRail() {
       ))}
       <div className="mt-auto flex flex-col items-center gap-1">
         <ConnectionBadge />
-        <ThemeMenu />
         <InstallPrompt />
         <div className="mt-1">
-          <ActorSelector />
+          <UserMenu />
         </div>
       </div>
     </nav>

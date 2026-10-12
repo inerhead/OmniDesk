@@ -30,8 +30,39 @@ export const EnvSchema = z
     MESSAGING_PROVIDER: z.enum(['simulated']).default('simulated'),
     /** Probabilidad (0 a 1) de que el proveedor simulado falle un envío. */
     SIMULATED_PROVIDER_FAILURE_RATE: z.coerce.number().min(0).max(1).default(0),
+    /** Cliente OAuth de Google. Sin él, el login con Google no está disponible (obligatorio en producción). */
+    GOOGLE_CLIENT_ID: z.string().min(1).optional(),
+    GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+    GOOGLE_CALLBACK_URL: z.url().default('http://localhost:8080/api/v1/auth/google/callback'),
+    /** Base de la web: enlaces de invitación y redirecciones tras el login. */
+    APP_URL: z.url().default('http://localhost:8080'),
+    /** Cookie de sesión solo por HTTPS. Obligatorio en producción. */
+    SESSION_COOKIE_SECURE: booleanString,
   })
   .superRefine((env, ctx) => {
+    if (env.GOOGLE_CLIENT_ID && !env.GOOGLE_CLIENT_SECRET) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['GOOGLE_CLIENT_SECRET'],
+        message: 'Es obligatoria con GOOGLE_CLIENT_ID',
+      });
+    }
+    if (env.NODE_ENV === 'production') {
+      if (!env.GOOGLE_CLIENT_ID) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['GOOGLE_CLIENT_ID'],
+          message: 'Es obligatoria con NODE_ENV=production',
+        });
+      }
+      if (!env.SESSION_COOKIE_SECURE) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['SESSION_COOKIE_SECURE'],
+          message: 'Debe ser true con NODE_ENV=production',
+        });
+      }
+    }
     if (!env.DEMO_MODE) return;
     if (env.NODE_ENV === 'production') {
       ctx.addIssue({

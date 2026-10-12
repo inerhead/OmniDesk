@@ -1,6 +1,6 @@
 # SPEC 07 — Identidad y tenancy: Google Login, empresas, invitaciones y roles
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:** SPEC 04, SPEC 06
 > **Date:** 2026-10-12
 > **Objective:** Los usuarios entran con Google (o con el login de desarrollo en `DEMO_MODE`) mediante una sesión en cookie `httpOnly` guardada en Postgres, crean su empresa, invitan miembros con un enlace, gestionan roles y cambian de empresa activa, y esa sesión reemplaza al actor demo en el API, en Socket.IO y en la web.

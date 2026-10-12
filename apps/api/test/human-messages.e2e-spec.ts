@@ -3,7 +3,6 @@ import { randomInt, randomUUID } from 'node:crypto';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import {
-  DEMO_MEMBER_HEADER,
   DeliveryStatusResponseSchema,
   ListMessagesResponseSchema,
   MessageSchema,
@@ -16,6 +15,7 @@ import { configureApp } from '../src/bootstrap';
 import { ENV, type Env } from '../src/shared/config/env';
 import { sha256Hex } from '../src/shared/infrastructure/crypto/sha256';
 import { PrismaService } from '../src/shared/infrastructure/prisma/prisma.service';
+import { devLogin, WEB_ORIGIN } from './support/session';
 import { E2E_DEMO_KEY, testEnv } from './support/test-env';
 
 const phone = () => `+57300${randomInt(1_000_000, 9_999_999)}`;
@@ -55,8 +55,10 @@ describe('Atención humana (e2e)', () => {
       })
     ).body as { conversationId: string; controlVersion: number };
 
+  /** Cookie de sesión de cada miembro demo (dev-login en `beforeAll`). */
+  const cookies = new Map<string, string>();
   const post = (actor: string, path: string, body: object = {}) =>
-    http().post(path).set(DEMO_MEMBER_HEADER, actor).send(body);
+    http().post(path).set('Cookie', cookies.get(actor)!).set('Origin', WEB_ORIGIN).send(body);
 
   /** Conversación nueva asignada a Laura. */
   async function lauraConversation(): Promise<string> {
@@ -121,6 +123,7 @@ describe('Atención humana (e2e)', () => {
     owner = await member('supervisor@demo.omnidesk.local');
     laura = await member('laura@demo.omnidesk.local');
     mateo = await member('mateo@demo.omnidesk.local');
+    for (const id of [owner, laura, mateo]) cookies.set(id, await devLogin(app, id));
 
     // Otro tenant con su canal y su credencial, para probar el aislamiento por canal.
     foreignKey = `otro-canal-key-${randomUUID()}`;
@@ -235,7 +238,7 @@ describe('Atención humana (e2e)', () => {
 
       const list = await http()
         .get(`/api/v1/conversations/${conversationId}/messages`)
-        .set(DEMO_MEMBER_HEADER, laura)
+        .set('Cookie', cookies.get(laura)!)
         .expect(200);
       const agentMessage = ListMessagesResponseSchema.parse(list.body).items.find(
         (m) => m.id === messageId,

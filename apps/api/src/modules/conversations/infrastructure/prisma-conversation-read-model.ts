@@ -97,6 +97,17 @@ export class PrismaConversationReadModel implements ConversationReadModel {
     return row ? toSummaryView(row) : null;
   }
 
+  listAssignedOpen(
+    tenantId: string,
+    memberId: string,
+  ): Promise<Array<{ id: string; controlVersion: number }>> {
+    return this.db.client.conversation.findMany({
+      where: { tenantId, status: 'OPEN', assignedAgentId: memberId },
+      orderBy: { id: 'asc' },
+      select: { id: true, controlVersion: true },
+    });
+  }
+
   findAccess(
     tenantId: string,
     conversationId: string,

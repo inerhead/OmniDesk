@@ -4,10 +4,13 @@ import { ZodValidationPipe } from 'nestjs-zod';
 import { ConversationsModule } from './modules/conversations/conversations.module';
 import { DemoModule } from './modules/demo/demo.module';
 import { HealthModule } from './modules/health/health.module';
+import { IdentityModule } from './modules/identity/identity.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { MembersModule } from './modules/members/members.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
+import { TeamModule } from './modules/team/team.module';
+import { TenancyModule } from './modules/tenancy/tenancy.module';
 import { ConfigModule } from './shared/config/config.module';
 import type { Env } from './shared/config/env';
 import { PrismaModule } from './shared/infrastructure/prisma/prisma.module';
@@ -23,8 +26,11 @@ export class AppModule {
         LoggingModule,
         PrismaModule,
         HealthModule,
+        IdentityModule,
         DemoModule,
+        TenancyModule,
         MembersModule,
+        TeamModule,
         ConversationsModule,
         IntegrationsModule,
         MessagingModule,

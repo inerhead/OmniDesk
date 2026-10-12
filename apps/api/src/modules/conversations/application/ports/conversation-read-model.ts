@@ -60,6 +60,11 @@ export interface ConversationReadModel {
     take: number,
   ): Promise<ConversationSummaryView[]>;
   getSummary(tenantId: string, conversationId: string): Promise<ConversationSummaryView | null>;
+  /** Conversaciones abiertas asignadas al miembro (para devolverlas a la IA al quitarlo). */
+  listAssignedOpen(
+    tenantId: string,
+    memberId: string,
+  ): Promise<Array<{ id: string; controlVersion: number }>>;
   /** Estado de acceso de la conversación, o `null` si no existe en el tenant. */
   findAccess(
     tenantId: string,

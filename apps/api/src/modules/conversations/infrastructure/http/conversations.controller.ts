@@ -35,8 +35,9 @@ import type {
 } from '@omnidesk/contracts';
 import type { Response } from 'express';
 import type { ActorContext } from '../../../../shared/application/request-context';
-import { CurrentActor } from '../../../../shared/infrastructure/http/request-context.decorators';
-import { DemoActorGuard } from '../../../demo/infrastructure/http/demo-actor.guard';
+import { OriginGuard } from '../../../../shared/infrastructure/http/origin.guard';
+import { Actor } from '../../../../shared/infrastructure/http/request-context.decorators';
+import { SessionGuard } from '../../../identity/infrastructure/http/session.guard';
 import { AssignConversationUseCase } from '../../application/assign-conversation.use-case';
 import { CloseConversationUseCase } from '../../application/close-conversation.use-case';
 import { InvalidCursorError } from '../../application/conversation-cursor';
@@ -91,14 +92,15 @@ function toMessageDto(message: Message): MessageResponse {
 }
 
 /**
- * Bandeja y comandos de conversaciones. Sin login todavía: el tenant y el actor los resuelve
- * DemoActorGuard (solo DEMO_MODE=true) con la cabecera `X-Demo-Member-Id`.
+ * Bandeja y comandos de conversaciones. El tenant y el actor salen de la sesión (`SessionGuard`):
+ * la empresa activa y la membresía del usuario en ella.
  */
 @ApiTags('conversations')
-@ApiUnauthorizedResponse({
-  description: 'Sin actor demo (`X-Demo-Member-Id`) o con DEMO_MODE desactivado.',
+@ApiUnauthorizedResponse({ description: 'Sin sesión (`UNAUTHENTICATED`).' })
+@ApiForbiddenResponse({
+  description: 'Sin empresa activa (`NO_ACTIVE_TENANT`) u Origin no permitido.',
 })
-@UseGuards(DemoActorGuard)
+@UseGuards(OriginGuard, SessionGuard)
 @Controller({ path: 'conversations', version: '1' })
 export class ConversationsController {
   constructor(
@@ -120,7 +122,7 @@ export class ConversationsController {
     description: 'Tu rol no puede ver esa bandeja (`all` es de OWNER/ADMIN).',
   })
   async list(
-    @CurrentActor() actor: ActorContext,
+    @Actor() actor: ActorContext,
     @Query() query: ListConversationsQueryDto,
   ): Promise<ListConversationsResponse> {
     try {
@@ -143,7 +145,7 @@ export class ConversationsController {
   @ApiOkResponse({ type: ConversationSummaryDto.Output })
   @ApiNotFoundResponse({ description: 'La conversación no existe o el actor no puede verla.' })
   async detail(
-    @CurrentActor() actor: ActorContext,
+    @Actor() actor: ActorContext,
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<ConversationSummaryResponse> {
     const summary = await this.getSummary.execute(actor, id);
@@ -155,7 +157,7 @@ export class ConversationsController {
   @ApiOkResponse({ type: ListMessagesResponseDto.Output })
   @ApiNotFoundResponse({ description: 'La conversación no existe o el actor no puede verla.' })
   async messages(
-    @CurrentActor() actor: ActorContext,
+    @Actor() actor: ActorContext,
     @Param('id', new ParseUUIDPipe()) id: string,
     @Query() query: ListMessagesQueryDto,
   ): Promise<ListMessagesResponse> {
@@ -171,7 +173,7 @@ export class ConversationsController {
   @ApiOkResponse({ type: ListTimelineResponseDto.Output })
   @ApiNotFoundResponse({ description: 'La conversación no existe o el actor no puede verla.' })
   async timeline(
-    @CurrentActor() actor: ActorContext,
+    @Actor() actor: ActorContext,
     @Param('id', new ParseUUIDPipe()) id: string,
     @Query() query: ListTimelineQueryDto,
   ): Promise<ListTimelineResponse> {
@@ -201,7 +203,7 @@ export class ConversationsController {
   @ApiForbiddenResponse({ description: 'Solo escribe el agente asignado.' })
   @ApiNotFoundResponse({ description: 'La conversación no existe o no puedes verla.' })
   async send(
-    @CurrentActor() actor: ActorContext,
+    @Actor() actor: ActorContext,
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() body: SendAgentMessageRequestDto,
     @Res({ passthrough: true }) res: Response,
@@ -233,7 +235,7 @@ export class ConversationsController {
     description: 'La conversación o el mensaje no existen, o no puedes verla.',
   })
   async retry(
-    @CurrentActor() actor: ActorContext,
+    @Actor() actor: ActorContext,
     @Param('id', new ParseUUIDPipe()) id: string,
     @Param('messageId', new ParseUUIDPipe()) messageId: string,
   ): Promise<SendAgentMessageResponse> {
@@ -262,7 +264,7 @@ export class ConversationsController {
     description: 'La conversación o el miembro no existen, o no puedes verla.',
   })
   async assign(
-    @CurrentActor() actor: ActorContext,
+    @Actor() actor: ActorContext,
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() body: AssignConversationRequestDto,
   ): Promise<ConversationCommandResponse> {
@@ -281,7 +283,7 @@ export class ConversationsController {
   @ApiForbiddenResponse({ description: 'Tu rol no permite esta acción.' })
   @ApiNotFoundResponse({ description: 'La conversación no existe o no puedes verla.' })
   async release(
-    @CurrentActor() actor: ActorContext,
+    @Actor() actor: ActorContext,
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() body: ConversationCommandRequestDto,
   ): Promise<ConversationCommandResponse> {
@@ -299,7 +301,7 @@ export class ConversationsController {
   @ApiForbiddenResponse({ description: 'Tu rol no permite esta acción.' })
   @ApiNotFoundResponse({ description: 'La conversación no existe o no puedes verla.' })
   async close(
-    @CurrentActor() actor: ActorContext,
+    @Actor() actor: ActorContext,
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() body: ConversationCommandRequestDto,
   ): Promise<ConversationCommandResponse> {
@@ -317,7 +319,7 @@ export class ConversationsController {
   @ApiForbiddenResponse({ description: 'Tu rol no permite esta acción.' })
   @ApiNotFoundResponse({ description: 'La conversación no existe o no puedes verla.' })
   async reopen(
-    @CurrentActor() actor: ActorContext,
+    @Actor() actor: ActorContext,
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() body: ConversationCommandRequestDto,
   ): Promise<ConversationCommandResponse> {

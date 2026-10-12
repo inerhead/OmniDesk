@@ -3,7 +3,6 @@ import { randomInt, randomUUID } from 'node:crypto';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import {
-  DEMO_MEMBER_HEADER,
   InboundMessageResponseSchema,
   ListConversationsResponseSchema,
   ListMessagesResponseSchema,
@@ -14,6 +13,7 @@ import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
 import { sha256Hex } from '../src/shared/infrastructure/crypto/sha256';
 import { PrismaService } from '../src/shared/infrastructure/prisma/prisma.service';
+import { devLogin } from './support/session';
 import { E2E_DEMO_KEY, testEnv } from './support/test-env';
 
 async function createApp(overrides: Record<string, string> = {}): Promise<NestExpressApplication> {
@@ -40,10 +40,10 @@ describe('Bandeja de conversaciones (e2e)', () => {
   let prisma: PrismaService;
   const otherKey = `e2e-other-key-${randomUUID()}`;
   const http = () => request(app.getHttpServer());
-  let supervisorId: string;
+  let supervisorCookie: string;
 
-  /** Lectura de la web: actúa como el supervisor demo (ve todas las bandejas). */
-  const read = (path: string) => http().get(path).set(DEMO_MEMBER_HEADER, supervisorId);
+  /** Lectura de la web con la sesión del supervisor demo (ve todas las bandejas). */
+  const read = (path: string) => http().get(path).set('Cookie', supervisorCookie);
 
   const inbound = (body: object, key = E2E_DEMO_KEY) =>
     http()
@@ -60,11 +60,12 @@ describe('Bandeja de conversaciones (e2e)', () => {
   beforeAll(async () => {
     app = await createApp();
     prisma = app.get(PrismaService);
-    supervisorId = (
+    const supervisorId = (
       await prisma.tenantMember.findFirstOrThrow({
         where: { role: 'OWNER', tenant: { slug: 'demo' } },
       })
     ).id;
+    supervisorCookie = await devLogin(app, supervisorId);
 
     // Segundo tenant con su propio canal y credencial, para probar el aislamiento.
     const tenant = await prisma.tenant.create({
@@ -297,7 +298,7 @@ describe('Bandeja de conversaciones (e2e)', () => {
   });
 });
 
-describe('Lectura con DEMO_MODE=false (e2e)', () => {
+describe('Lectura sin sesión con DEMO_MODE=false (e2e)', () => {
   let app: NestExpressApplication;
 
   beforeAll(async () => {

@@ -1,6 +1,6 @@
 import { type Inbox } from '@omnidesk/contracts';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { useCurrentActor } from '@/features/actor/api/use-actor';
+import { useCurrentActor } from '@/features/auth/api/use-current-actor';
 import { ApiHttpError } from '@/shared/api/http-client';
 import { backupPollingInterval, useConnectionStatus } from '@/shared/realtime/connection-status';
 import { fetchConversation, fetchConversations, fetchTimeline } from './conversations-api';
@@ -17,7 +17,7 @@ export function useConversations(inbox: Inbox, q: string | undefined) {
   const connection = useConnectionStatus();
   return useInfiniteQuery({
     queryKey: ['conversations', actor?.id, 'list', inbox, q ?? ''],
-    queryFn: ({ pageParam }) => fetchConversations(actor!.id, inbox, q, pageParam),
+    queryFn: ({ pageParam }) => fetchConversations(inbox, q, pageParam),
     enabled: actor !== null,
     // Al escribir en el buscador se mantiene la lista anterior hasta tener resultados; al cambiar
     // de bandeja o de actor, no: se ven los skeletons.
@@ -38,7 +38,7 @@ export function useConversation(conversationId: string) {
   const connection = useConnectionStatus();
   return useQuery({
     queryKey: conversationDetailKey(actor?.id, conversationId),
-    queryFn: () => fetchConversation(actor!.id, conversationId),
+    queryFn: () => fetchConversation(conversationId),
     enabled: actor !== null,
     refetchInterval: (query) =>
       isNotFound(query.state.error) ? false : backupPollingInterval(connection),
@@ -53,7 +53,7 @@ export function useTimeline(conversationId: string) {
   const connection = useConnectionStatus();
   return useInfiniteQuery({
     queryKey: ['timeline', conversationId, actor?.id],
-    queryFn: ({ pageParam }) => fetchTimeline(actor!.id, conversationId, pageParam),
+    queryFn: ({ pageParam }) => fetchTimeline(conversationId, pageParam),
     enabled: actor !== null,
     initialPageParam: undefined as number | undefined,
     getNextPageParam: (lastPage) => lastPage.prevCursor ?? undefined,

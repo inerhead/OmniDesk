@@ -1,0 +1,20 @@
+# Gateway local de mismo origen (docs/arquitectura.md §4.3).
+# HTTP en localhost: ya es un contexto seguro para instalar la PWA en escritorio.
+# El HTTPS para el celular lo pone el túnel (profile `tunnel`).
+{
+	admin off
+	auto_https off
+}
+
+:80 {
+	encode gzip
+
+	handle /api/* {
+		reverse_proxy api:5001
+	}
+
+	# web:5173 (Vite dev) por defecto; web-preview:4173 para probar la PWA.
+	handle {
+		reverse_proxy {$WEB_UPSTREAM:web:5173}
+	}
+}

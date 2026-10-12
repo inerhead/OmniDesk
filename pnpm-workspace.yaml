@@ -1,0 +1,12 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+# pnpm bloquea los scripts de instalación por defecto; solo se permiten estos.
+allowBuilds:
+  esbuild: true
+  '@swc/core': true
+  '@prisma/engines': true
+  prisma: true
+  # Telemetría de swagger-ui-dist: se deniega explícitamente.
+  '@scarf/scarf': false

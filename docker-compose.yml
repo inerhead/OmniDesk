@@ -1,0 +1,98 @@
+name: omnidesk
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-omnidesk}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-omnidesk}
+      POSTGRES_DB: ${POSTGRES_DB:-omnidesk}
+    ports:
+      - '${POSTGRES_HOST_PORT:-5532}:5432'
+    volumes:
+      # Postgres 18 guarda los datos bajo /var/lib/postgresql (ya no en /var/lib/postgresql/data).
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: dev
+    env_file: .env
+    ports:
+      - '${API_HOST_PORT:-5001}:5001'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./apps/api/src:/repo/apps/api/src
+      - ./apps/api/prisma:/repo/apps/api/prisma
+      - ./apps/api/test:/repo/apps/api/test
+      - ./packages/contracts/src:/repo/packages/contracts/src
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: dev
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-}
+    ports:
+      - '5173:5173'
+    depends_on:
+      - api
+    volumes:
+      - ./apps/web/src:/repo/apps/web/src
+      - ./apps/web/public:/repo/apps/web/public
+      - ./packages/contracts/src:/repo/packages/contracts/src
+
+  caddy:
+    image: caddy:2
+    environment:
+      WEB_UPSTREAM: ${WEB_UPSTREAM:-web:5173}
+    ports:
+      - '${GATEWAY_HOST_PORT:-8080}:80'
+    depends_on:
+      - api
+      - web
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+
+  # Build de producción de la web servido por `vite preview`, para verificar la PWA.
+  # Uso: WEB_UPSTREAM=web-preview:4173 docker compose --profile pwa up
+  web-preview:
+    profiles: [pwa]
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: dev
+    environment:
+      NODE_ENV: production
+      VITE_API_URL: ${VITE_API_URL:-}
+    command:
+      - sh
+      - -c
+      - pnpm exec turbo run build --filter=@omnidesk/web... && pnpm --filter @omnidesk/web preview
+    ports:
+      - '4173:4173'
+    volumes:
+      - ./apps/web/src:/repo/apps/web/src
+      - ./apps/web/public:/repo/apps/web/public
+      - ./packages/contracts/src:/repo/packages/contracts/src
+
+  # URL HTTPS pública temporal hacia caddy, para instalar la PWA en un celular.
+  # La URL aparece en: docker compose logs cloudflared
+  cloudflared:
+    profiles: [tunnel]
+    image: cloudflare/cloudflared:2026.9.3
+    command: tunnel --no-autoupdate --url http://caddy:80
+    depends_on:
+      - caddy
+
+volumes:
+  pgdata:

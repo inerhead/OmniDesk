@@ -1,0 +1,33 @@
+# dependencies
+node_modules/
+
+# builds
+dist/
+dev-dist/
+build/
+*.tsbuildinfo
+
+# turbo
+.turbo/
+
+# env
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# tests
+coverage/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# código generado
+apps/api/src/generated/

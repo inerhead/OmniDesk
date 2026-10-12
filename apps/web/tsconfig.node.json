@@ -1,0 +1,16 @@
+{
+  "extends": "@omnidesk/tsconfig/base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "types": ["node"],
+    "allowImportingTsExtensions": true
+  },
+  "include": [
+    "vite.config.ts",
+    "vitest.config.ts",
+    "pwa-assets.config.ts",
+    "src/shared/config/env-schema.ts"
+  ]
+}

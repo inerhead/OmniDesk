@@ -1,0 +1,12 @@
+pnpm-lock.yaml
+dist
+dev-dist
+coverage
+.turbo
+*.docx
+apps/api/src/generated
+docs
+specs
+.claude
+.agents
+AGENTS.md

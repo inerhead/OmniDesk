@@ -1,0 +1,15 @@
+**/node_modules
+**/dist
+**/dev-dist
+**/.turbo
+**/coverage
+apps/api/src/generated
+.git
+.env
+.env.*
+!.env.example
+*.docx
+.claude
+.agents
+specs
+docs

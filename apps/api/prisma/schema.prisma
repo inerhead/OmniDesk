@@ -1,0 +1,11 @@
+// Sin modelos de dominio en el SPEC 01. Tenant, User, etc. llegan con el incremento 1.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}

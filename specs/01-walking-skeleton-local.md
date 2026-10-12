@@ -134,7 +134,9 @@ export type StatusView =
 | `VITE_API_URL` | web (build) | vacía o URL | vacía = mismo origen (`/api/...`) |
 | `WEB_UPSTREAM` | caddy | `host:puerto` | `web:5173` (con PWA: `web-preview:4173`) |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | compose | — | `omnidesk` / `omnidesk` / `omnidesk` |
-| `POSTGRES_HOST_PORT` | compose | entero | `5432` |
+| `POSTGRES_HOST_PORT` | compose | entero | `5532` |
+| `API_HOST_PORT` | compose | entero | `5001` |
+| `GATEWAY_HOST_PORT` | compose | entero | `8080` |
 
 **Prisma:**
 
@@ -149,7 +151,7 @@ export type StatusView =
 | `5173` | Vite dev | Web en desarrollo |
 | `4173` | Vite preview | Build de producción de la web |
 | `5001` | API | Directo, para `curl` y Swagger |
-| `5432` | Postgres | Base de datos |
+| `5532` | Postgres | Base de datos (puerto del host; dentro de Docker sigue siendo `5432`) |
 
 **Convenciones:**
 
@@ -325,6 +327,16 @@ export type StatusView =
 - **Sí:** Node 24 LTS y `postgres:18`.
 - **Sí:** los Dockerfiles solo tienen etapa `dev`. Las imágenes de producción y el hosting estático de la web van con el spec de despliegue.
 
+**Decisiones tomadas durante la implementación (2026-10-12):**
+
+- **Sí:** Nest 11.2 + `@nestjs/swagger` 11.4 + `nestjs-zod` 5.5. `nestjs-zod` todavía no soporta Nest 12; se aplicó la mitigación prevista en Riesgos (fijar versiones compatibles).
+- **Sí:** TypeScript 6.0. TypeScript 7 no es compatible con `typescript-eslint` ni con `@nestjs/swagger`.
+- **Sí:** Prisma 7.10 (estable) con `prisma.config.ts`, driver adapter `@prisma/adapter-pg` y generador `prisma-client` en formato `cjs`. **No:** Prisma 8, que sigue en RC.
+- **Sí:** se respeta la política de pnpm `minimumReleaseAge` (24 h): se fijan versiones publicadas hace más de un día.
+- **Sí:** los scripts de instalación se permiten explícitamente en `pnpm-workspace.yaml` (`allowBuilds`). La telemetría `@scarf/scarf` se deniega.
+- **Sí:** `API_HOST_PORT` y `GATEWAY_HOST_PORT` son configurables, igual que `POSTGRES_HOST_PORT`, con los defaults 5001 y 8080 del spec. En la máquina de desarrollo esos puertos ya estaban ocupados por otro proyecto.
+- **Sí:** el contenedor `api` verifica que exista `DATABASE_URL` antes de `db:deploy`. Sin esa guarda, Prisma fallaba primero con un mensaje que no nombra la variable.
+
 ## Riesgos
 
 | Riesgo | Mitigación |
@@ -338,7 +350,7 @@ export type StatusView =
 | `nestjs-zod` incompatible con la versión de zod instalada | Fijar versiones compatibles. Alternativa: `@asteasolutions/zod-to-openapi`. |
 | Prisma no genera una migración vacía sin modelos | Crear `migration.sql` a mano con un comentario SQL. |
 | `postgres:18` usa otra ruta de datos | Montar el volumen en `/var/lib/postgresql`. |
-| Puertos 8080, 5432, 5173 o 5001 ocupados | `POSTGRES_HOST_PORT` configurable. Los demás se documentan en el README. |
+| Puertos 8080, 5532, 5173 o 5001 ocupados | `GATEWAY_HOST_PORT`, `API_HOST_PORT` y `POSTGRES_HOST_PORT` configurables en `.env`. 5173 y 4173 se documentan en el README. |
 
 ## Lo que **no** entra en este spec
 

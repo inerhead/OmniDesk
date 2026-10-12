@@ -5,6 +5,7 @@ import { InstallPrompt } from '@/shared/pwa/install-prompt';
 import { ConnectionBadge } from '@/shared/realtime/connection-badge';
 import { Tooltip } from '@/shared/ui/tooltip';
 import { NAV_ITEMS } from './nav-items';
+import { publicAsset } from '@/shared/config/env';
 
 /** Rail vertical de 64 px (≥ md): destinos arriba; conexión, instalar y usuario (empresa, tema, miembros) abajo. */
 export function NavRail() {
@@ -13,7 +14,7 @@ export function NavRail() {
       aria-label="Principal"
       className="bg-sidebar text-sidebar-foreground hidden w-16 shrink-0 flex-col items-center gap-2 border-r py-3 md:flex"
     >
-      <img src="/logo.svg" alt="OmniDesk" className="mb-2 size-8" />
+      <img src={publicAsset('logo.svg')} alt="OmniDesk" className="mb-2 size-8" />
       {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
         <Tooltip key={to} content={label} side="right">
           <NavLink

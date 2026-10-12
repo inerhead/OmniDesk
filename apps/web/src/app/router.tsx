@@ -8,39 +8,44 @@ import { ConversationPage, ConversationPlaceholder } from '@/pages/conversation-
 import { ConversationsPage } from '@/pages/conversations-page';
 import { NotFoundPage } from '@/pages/not-found-page';
 import { StatusPage } from '@/pages/status-page';
+import { basePath } from '@/shared/config/env';
 import { AppLayout } from './app-layout';
 
-export const router = createBrowserRouter([
-  // Públicas.
-  { path: '/login', element: <LoginPage /> },
-  { path: '/invite/:token', element: <InvitePage /> },
-  // Con sesión (`GET /me`); un 401 redirige a /login?next=.
-  {
-    element: <AuthGate />,
-    children: [
-      { path: '/onboarding', element: <OnboardingPage /> },
-      {
-        path: '/',
-        element: (
-          <RequireActiveTenant>
-            <AppLayout />
-          </RequireActiveTenant>
-        ),
-        children: [
-          { index: true, element: <Navigate to="/conversations" replace /> },
-          {
-            path: 'conversations',
-            element: <ConversationsPage />,
-            children: [
-              { index: true, element: <ConversationPlaceholder /> },
-              { path: ':conversationId', element: <ConversationPage /> },
-            ],
-          },
-          { path: 'status', element: <StatusPage /> },
-          { path: 'settings/members', element: <MembersPage /> },
-          { path: '*', element: <NotFoundPage /> },
-        ],
-      },
-    ],
-  },
-]);
+export const router = createBrowserRouter(
+  [
+    // Públicas.
+    { path: '/login', element: <LoginPage /> },
+    { path: '/invite/:token', element: <InvitePage /> },
+    // Con sesión (`GET /me`); un 401 redirige a /login?next=.
+    {
+      element: <AuthGate />,
+      children: [
+        { path: '/onboarding', element: <OnboardingPage /> },
+        {
+          path: '/',
+          element: (
+            <RequireActiveTenant>
+              <AppLayout />
+            </RequireActiveTenant>
+          ),
+          children: [
+            { index: true, element: <Navigate to="/conversations" replace /> },
+            {
+              path: 'conversations',
+              element: <ConversationsPage />,
+              children: [
+                { index: true, element: <ConversationPlaceholder /> },
+                { path: ':conversationId', element: <ConversationPage /> },
+              ],
+            },
+            { path: 'status', element: <StatusPage /> },
+            { path: 'settings/members', element: <MembersPage /> },
+            { path: '*', element: <NotFoundPage /> },
+          ],
+        },
+      ],
+    },
+  ],
+  // La app vive bajo la subruta (`base` de Vite): las rutas de aquí no la incluyen.
+  { basename: basePath || '/' },
+);

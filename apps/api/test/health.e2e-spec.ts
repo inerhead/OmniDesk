@@ -7,13 +7,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
 import { DATABASE_HEALTH_PORT } from '../src/modules/health/application/ports/database-health.port';
+import type { Env } from '../src/shared/config/env';
 import { testEnv } from './support/test-env';
 
 // Requiere DATABASE_URL apuntando al Postgres de Docker Compose (se usa la base `_e2e`).
 const env = testEnv();
 
-async function createApp(databaseUp?: boolean): Promise<NestExpressApplication> {
-  let builder = Test.createTestingModule({ imports: [AppModule.forRoot(env)] });
+async function createApp(databaseUp?: boolean, appEnv: Env = env): Promise<NestExpressApplication> {
+  let builder = Test.createTestingModule({ imports: [AppModule.forRoot(appEnv)] });
   if (databaseUp !== undefined) {
     builder = builder
       .overrideProvider(DATABASE_HEALTH_PORT)
@@ -21,7 +22,7 @@ async function createApp(databaseUp?: boolean): Promise<NestExpressApplication> 
   }
   const moduleRef = await builder.compile();
   const app = moduleRef.createNestApplication<NestExpressApplication>({ bufferLogs: true });
-  configureApp(app, env);
+  configureApp(app, appEnv);
   await app.init();
   return app;
 }
@@ -102,5 +103,38 @@ describe('GET /api/v1/health (base de datos abajo)', () => {
     const body = HealthResponseSchema.parse(res.body);
     expect(body.status).toBe('error');
     expect(body.checks.database).toBe('down');
+  });
+});
+
+describe('Producción (NODE_ENV=production)', () => {
+  let app: NestExpressApplication;
+
+  beforeAll(async () => {
+    app = await createApp(
+      true,
+      testEnv({
+        NODE_ENV: 'production',
+        DEMO_MODE: 'false',
+        GOOGLE_CLIENT_ID: 'e2e-client-id',
+        GOOGLE_CLIENT_SECRET: 'e2e-client-secret',
+        SESSION_COOKIE_SECURE: 'true',
+        APP_VERSION: 'v0.1.0',
+      }),
+    );
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('no publica Swagger', async () => {
+    await request(app.getHttpServer()).get('/api/docs').expect(404);
+    await request(app.getHttpServer()).get('/api/docs-json').expect(404);
+  });
+
+  it('el health muestra APP_VERSION', async () => {
+    const res = await request(app.getHttpServer()).get('/api/v1/health').expect(200);
+
+    expect(HealthResponseSchema.parse(res.body).version).toBe('v0.1.0');
   });
 });

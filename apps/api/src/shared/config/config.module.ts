@@ -13,7 +13,7 @@ export class ConfigModule {
       module: ConfigModule,
       providers: [
         { provide: ENV, useValue: env },
-        { provide: APP_VERSION, useValue: readAppVersion() },
+        { provide: APP_VERSION, useValue: env.APP_VERSION ?? readAppVersion() },
         { provide: CLOCK, useValue: systemClock },
       ],
       exports: [ENV, APP_VERSION, CLOCK],

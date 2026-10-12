@@ -1,6 +1,6 @@
 # OmniDesk — Arquitectura y plan MVP incremental
 
-> **Versión:** 0.4
+> **Versión:** 0.5
 > **Fecha:** 2026-10-12
 > **Sustituye a:** `OmniDesk_Plan_MVP_Arquitectura.docx` (v0.1, 2026-10-11), que queda como histórico.
 > **Estado:** documento base de planificación. Cada incremento se detalla en su propio spec dentro de `specs/` antes de implementarse.
@@ -10,6 +10,13 @@ Plataforma SaaS multiempresa para supervisar conversaciones atendidas por IA y p
 ---
 
 ## 0. Historial de cambios
+
+### v0.5 (respecto a v0.4)
+
+| # | Cambio | Motivo |
+| --- | --- | --- |
+| 1 | El despliegue pasa de Railway a un **VPS propio con Docker Compose** y dos entornos aislados (`omnidesk-dev`, `omnidesk-prod`). | Decisión del equipo (SPEC 08). Con VPS y dominio propios, Railway no aporta y sus dominios `*.up.railway.app` rompen la cookie entre `app` y `api` (Public Suffix List). |
+| 2 | La web y el API se sirven en el **mismo origen bajo la subruta `/omnidesk`** (`https://<dominio>/omnidesk` y `/omnidesk/api`), detrás del Nginx existente. Local también usa `/omnidesk`. | El dominio ya sirve otro sitio en la raíz. Mismo origen: sin CORS entre orígenes y cookie de un solo origen (también en iOS standalone). |
 
 ### v0.4 (respecto a v0.3)
 
@@ -132,29 +139,34 @@ flowchart LR
         SW[Service worker<br/>app shell en caché]
         SPA[SPA React]
     end
-    SPA -- "HTTPS /api/v1/*<br/>(red, nunca caché)" --> API[OmniDesk API<br/>NestJS]
-    SPA -- "WebSocket (inc. 3)" --> API
-    SW -. "precache de HTML/JS/CSS/íconos" .-> STATIC[Hosting estático<br/>de apps/web/dist]
+    SPA -- "HTTPS /omnidesk/api/v1/*<br/>(red, nunca caché)" --> GW
+    SPA -- "WebSocket /omnidesk/api/realtime" --> GW
+    SW -. "precache de HTML/JS/CSS/íconos" .-> GW
+    GW[Gateway Caddy<br/>dist en /omnidesk/*<br/>quita /omnidesk en /omnidesk/api/*] --> API[OmniDesk API<br/>NestJS, /api/*]
     API --> DB[(PostgreSQL)]
 ```
 
+La app vive bajo la subruta `BASE_PATH=/omnidesk` en todos los entornos. La web la conoce en el build (`base` de Vite, `basename` del router, `scope` y `start_url` del manifest, `navigateFallback` de Workbox). El API sigue sirviendo `/api/*`: el gateway quita el prefijo, y el API solo usa `PUBLIC_BASE_PATH` para la ruta de la cookie (`Path=/omnidesk`) y las URL públicas (`APP_URL`, callback de OAuth).
+
 **Local (incremento 0):**
 
-- Caddy publica un único origen en `http://localhost:8080`: `/api/*` va al API y el resto a la web.
+- Caddy publica un único origen en `http://localhost:8080`: `/omnidesk/api/*` va al API (sin el prefijo), `/omnidesk/*` a Vite y `/` redirige a `/omnidesk/`.
 - `localhost` ya es un contexto seguro, así que la PWA se instala en escritorio sin certificados.
 - Para instalarla en un celular, el profile `tunnel` (cloudflared) expone ese mismo origen por una URL HTTPS pública temporal.
 
-**Producción** (se confirma en el incremento 5):
+**Producción** (SPEC 08, guía en `docs/despliegue.md`):
 
-- La web se sirve como sitio estático en `app.<dominio>` y el API en `api.<dominio>`.
-- Al ser subdominios del mismo sitio, la cookie de sesión `SameSite=Lax` funciona.
-- El API solo permite CORS desde `app.<dominio>`.
-- La web se compila con `VITE_API_URL=https://api.<dominio>`.
+- Un VPS propio con dos proyectos Compose aislados (red, volumen y backups propios): `omnidesk-dev` en `https://dev.gastromesa.com/omnidesk` y `omnidesk-prod` en `https://gastromesa.com/omnidesk`.
+- El Nginx existente termina TLS y reenvía `/omnidesk/*`, sin quitar el prefijo, al gateway del entorno en `127.0.0.1` (8081 dev, 8082 prod). Pasa el upgrade del WebSocket.
+- El gateway (imagen `infra/gateway`) es Caddy con el build de la web y el proxy al API, con cabeceras de caché (`no-cache` para `index.html`, `sw.js` y el manifest; `immutable` para `assets/`) y una CSP estricta (`default-src 'self'`).
+- Web y API en el mismo origen: la web se compila con `VITE_API_URL` vacía, la cookie es de un solo origen y no hay CORS entre orígenes.
+- El API corre como usuario no root, aplica `prisma migrate deploy` antes de aceptar peticiones y confía en dos proxies (`TRUST_PROXY=2`).
+- Postgres en contenedor sin puertos publicados, con `pg_dump` diario a las 03:00 y 7 copias por entorno.
 
 **Reglas del service worker:**
 
 - Precarga solo el app shell (HTML, JS, CSS, íconos).
-- `navigateFallback` a `index.html`, excepto en `/api/*`.
+- `navigateFallback` a `/omnidesk/index.html`, excepto en `/omnidesk/api/*`. El `scope` es `/omnidesk/`.
 - Nunca cachea respuestas del API: los datos de conversaciones siempre vienen de la red.
 - Cuando hay una versión nueva, la app muestra "Nueva versión disponible" y no recarga sola, para no interrumpir a un agente mientras escribe.
 
@@ -173,7 +185,7 @@ flowchart LR
 | Pruebas | Vitest (unitarias e integración), supertest (e2e del API), Playwright (E2E de la PWA, incremento 7) |
 | Entorno local | Docker Compose: `postgres`, `api`, `web` y `caddy` (gateway de mismo origen); profiles `pwa` (build + preview) y `tunnel` (cloudflared, HTTPS para móvil) |
 | Integración inicial | n8n + WhatsApp Cloud API |
-| Despliegue | Railway (incremento 5) |
+| Despliegue | VPS propio con Docker Compose (dev y prod), detrás del Nginx existente, bajo `/omnidesk`; despliegue manual con `infra/deploy/deploy.sh` (SPEC 08) |
 | Evolución | Redis (adapter de Socket.IO y colas) cuando haya más de una instancia, almacenamiento de archivos, servicio de IA propio |
 
 ## 6. Estructura del repositorio
@@ -368,7 +380,7 @@ Cada incremento se especifica en `specs/NN-*.md` justo antes de implementarlo. S
 | 2 | SPEC 03 | Tiempo real | **Implementado.** Outbox transaccional + dispatcher (cada 500 ms, `FOR UPDATE SKIP LOCKED`) y Socket.IO en `/api/realtime` con un room por tenant. Los eventos son ligeros (`conversationId` + `reason`) y la web invalida sus queries. Latencia objetivo ≤ 1 s; el polling de 5 s se elimina y queda un respaldo de 15 s solo mientras el socket está caído. Rooms por conversación llegan con identidad. |
 | 3 | SPEC 07 | Identidad y tenancy | **Implementado.** Google Login (Passport, página completa) y login de desarrollo con `DEMO_MODE`. Sesión opaca en Postgres (cookie `HttpOnly`, 30 días deslizantes) que reemplaza al actor demo en el API, Socket.IO y la web. Empresas en autoservicio con empresa activa por sesión, invitaciones por enlace (7 días, un solo uso, ligadas al email), roles OWNER/ADMIN/AGENT y baja lógica de miembros que devuelve sus conversaciones a la IA. |
 | 4 | SPEC 04 | Asignación | **Implementado.** `assign`/`release`/`close`/`reopen` con `controlVersion`, eventos en el historial y permisos por rol (`TenantMember`; el actor sale de la sesión desde SPEC 07). Bandejas IA/Mías/Todas/Cerradas, reapertura automática por un inbound y suspensión inmediata de la IA. |
-| 5 | — | Despliegue | Railway con dos servicios independientes: la web como sitio estático (`app.<dominio>`) y el API con imagen de producción (`api.<dominio>`). Incluye migraciones, secretos, dominios y conexión con n8n y WhatsApp reales. Puede adelantarse si se necesita una demo pública. |
+| 5 | SPEC 08 | Despliegue | VPS propio con Docker Compose: dos entornos aislados (`dev`, `prod`) en la subruta `/omnidesk` de `dev.gastromesa.com` y `gastromesa.com`, tras el Nginx existente, con web y API en el mismo origen. Imágenes de producción (API no root con migraciones al arrancar; gateway Caddy con la PWA, caché y CSP), backup diario con 7 copias y despliegue manual con `deploy.sh`. La conexión con n8n y WhatsApp reales pasa a SPEC 09. |
 | 6 | SPEC 05 | Atención humana | **Completa el ciclo del MVP en local.** El agente asignado responde desde la PWA: el mensaje se registra `PENDING`, el dispatcher del Outbox lo envía por el puerto `MessagingProvider` (adaptador simulado) con reintentos de 1/2/4/8/16 s y los estados `SENT`/`DELIVERED`/`READ`/`FAILED` se ven en tiempo real, con reintento manual. `POST /integrations/messages/status` (deduplicado en `EventInbox`, transiciones monótonas) recibe los estados de las respuestas de IA. El adaptador n8n/WhatsApp real llega con la integración real, sin tocar el dominio. |
 | 7 | — | Robustez | E2E con Playwright (también en viewport móvil), rate limiting, evaluación de RLS, métricas, política de retención y notificaciones Web Push (requieren la PWA instalada en iOS) |
 
@@ -408,11 +420,11 @@ La arquitectura sí admite estas ampliaciones.
 - Las respuestas de IA en vuelo se resuelven con el protocolo `controlVersion` (§9).
 
 - **Sesión de Google OAuth** (incremento 1):
-  - Passport en NestJS con cookie `httpOnly`, `Secure` y `SameSite=Lax`, en subdominios del mismo sitio.
+  - Passport en NestJS con cookie `httpOnly`, `Secure` y `SameSite=Lax`, de un solo origen con `Path=/omnidesk` (SPEC 08).
   - El API es la autoridad, y Socket.IO reutiliza la misma sesión.
 
 **Pendientes reales:**
 
 - Validar el login de Google dentro de la PWA instalada en iOS (incremento 1). En modo `standalone`, iOS guarda cookies separadas de Safari, y el flujo de redirección debe completarse dentro de la PWA.
 - Política de retención, exportación y eliminación de datos (incremento 7).
-- Momento exacto del despliegue en Railway respecto a la integración con n8n en la nube (incremento 5).
+- ~~Momento exacto del despliegue respecto a la integración con n8n en la nube (incremento 5).~~ Cerrado en SPEC 08: el despliegue en el VPS va primero y n8n + WhatsApp reales llegan con SPEC 09.

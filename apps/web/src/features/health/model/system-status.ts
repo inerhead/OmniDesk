@@ -71,7 +71,7 @@ export function toSystemStatus({ online, check, realtime }: SystemInput): System
     name: 'API',
     description: 'Servidor de OmniDesk: bandeja, comandos e integraciones.',
     state: apiState,
-    detail: check ? `${check.latencyMs} ms · v${check.health.version}` : null,
+    detail: check ? `${check.latencyMs} ms · ${formatVersion(check.health.version)}` : null,
   });
 
   const database = component({
@@ -144,4 +144,9 @@ export function toSystemStatus({ online, check, realtime }: SystemInput): System
     description: 'El API, la base de datos y el tiempo real funcionan con normalidad.',
     components,
   };
+}
+
+/** Versión desplegada para mostrar: `1.2.3` → `v1.2.3`; una etiqueta `v0.1.0` o un commit `abc1234`, tal cual. */
+export function formatVersion(version: string): string {
+  return /^\d/.test(version) ? `v${version}` : version;
 }

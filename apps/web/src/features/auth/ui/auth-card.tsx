@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { ThemeMenu } from '@/shared/theme/theme-menu';
+import { publicAsset } from '@/shared/config/env';
 
 /** Pantallas sin sesión o sin empresa (login, onboarding, invitación): tarjeta centrada con marca. */
 export function AuthCard({
@@ -18,7 +19,7 @@ export function AuthCard({
       </div>
       <main className="bg-card text-card-foreground flex w-full max-w-sm flex-col gap-6 rounded-2xl border p-6 shadow-sm sm:p-8">
         <div className="flex flex-col items-center gap-3 text-center">
-          <img src="/logo.svg" alt="OmniDesk" className="size-10" />
+          <img src={publicAsset('logo.svg')} alt="OmniDesk" className="size-10" />
           <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
           {description && <p className="text-muted-foreground text-sm">{description}</p>}
         </div>

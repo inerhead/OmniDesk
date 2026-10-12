@@ -12,24 +12,8 @@
       content="Supervisión de conversaciones atendidas por IA y agentes humanos."
     />
     <meta name="theme-color" content="#ffffff" />
-    <script>
-      // Aplica el tema antes del primer render para evitar el parpadeo en claro.
-      // Debe coincidir con src/shared/theme/theme-store.ts (clave, valores y colores).
-      (function () {
-        var pref = 'system';
-        try {
-          var stored = localStorage.getItem('omnidesk:theme');
-          if (stored === 'light' || stored === 'dark') pref = stored;
-        } catch (e) {}
-        var dark =
-          pref === 'dark' ||
-          (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        if (dark) document.documentElement.classList.add('dark');
-        document
-          .querySelector('meta[name="theme-color"]')
-          .setAttribute('content', dark ? '#0e1016' : '#ffffff');
-      })();
-    </script>
+    <!-- Tema antes del primer render (síncrono, sin parpadeo). Ver public/theme-init.js. -->
+    <script src="/theme-init.js"></script>
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" href="/logo.svg" sizes="any" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" />

@@ -18,6 +18,8 @@ export function testEnv(overrides: Record<string, string> = {}): Env {
     CORS_ORIGINS: 'http://localhost:8080,http://localhost:5173',
     DEMO_MODE: 'true',
     DEMO_CHANNEL_API_KEY: E2E_DEMO_KEY,
+    PUBLIC_BASE_PATH: '/omnidesk',
+    APP_URL: 'http://localhost:8080/omnidesk',
     ...overrides,
   });
 }

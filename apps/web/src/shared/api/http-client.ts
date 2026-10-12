@@ -1,4 +1,4 @@
-import { env } from '@/shared/config/env';
+import { apiBase } from '@/shared/config/env';
 import { newRequestId } from './request-id';
 
 const DEFAULT_TIMEOUT_MS = 3_000;
@@ -55,7 +55,7 @@ async function requestJson(
   let response: ApiResponse;
 
   try {
-    const res = await fetch(`${env.VITE_API_URL}${path}`, {
+    const res = await fetch(`${apiBase}${path}`, {
       method,
       headers: {
         accept: 'application/json',
@@ -78,7 +78,7 @@ async function requestJson(
   return response;
 }
 
-/** GET contra el API (`${VITE_API_URL}/api/v1/...`) con timeout y `x-request-id` por petición. */
+/** GET contra el API (`${apiBase}/api/v1/...`; mismo origen: `/omnidesk/api/v1/...`) con timeout y `x-request-id` por petición. */
 export function getJson(path: string, options: RequestOptions = {}): Promise<ApiResponse> {
   return requestJson('GET', path, undefined, options);
 }

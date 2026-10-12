@@ -4,7 +4,7 @@ import { useSyncExternalStore } from 'react';
 export type ThemePref = 'light' | 'dark' | 'system';
 export type Theme = 'light' | 'dark';
 
-/** Misma clave que lee el script inline de `index.html` antes del primer render. */
+/** Misma clave que lee `public/theme-init.js` (desde `index.html`) antes del primer render. */
 export const THEME_STORAGE_KEY = 'omnidesk:theme';
 
 /** Color de la barra del navegador y de la PWA según el tema efectivo (igual que `--background`). */

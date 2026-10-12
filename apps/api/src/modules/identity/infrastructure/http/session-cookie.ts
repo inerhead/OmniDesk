@@ -1,12 +1,21 @@
 import { SESSION_COOKIE } from '@omnidesk/contracts';
 import type { CookieOptions, Request, Response } from 'express';
 import type { Env } from '../../../../shared/config/env';
+import { publicPath } from '../../../../shared/config/public-url';
 import { parseCookies } from '../../../../shared/infrastructure/http/cookies';
 import { SESSION_TTL_MS } from '../../domain/session';
 
-/** `HttpOnly` + `SameSite=Lax` siempre; `Secure` según `SESSION_COOKIE_SECURE` (obligatorio en producción). */
+/**
+ * `HttpOnly` + `SameSite=Lax` siempre; `Secure` según `SESSION_COOKIE_SECURE` (obligatorio en producción).
+ * `Path` = `PUBLIC_BASE_PATH`: la cookie solo viaja a la app, no al resto del dominio.
+ */
 export function sessionCookieOptions(env: Env): CookieOptions {
-  return { httpOnly: true, sameSite: 'lax', secure: env.SESSION_COOKIE_SECURE, path: '/' };
+  return {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: env.SESSION_COOKIE_SECURE,
+    path: publicPath(env.PUBLIC_BASE_PATH, ''),
+  };
 }
 
 export function readSessionToken(cookieHeader: string | undefined): string | undefined {

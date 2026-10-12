@@ -35,6 +35,7 @@ import {
 import { createZodDto } from 'nestjs-zod';
 import type { ActorContext, SessionContext } from '../../../../shared/application/request-context';
 import { ENV, type Env } from '../../../../shared/config/env';
+import { publicUrl } from '../../../../shared/config/public-url';
 import { apiError } from '../../../../shared/infrastructure/http/api-error';
 import { OriginGuard } from '../../../../shared/infrastructure/http/origin.guard';
 import {
@@ -90,7 +91,7 @@ export class InvitationsController {
     }
     return {
       id: result.invitation.id,
-      url: new URL(`/invite/${result.token}`, this.env.APP_URL).toString(),
+      url: publicUrl(this.env.APP_URL, `/invite/${result.token}`),
       expiresAt: result.invitation.expiresAt.toISOString(),
     };
   }

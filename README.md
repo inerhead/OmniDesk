@@ -17,7 +17,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Abre <http://localhost:8080> (el gateway; usa siempre esta URL). La página muestra el estado del sistema:
+Abre <http://localhost:8080/omnidesk> (el gateway; usa siempre esta URL). La app vive bajo la subruta `/omnidesk`, igual que en el VPS; `http://localhost:8080/` redirige ahí. La página muestra el estado del sistema:
 
 | Mensaje              | Significado                    |
 | -------------------- | ------------------------------ |
@@ -28,15 +28,15 @@ Abre <http://localhost:8080> (el gateway; usa siempre esta URL). La página mues
 
 ## Servicios y puertos
 
-| Servicio      | URL en el host                        | Qué es                                                     |
-| ------------- | ------------------------------------- | ---------------------------------------------------------- |
-| `caddy`       | <http://localhost:8080>               | Gateway de mismo origen: `/api/*` → API, el resto → web    |
-| `web`         | <http://localhost:5173>               | Vite dev sin proxy: ahí `/api` no llega al API. Usa 8080   |
-| `api`         | <http://localhost:5001/api/v1/health> | API NestJS                                                 |
-| Swagger       | <http://localhost:5001/api/docs>      | Documentación del API generada desde `@omnidesk/contracts` |
-| `postgres`    | `localhost:5532`                      | PostgreSQL 18                                              |
-| `web-preview` | <http://localhost:4173>               | Build de producción de la web (profile `pwa`)              |
-| `cloudflared` | URL `https://*.trycloudflare.com`     | Túnel HTTPS hacia `caddy` (profile `tunnel`)               |
+| Servicio      | URL en el host                        | Qué es                                                                                 |
+| ------------- | ------------------------------------- | -------------------------------------------------------------------------------------- |
+| `caddy`       | <http://localhost:8080/omnidesk>      | Gateway de mismo origen: `/omnidesk/api/*` → API (sin el prefijo), `/omnidesk/*` → web |
+| `web`         | <http://localhost:5173/omnidesk/>     | Vite dev sin proxy: ahí `/api` no llega al API. Usa 8080                               |
+| `api`         | <http://localhost:5001/api/v1/health> | API NestJS                                                                             |
+| Swagger       | <http://localhost:5001/api/docs>      | Documentación del API generada desde `@omnidesk/contracts`                             |
+| `postgres`    | `localhost:5532`                      | PostgreSQL 18                                                                          |
+| `web-preview` | <http://localhost:4173/omnidesk/>     | Build de producción de la web (profile `pwa`)                                          |
+| `cloudflared` | URL `https://*.trycloudflare.com`     | Túnel HTTPS hacia `caddy` (profile `tunnel`)                                           |
 
 ¿Algún puerto ya está ocupado en tu máquina? Cámbialo en `.env`: `GATEWAY_HOST_PORT`, `API_HOST_PORT` o `POSTGRES_HOST_PORT`. Si cambias el del gateway, añade su origen a `CORS_ORIGINS`.
 
@@ -77,7 +77,7 @@ pnpm simulate          # crea 5 conversaciones de ejemplo; repetirlo no duplica 
 pnpm simulate --live   # un mensaje nuevo cada 4 s (cliente + IA) hasta Ctrl+C
 ```
 
-El simulador corre en el host (Node 24 + pnpm) y llama a `http://localhost:${GATEWAY_HOST_PORT}`. Para otra URL, define `SIMULATOR_API_URL`.
+El simulador corre en el host (Node 24 + pnpm) y llama a `http://localhost:${GATEWAY_HOST_PORT}/omnidesk`. Para otra URL, define `SIMULATOR_API_URL` (con la subruta).
 
 ## Iniciar sesión
 
@@ -92,7 +92,7 @@ Con `DEMO_MODE=true`, `/login` muestra **Entrar como Sup. Demo / Laura / Mateo**
 1. En [Google Cloud Console](https://console.cloud.google.com/apis/credentials) crea un proyecto y configura la **pantalla de consentimiento** (tipo _Externo_, en modo _Testing_, y añade tu cuenta como usuario de prueba).
 2. Crea una credencial **ID de cliente de OAuth → Aplicación web** con:
    - **Orígenes autorizados de JavaScript:** `http://localhost:8080`
-   - **URI de redirección autorizados:** `http://localhost:8080/api/v1/auth/google/callback`
+   - **URI de redirección autorizados:** `http://localhost:8080/omnidesk/api/v1/auth/google/callback`
 
    (Si usas otro `GATEWAY_HOST_PORT`, cambia el puerto en las dos.)
 
@@ -101,8 +101,8 @@ Con `DEMO_MODE=true`, `/login` muestra **Entrar como Sup. Demo / Laura / Mateo**
    ```bash
    GOOGLE_CLIENT_ID=…apps.googleusercontent.com
    GOOGLE_CLIENT_SECRET=…
-   GOOGLE_CALLBACK_URL=http://localhost:8080/api/v1/auth/google/callback
-   APP_URL=http://localhost:8080
+   GOOGLE_CALLBACK_URL=http://localhost:8080/omnidesk/api/v1/auth/google/callback
+   APP_URL=http://localhost:8080/omnidesk
    ```
 
 4. `docker compose up -d api` recrea el API. `/login` muestra **Entrar con Google**.
@@ -126,7 +126,7 @@ El primer login sin empresas lleva a `/onboarding` (**Crea tu empresa**): quien 
 
 ### Ver el tiempo real
 
-Con la bandeja abierta en <http://localhost:8080/conversations>, lanza `pnpm simulate --live`: cada mensaje nuevo aparece en la lista y en el chat abierto en ≤ 1 s, sin recargar. El punto de conexión (abajo en el rail; en móvil, en la barra inferior) está verde, con el tooltip **En vivo**, mientras el socket (`/api/realtime`) está conectado. Si estás leyendo más arriba en el historial, el chat no salta: aparece **1 mensaje nuevo** y, al pulsarlo, baja al final.
+Con la bandeja abierta en <http://localhost:8080/omnidesk/conversations>, lanza `pnpm simulate --live`: cada mensaje nuevo aparece en la lista y en el chat abierto en ≤ 1 s, sin recargar. El punto de conexión (abajo en el rail; en móvil, en la barra inferior) está verde, con el tooltip **En vivo**, mientras el socket (`/omnidesk/api/realtime`) está conectado. Si estás leyendo más arriba en el historial, el chat no salta: aparece **1 mensaje nuevo** y, al pulsarlo, baja al final.
 
 Para ver el respaldo, detén el API con `docker compose stop api`: el punto pasa a ámbar (**Reconectando…**) y la lista se refresca como máximo cada 15 s. Al levantarlo de nuevo, vuelve a verde (**En vivo**) y aparecen los mensajes que llegaron mientras tanto.
 
@@ -179,7 +179,7 @@ El service worker está desactivado en `vite dev`. Para probar la instalación s
 WEB_UPSTREAM=web-preview:4173 docker compose --profile pwa up --build
 ```
 
-En Chrome de escritorio, abre <http://localhost:8080> y pulsa **Instalar app**: la app se abre en su propia ventana. `localhost` ya es un contexto seguro, así que no hacen falta certificados.
+En Chrome de escritorio, abre <http://localhost:8080/omnidesk> y pulsa **Instalar app**: la app se abre en su propia ventana. `localhost` ya es un contexto seguro, así que no hacen falta certificados.
 
 ### Probar en el celular
 
@@ -191,7 +191,7 @@ Un celular solo instala una PWA desde HTTPS. El profile `tunnel` publica el gate
    WEB_UPSTREAM=web-preview:4173 docker compose --profile pwa --profile tunnel up --build
    ```
 
-2. Copia la URL `https://….trycloudflare.com` de los logs:
+2. Copia la URL `https://….trycloudflare.com` de los logs (la app está en `<URL>/omnidesk`):
 
    ```bash
    docker compose logs cloudflared | grep trycloudflare.com
@@ -206,6 +206,12 @@ La URL del túnel cambia cada vez que se reinicia `cloudflared`. Si la cambias, 
 ### Limpiar el service worker
 
 Si el navegador sigue mostrando una versión vieja: DevTools → Application → Service workers → **Unregister**, y luego Storage → **Clear site data**.
+
+**Si instalaste la PWA antes de la subruta** (scope `/`), su service worker puede seguir interceptando `http://localhost:8080/`. Desinstala la app, quita ese service worker como arriba y vuelve a instalar desde `http://localhost:8080/omnidesk`.
+
+## Despliegue
+
+dev y prod corren en un VPS con Docker Compose, en <https://dev.gastromesa.com/omnidesk> y <https://gastromesa.com/omnidesk>. Para desplegar se ejecuta `infra/deploy/deploy.sh <dev|prod> <git-ref>` en el VPS. La guía completa, con la preparación, el primer despliegue, el rollback y los backups, está en [`docs/despliegue.md`](docs/despliegue.md).
 
 ## Estructura
 

@@ -10,6 +10,11 @@ const csvOfUrls = z
   )
   .pipe(z.array(z.url()).min(1));
 
+/** Ruta base pública: vacía (raíz) o `/algo` sin barra final. */
+const basePath = z
+  .string()
+  .regex(/^(\/[A-Za-z0-9._~-]+)*$/, 'Debe empezar por "/" y no terminar en "/" (p. ej. /omnidesk)');
+
 const booleanString = z
   .enum(['true', 'false'])
   .default('false')
@@ -33,9 +38,17 @@ export const EnvSchema = z
     /** Cliente OAuth de Google. Sin él, el login con Google no está disponible (obligatorio en producción). */
     GOOGLE_CLIENT_ID: z.string().min(1).optional(),
     GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
-    GOOGLE_CALLBACK_URL: z.url().default('http://localhost:8080/api/v1/auth/google/callback'),
-    /** Base de la web: enlaces de invitación y redirecciones tras el login. */
-    APP_URL: z.url().default('http://localhost:8080'),
+    GOOGLE_CALLBACK_URL: z
+      .url()
+      .default('http://localhost:8080/omnidesk/api/v1/auth/google/callback'),
+    /** Base de la web: enlaces de invitación y redirecciones tras el login. Incluye PUBLIC_BASE_PATH. */
+    APP_URL: z.url().default('http://localhost:8080/omnidesk'),
+    /** Subruta pública de la app (ruta de la cookie). El gateway la quita antes de llegar al API. */
+    PUBLIC_BASE_PATH: basePath.default('/omnidesk'),
+    /** Proxies delante del API (`trust proxy` de Express): 1 = Caddy, 2 = Nginx + Caddy. */
+    TRUST_PROXY: z.coerce.number().int().min(0).default(1),
+    /** Versión desplegada (commit corto o etiqueta). Sin ella, la de package.json. */
+    APP_VERSION: z.preprocess((value) => value || undefined, z.string().optional()),
     /** Cookie de sesión solo por HTTPS. Obligatorio en producción. */
     SESSION_COOKIE_SECURE: booleanString,
   })
@@ -45,6 +58,13 @@ export const EnvSchema = z
         code: 'custom',
         path: ['GOOGLE_CLIENT_SECRET'],
         message: 'Es obligatoria con GOOGLE_CLIENT_ID',
+      });
+    }
+    if (new URL(env.APP_URL).pathname.replace(/\/$/, '') !== env.PUBLIC_BASE_PATH) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['APP_URL'],
+        message: `Su ruta debe ser PUBLIC_BASE_PATH (${env.PUBLIC_BASE_PATH || '/'})`,
       });
     }
     if (env.NODE_ENV === 'production') {

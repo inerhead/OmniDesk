@@ -7,7 +7,7 @@ import {
   summarizeHistory,
   type CheckRecord,
 } from './check-history';
-import { SLOW_LATENCY_MS, toSystemStatus } from './system-status';
+import { formatVersion, SLOW_LATENCY_MS, toSystemStatus } from './system-status';
 
 const health = (database: 'up' | 'down'): HealthResponse => ({
   status: database === 'up' ? 'ok' : 'error',
@@ -106,5 +106,13 @@ describe('historial de comprobaciones', () => {
     expect(formatAgo(1_000, 1_500)).toBe('justo ahora');
     expect(formatAgo(0, 12_000)).toBe('hace 12 s');
     expect(formatAgo(0, 125_000)).toBe('hace 2 min');
+  });
+});
+
+describe('formatVersion', () => {
+  it('antepone v a una versión semver y deja las etiquetas y commits como vienen', () => {
+    expect(formatVersion('1.2.3')).toBe('v1.2.3');
+    expect(formatVersion('v0.1.0')).toBe('v0.1.0');
+    expect(formatVersion('abc1234')).toBe('abc1234');
   });
 });

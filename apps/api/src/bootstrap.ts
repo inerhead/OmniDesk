@@ -11,7 +11,8 @@ import { REQUEST_ID_HEADER } from './shared/logging/request-id';
 /** Configuración HTTP común a `main.ts` y a las pruebas e2e. */
 export function configureApp(app: NestExpressApplication, env: Env): void {
   app.useLogger(app.get(Logger));
-  app.set('trust proxy', true);
+  // Número de proxies delante (Caddy; Nginx + Caddy en el VPS): IP real y `https` de X-Forwarded-*.
+  app.set('trust proxy', env.TRUST_PROXY);
   app.setGlobalPrefix('api');
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
   app.enableCors({
@@ -21,10 +22,10 @@ export function configureApp(app: NestExpressApplication, env: Env): void {
   });
   app.useWebSocketAdapter(new RealtimeIoAdapter(app, env));
   app.enableShutdownHooks();
-  setupSwagger(app);
+  if (env.NODE_ENV !== 'production') setupSwagger(app);
 }
 
-/** Swagger en /api/docs y el JSON en /api/docs-json. */
+/** Swagger en /api/docs y el JSON en /api/docs-json. No se publica con NODE_ENV=production. */
 function setupSwagger(app: NestExpressApplication): void {
   const config = new DocumentBuilder()
     .setTitle('OmniDesk API')

@@ -112,7 +112,7 @@ describe('Identidad y tenancy (e2e)', () => {
       expect(setCookie).toMatch(new RegExp(`${SESSION_COOKIE}=[^;]+;`));
       expect(setCookie).toMatch(/HttpOnly/i);
       expect(setCookie).toMatch(/SameSite=Lax/i);
-      expect(setCookie).toMatch(/Path=\//);
+      expect(setCookie).toMatch(/Path=\/omnidesk(;|$)/m);
 
       const me = MeResponseSchema.parse(
         (await as(sessionCookieFrom(res.headers['set-cookie'])).get('/api/v1/me').expect(200)).body,
@@ -202,7 +202,7 @@ describe('Identidad y tenancy (e2e)', () => {
       const payload = location.searchParams.get('state')!.split('.')[0]!;
       expect(JSON.parse(Buffer.from(payload, 'base64url').toString()).next).toBeNull();
       expect(([] as string[]).concat(res.headers['set-cookie'] ?? []).join()).toMatch(
-        /omnidesk_oauth=.+HttpOnly/i,
+        /omnidesk_oauth=.+Path=\/omnidesk\/api\/v1\/auth\/google.+HttpOnly/i,
       );
     });
 
@@ -212,7 +212,7 @@ describe('Identidad y tenancy (e2e)', () => {
         .query({ state: 'falso', code: 'x' })
         .expect(302);
 
-      expect(res.headers.location).toBe('http://localhost:8080/login?error=oauth');
+      expect(res.headers.location).toBe('http://localhost:8080/omnidesk/login?error=oauth');
       expect(([] as string[]).concat(res.headers['set-cookie'] ?? []).join()).not.toContain(
         `${SESSION_COOKIE}=`,
       );
@@ -294,7 +294,7 @@ describe('Identidad y tenancy (e2e)', () => {
         .post('/api/v1/invitations', { email: 'Nuevo@E2E.local', role: 'AGENT' })
         .expect(201);
       const invitation = CreateInvitationResponseSchema.parse(res.body);
-      expect(invitation.url).toMatch(/^http:\/\/localhost:8080\/invite\/[\w-]{43}$/);
+      expect(invitation.url).toMatch(/^http:\/\/localhost:8080\/omnidesk\/invite\/[\w-]{43}$/);
       expect(new Date(invitation.expiresAt).getTime() - Date.now()).toBeGreaterThan(
         6.9 * 24 * 3600 * 1000,
       );

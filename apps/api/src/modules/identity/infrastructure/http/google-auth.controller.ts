@@ -14,6 +14,7 @@ import { Authenticator } from 'passport';
 import { Strategy as GoogleStrategy, type Profile } from 'passport-google-oauth20';
 import { CLOCK, type Clock } from '../../../../shared/application/clock.port';
 import { ENV, type Env } from '../../../../shared/config/env';
+import { publicPath, publicUrl } from '../../../../shared/config/public-url';
 import { parseCookies } from '../../../../shared/infrastructure/http/cookies';
 import { GoogleLoginUseCase } from '../../application/google-login.use-case';
 import { mapGoogleProfile } from '../../domain/google-profile';
@@ -36,6 +37,7 @@ function createGoogleAuthenticator(clientID: string, clientSecret: string, callb
 type GoogleAuthenticator = ReturnType<typeof createGoogleAuthenticator>;
 
 const OAUTH_COOKIE = 'omnidesk_oauth';
+/** Ruta interna; el navegador la ve bajo `PUBLIC_BASE_PATH`. */
 const OAUTH_COOKIE_PATH = '/api/v1/auth/google';
 
 /**
@@ -79,7 +81,7 @@ export class GoogleAuthController {
       httpOnly: true,
       sameSite: 'lax',
       secure: this.env.SESSION_COOKIE_SECURE,
-      path: OAUTH_COOKIE_PATH,
+      path: this.oauthCookiePath(),
       maxAge: OAUTH_STATE_TTL_MS,
     });
     passport.authenticate('google', {
@@ -98,7 +100,7 @@ export class GoogleAuthController {
   ): Promise<void> {
     const passport = this.enabled();
     const nonce = parseCookies(request.header('cookie'))[OAUTH_COOKIE];
-    response.clearCookie(OAUTH_COOKIE, { path: OAUTH_COOKIE_PATH });
+    response.clearCookie(OAUTH_COOKIE, { path: this.oauthCookiePath() });
     const state = verifyOAuthState(
       rawState,
       this.env.GOOGLE_CLIENT_SECRET!,
@@ -133,7 +135,11 @@ export class GoogleAuthController {
     return this.passport;
   }
 
+  private oauthCookiePath(): string {
+    return publicPath(this.env.PUBLIC_BASE_PATH, OAUTH_COOKIE_PATH);
+  }
+
   private redirect(response: Response, path: string): void {
-    response.redirect(302, new URL(path, this.env.APP_URL).toString());
+    response.redirect(302, publicUrl(this.env.APP_URL, path));
   }
 }

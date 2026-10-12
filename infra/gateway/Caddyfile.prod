@@ -1,0 +1,47 @@
+# Gateway de producción (VPS). El Nginx del servidor termina TLS y reenvía <BASE_PATH>/* sin
+# quitar el prefijo a 127.0.0.1:${GATEWAY_HOST_PORT}; aquí solo hay HTTP.
+{
+	admin off
+	auto_https off
+}
+
+:80 {
+	encode zstd gzip
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		# La app solo habla con su propio origen ('self' incluye el WebSocket wss:// del mismo host).
+		Content-Security-Policy "default-src 'self'; connect-src 'self'; img-src 'self' data: https://lh3.googleusercontent.com"
+		-Server
+	}
+
+	redir {$BASE_PATH} {$BASE_PATH}/ 301
+
+	# API: se quita la subruta (también para <BASE_PATH>/api/realtime, el WebSocket).
+	handle {$BASE_PATH}/api/* {
+		uri strip_prefix {$BASE_PATH}
+		reverse_proxy api:5001
+	}
+
+	# Assets con hash: inmutables. Si no existe, 404 (nunca index.html con caché de un año).
+	handle {$BASE_PATH}/assets/* {
+		root * /srv
+		@exists file
+		header @exists Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	# Resto de la SPA (index.html, sw.js, manifest.webmanifest, íconos) siempre revalidado;
+	# cualquier otra ruta cae en index.html (fallback SPA, p. ej. /conversations/<id>).
+	handle {$BASE_PATH}/* {
+		root * /srv
+		header Cache-Control "no-cache"
+		try_files {path} {$BASE_PATH}/index.html
+		file_server
+	}
+
+	handle {
+		respond 404
+	}
+}

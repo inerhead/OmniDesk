@@ -9,10 +9,14 @@ import { parseWebEnv } from './src/shared/config/env-schema.ts';
 const allowedHosts = ['localhost', '.trycloudflare.com'];
 
 export default defineConfig(({ mode }) => {
-  // Un VITE_API_URL inválido hace fallar `vite build` y `vite dev`.
-  parseWebEnv(loadEnv(mode, process.cwd(), 'VITE_'));
+  // Un VITE_API_URL o BASE_PATH inválido hace fallar `vite build` y `vite dev`.
+  const { BASE_PATH } = parseWebEnv(loadEnv(mode, process.cwd(), ['VITE_', 'BASE_PATH']));
+  const base = `${BASE_PATH}/`;
+  const escapedBase = BASE_PATH.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   return {
+    // La app se sirve bajo la subruta (/omnidesk/) también en local.
+    base,
     plugins: [
       react(),
       tailwindcss(),
@@ -26,8 +30,8 @@ export default defineConfig(({ mode }) => {
           short_name: 'OmniDesk',
           description: 'Supervisión de conversaciones atendidas por IA y agentes humanos.',
           lang: 'es',
-          start_url: '/',
-          scope: '/',
+          start_url: base,
+          scope: base,
           display: 'standalone',
           theme_color: '#0f172a',
           background_color: '#ffffff',
@@ -47,8 +51,8 @@ export default defineConfig(({ mode }) => {
           // Solo el app shell (incluida la fuente Inter, para que funcione sin conexión).
           // Las respuestas del API nunca se cachean (sin runtimeCaching).
           globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest,woff2}'],
-          navigateFallback: '/index.html',
-          navigateFallbackDenylist: [/^\/api\//],
+          navigateFallback: `${base}index.html`,
+          navigateFallbackDenylist: [new RegExp(`^${escapedBase}/api/`)],
           cleanupOutdatedCaches: true,
         },
         // Sin service worker en `vite dev`: la PWA se verifica con el build (web-preview).

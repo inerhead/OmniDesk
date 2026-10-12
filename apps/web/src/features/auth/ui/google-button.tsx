@@ -1,4 +1,4 @@
-import { env } from '@/shared/config/env';
+import { apiBase } from '@/shared/config/env';
 import { Button } from '@/shared/ui/button';
 import { googleLoginUrl } from '../api/auth-api';
 
@@ -12,7 +12,7 @@ export function GoogleButton({
 }) {
   return (
     <Button asChild variant="outline" className="w-full">
-      <a href={googleLoginUrl(env.VITE_API_URL, next)}>
+      <a href={googleLoginUrl(apiBase, next)}>
         <svg viewBox="0 0 24 24" aria-hidden className="size-4">
           <path
             fill="#4285F4"

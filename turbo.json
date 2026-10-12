@@ -10,19 +10,24 @@
     "DEMO_MODE",
     "DEMO_CHANNEL_API_KEY",
     "SIMULATOR_API_URL",
-    "GATEWAY_HOST_PORT"
+    "GATEWAY_HOST_PORT",
+    "APP_URL",
+    "PUBLIC_BASE_PATH",
+    "TRUST_PROXY",
+    "GOOGLE_CALLBACK_URL",
+    "APP_VERSION"
   ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"],
-      "env": ["VITE_*"]
+      "env": ["VITE_*", "BASE_PATH"]
     },
     "dev": {
       "dependsOn": ["^build"],
       "cache": false,
       "persistent": true,
-      "env": ["VITE_*"]
+      "env": ["VITE_*", "BASE_PATH"]
     },
     "lint": {
       "dependsOn": ["^build"]

@@ -95,8 +95,10 @@ describe('parseEnv — identidad', () => {
   it('usa las URLs locales por defecto y la cookie sin Secure', () => {
     const env = parseEnv(valid);
 
-    expect(env.APP_URL).toBe('http://localhost:8080');
-    expect(env.GOOGLE_CALLBACK_URL).toBe('http://localhost:8080/api/v1/auth/google/callback');
+    expect(env.APP_URL).toBe('http://localhost:8080/omnidesk');
+    expect(env.GOOGLE_CALLBACK_URL).toBe(
+      'http://localhost:8080/omnidesk/api/v1/auth/google/callback',
+    );
     expect(env.SESSION_COOKIE_SECURE).toBe(false);
     expect(env.GOOGLE_CLIENT_ID).toBeUndefined();
   });
@@ -120,5 +122,44 @@ describe('parseEnv — identidad', () => {
         SESSION_COOKIE_SECURE: 'true',
       }).SESSION_COOKIE_SECURE,
     ).toBe(true);
+  });
+});
+
+describe('parseEnv — subruta y proxy', () => {
+  it('usa /omnidesk, un proxy y sin versión explícita por defecto', () => {
+    const env = parseEnv(valid);
+
+    expect(env.PUBLIC_BASE_PATH).toBe('/omnidesk');
+    expect(env.TRUST_PROXY).toBe(1);
+    expect(env.APP_VERSION).toBeUndefined();
+  });
+
+  it('acepta la raíz con PUBLIC_BASE_PATH vacía', () => {
+    const env = parseEnv({ ...valid, PUBLIC_BASE_PATH: '', APP_URL: 'http://localhost:8080' });
+
+    expect(env.PUBLIC_BASE_PATH).toBe('');
+  });
+
+  it.each(['omnidesk', '/omnidesk/', '/', '/a b'])('rechaza PUBLIC_BASE_PATH=%s', (path) => {
+    expect(() => parseEnv({ ...valid, PUBLIC_BASE_PATH: path })).toThrowError(/PUBLIC_BASE_PATH/);
+  });
+
+  it('exige que APP_URL termine en PUBLIC_BASE_PATH', () => {
+    expect(() => parseEnv({ ...valid, APP_URL: 'https://gastromesa.com' })).toThrowError(/APP_URL/);
+    expect(parseEnv({ ...valid, APP_URL: 'https://gastromesa.com/omnidesk/' }).APP_URL).toBe(
+      'https://gastromesa.com/omnidesk/',
+    );
+  });
+
+  it('convierte TRUST_PROXY a número y trata APP_VERSION vacía como ausente', () => {
+    const env = parseEnv({ ...valid, TRUST_PROXY: '2', APP_VERSION: '' });
+
+    expect(env.TRUST_PROXY).toBe(2);
+    expect(env.APP_VERSION).toBeUndefined();
+    expect(parseEnv({ ...valid, APP_VERSION: 'v0.1.0' }).APP_VERSION).toBe('v0.1.0');
+  });
+
+  it('rechaza un TRUST_PROXY negativo', () => {
+    expect(() => parseEnv({ ...valid, TRUST_PROXY: '-1' })).toThrowError(/TRUST_PROXY/);
   });
 });

@@ -1,0 +1,34 @@
+# Fragmento para el Nginx EXISTENTE del VPS (no lo reemplaza). Va dentro del bloque `server` HTTPS
+# de cada dominio, junto a lo que ya sirve el sitio en `/`. Ver docs/despliegue.md → "Nginx".
+#
+#   dev.gastromesa.com → 127.0.0.1:8081 (omnidesk-dev)
+#   gastromesa.com     → 127.0.0.1:8082 (omnidesk-prod)
+#
+# Si el `http {}` no lo tiene ya, añade este map (una vez) para el upgrade del WebSocket:
+#
+#   map $http_upgrade $connection_upgrade {
+#       default upgrade;
+#       ''      close;
+#   }
+
+location = /omnidesk {
+    return 301 /omnidesk/;
+}
+
+location /omnidesk/ {
+    # Sin URI tras el puerto: se conserva el prefijo /omnidesk (el gateway lo espera así).
+    proxy_pass http://127.0.0.1:8081;   # 8082 en gastromesa.com (prod)
+
+    proxy_http_version 1.1;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # WebSocket de Socket.IO (/omnidesk/api/realtime).
+    proxy_set_header Upgrade    $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+
+    # Mayor que el ping de Socket.IO (25 s + 20 s de timeout).
+    proxy_read_timeout 75s;
+}

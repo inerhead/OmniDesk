@@ -1,4 +1,4 @@
-import { REALTIME_PATH, RealtimeEventSchema, type RealtimeEvent } from '@omnidesk/contracts';
+import { RealtimeEventSchema, type RealtimeEvent } from '@omnidesk/contracts';
 import { io } from 'socket.io-client';
 import { setConnectionStatus } from './connection-status';
 
@@ -45,10 +45,13 @@ export function bindSocket(socket: SocketLike, handlers: RealtimeHandlers): void
   });
 }
 
-/** Abre el socket hacia `url` y devuelve la función que lo cierra. */
-export function connectRealtime(url: string, handlers: RealtimeHandlers): () => void {
+/** Abre el socket hacia `url` por `path` (incluye la subruta) y devuelve la función que lo cierra. */
+export function connectRealtime(
+  { url, path }: { url: string; path: string },
+  handlers: RealtimeHandlers,
+): () => void {
   setConnectionStatus('connecting');
-  const socket = io(url, { path: REALTIME_PATH, withCredentials: true });
+  const socket = io(url, { path, withCredentials: true });
   bindSocket(socket, handlers);
   return () => {
     socket.close();

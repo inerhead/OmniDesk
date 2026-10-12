@@ -42,7 +42,8 @@ function config(): { apiUrl: string; apiKey: string } {
     process.exit(1);
   }
   const apiUrl =
-    process.env.SIMULATOR_API_URL ?? `http://localhost:${process.env.GATEWAY_HOST_PORT ?? '8080'}`;
+    process.env.SIMULATOR_API_URL ??
+    `http://localhost:${process.env.GATEWAY_HOST_PORT ?? '8080'}/omnidesk`;
   return { apiUrl, apiKey };
 }
 

@@ -1,4 +1,4 @@
-# Gateway local de mismo origen (docs/arquitectura.md §4.3).
+# Gateway local de mismo origen (docs/arquitectura.md §4.3), bajo la subruta /omnidesk como en el VPS.
 # HTTP en localhost: ya es un contexto seguro para instalar la PWA en escritorio.
 # El HTTPS para el celular lo pone el túnel (profile `tunnel`).
 {
@@ -9,12 +9,18 @@
 :80 {
 	encode gzip
 
-	handle /api/* {
+	redir / /omnidesk/ 301
+	redir /omnidesk /omnidesk/ 301
+
+	# El API sigue sirviendo /api/*: se quita el prefijo (también para /omnidesk/api/realtime).
+	handle /omnidesk/api/* {
+		uri strip_prefix /omnidesk
 		reverse_proxy api:5001
 	}
 
+	# Vite ya sirve bajo la base /omnidesk/: se reenvía sin quitar el prefijo.
 	# web:5173 (Vite dev) por defecto; web-preview:4173 para probar la PWA.
-	handle {
+	handle /omnidesk/* {
 		reverse_proxy {$WEB_UPSTREAM:web:5173}
 	}
 }

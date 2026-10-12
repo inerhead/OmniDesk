@@ -41,6 +41,7 @@ services:
       dockerfile: apps/web/Dockerfile
       target: dev
     environment:
+      BASE_PATH: ${BASE_PATH:-/omnidesk}
       VITE_API_URL: ${VITE_API_URL:-}
     ports:
       - '5173:5173'
@@ -73,6 +74,7 @@ services:
       target: dev
     environment:
       NODE_ENV: production
+      BASE_PATH: ${BASE_PATH:-/omnidesk}
       VITE_API_URL: ${VITE_API_URL:-}
     command:
       - sh

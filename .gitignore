@@ -16,6 +16,9 @@ build/
 !.env.example
 !.env.*.example
 
+# dumps de Postgres del compose de prod
+infra/deploy/backups/
+
 # logs
 *.log
 npm-debug.log*

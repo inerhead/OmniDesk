@@ -88,6 +88,16 @@ services:
       timeout: 5s
       retries: 3
 
+  # Comparte la red del gateway: en Cloudflare el servicio sigue siendo http://localhost:80.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    network_mode: service:gateway
+    depends_on:
+      gateway:
+        condition: service_healthy
+    command: tunnel --protocol ${CLOUDFLARE_TUNNEL_PROTOCOL:-http2} --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:?falta CLOUDFLARE_TUNNEL_TOKEN}
+
   # pg_dump -Fc diario a las 03:00 (hora del servidor), conserva los 7 más recientes.
   # Backup inmediato: docker compose ... run --rm backup now
   backup:

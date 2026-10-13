@@ -3,14 +3,31 @@ import { Bot, UserRound } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { Badge } from '@/shared/ui/badge';
 
-/** Quién atiende: la IA, un agente, un mensaje directo sin IA, o "Cerrada". */
+function WhatsAppMark() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden fill="currentColor">
+      <path d="M12.04 2C6.58 2 2.15 6.4 2.15 11.82c0 1.74.46 3.44 1.34 4.94L2 22l5.39-1.41a10.1 10.1 0 0 0 4.65 1.12h.01c5.46 0 9.89-4.4 9.89-9.82C21.94 6.4 17.5 2 12.04 2zm5.76 13.86c-.24.68-1.4 1.24-1.94 1.32-.5.07-1.12.1-1.81-.11-.41-.13-.95-.31-1.64-.61-2.88-1.24-4.76-4.14-4.9-4.33-.14-.2-1.16-1.54-1.16-2.94s.73-2.08 1-2.37c.26-.28.57-.35.76-.35h.55c.17 0 .41-.07.64.49.24.58.82 2 .89 2.15.07.14.12.32.02.51-.1.2-.14.32-.28.49-.14.17-.3.38-.42.51-.14.14-.29.29-.12.56.17.28.74 1.22 1.59 1.98 1.09.97 2.01 1.27 2.29 1.41.28.14.45.12.61-.07.17-.2.7-.82.89-1.1.19-.28.37-.23.63-.14.26.1 1.64.77 1.92.91.28.14.47.21.54.32.07.12.07.68-.17 1.36z" />
+    </svg>
+  );
+}
+
+function WhatsAppChip() {
+  return (
+    <Badge variant="outline" aria-label="WhatsApp" className="text-[#25D366]">
+      <WhatsAppMark />
+    </Badge>
+  );
+}
+
+/** IA si la atiende la IA. WhatsApp si es directa; con agente, el icono se queda junto al nombre. */
 export function StatusChip({
   conversation,
   className,
 }: {
-  conversation: Pick<ConversationSummary, 'status' | 'assignedAgent' | 'aiActive'>;
+  conversation: Pick<ConversationSummary, 'status' | 'assignedAgent' | 'aiActive' | 'channel'>;
   className?: string;
 }) {
+  const fromWhatsApp = conversation.channel.type === 'WHATSAPP';
   if (conversation.status === 'CLOSED') {
     return (
       <Badge variant="outline" className={cn('text-muted-foreground', className)}>
@@ -18,24 +35,23 @@ export function StatusChip({
       </Badge>
     );
   }
-  if (conversation.assignedAgent) {
+  if (conversation.aiActive) {
     return (
-      <Badge variant="warning" className={cn('max-w-32', className)}>
-        <UserRound aria-hidden />
-        <span className="truncate">{conversation.assignedAgent.displayName}</span>
+      <Badge variant="brand" className={className}>
+        <Bot aria-hidden />
+        IA
       </Badge>
     );
   }
-  if (!conversation.aiActive)
-    return (
-      <Badge variant="outline" className={className}>
-        Sin IA
-      </Badge>
-    );
   return (
-    <Badge variant="brand" className={className}>
-      <Bot aria-hidden />
-      IA
-    </Badge>
+    <span className={cn('inline-flex items-center gap-1', className)}>
+      {fromWhatsApp && <WhatsAppChip />}
+      {conversation.assignedAgent && (
+        <Badge variant="warning" className="max-w-32">
+          <UserRound aria-hidden />
+          <span className="truncate">{conversation.assignedAgent.displayName}</span>
+        </Badge>
+      )}
+    </span>
   );
 }

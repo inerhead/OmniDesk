@@ -21,7 +21,7 @@ import { useLogout } from '../api/use-session-actions';
 import { SettingsMenuItems, TenantMenuItems } from './account-menu-items';
 
 /**
- * Perfil: avatar con el estado de conexión en la esquina (con anillo en `/settings/*`). Su menú reúne, en este orden, la cuenta, la
+ * Perfil: avatar con el estado de conexión en la esquina (resaltado en `/settings/*`). Su menú reúne, en este orden, la cuenta, la
  * empresa (cambiar o crear), los ajustes de la empresa activa (Owner y Admin), el tema y cerrar sesión.
  */
 export function UserMenu({ variant }: { variant: 'rail' | 'bar' }) {
@@ -45,8 +45,10 @@ export function UserMenu({ variant }: { variant: 'rail' | 'bar' }) {
           <DropdownMenuTrigger
             aria-label={`Menú de usuario: ${me.user.displayName}`}
             className={cn(
-              'focus-visible:ring-ring/50 rounded-full outline-none focus-visible:ring-[3px]',
-              inSettings && 'ring-primary ring-offset-sidebar ring-2 ring-offset-2',
+              'focus-visible:ring-ring/50 flex size-10 cursor-pointer items-center justify-center rounded-lg transition-colors outline-none focus-visible:ring-[3px]',
+              inSettings
+                ? 'bg-primary/12 dark:bg-primary/20'
+                : 'hover:bg-accent data-[state=open]:bg-accent',
             )}
           >
             <Avatar
@@ -58,7 +60,7 @@ export function UserMenu({ variant }: { variant: 'rail' | 'bar' }) {
             />
           </DropdownMenuTrigger>
         </Tooltip>
-        <ConnectionDot className="ring-sidebar absolute -right-0.5 -bottom-0.5 ring-2" />
+        <ConnectionDot className="ring-sidebar absolute right-0.5 bottom-0.5 ring-2" />
       </span>
       <DropdownMenuContent side={side} align="end" className="w-72">
         <div className="flex items-center gap-3 px-2 py-2">

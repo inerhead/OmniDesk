@@ -27,6 +27,7 @@ export function statusLabel(
   conversation: Pick<ConversationSummary, 'status' | 'aiActive' | 'assignedAgent'>,
 ): string {
   if (conversation.status === 'CLOSED') return 'Cerrada';
-  if (conversation.aiActive || !conversation.assignedAgent) return 'IA activa';
-  return `Asignada a ${conversation.assignedAgent.displayName}`;
+  if (conversation.assignedAgent) return `Asignada a ${conversation.assignedAgent.displayName}`;
+  if (conversation.aiActive) return 'IA activa';
+  return 'Mensaje directo sin IA';
 }

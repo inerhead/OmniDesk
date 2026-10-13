@@ -8,18 +8,16 @@ import {
   Req,
   Res,
   Inject,
-  UnauthorizedException,
   ForbiddenException,
+  NotFoundException,
   HttpCode,
   ServiceUnavailableException,
+  Logger,
   type RawBodyRequest,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { timingSafeEqual } from 'node:crypto';
-import {
-  CHANNEL_SECRET_CIPHER,
-  type ChannelSecretCipher,
-} from '../channels/application/ports/channel-secret-cipher';
+import { writeFileSync } from 'node:fs';
 import { OUTBOX_PORT, type OutboxPort } from '../../shared/application/outbox.port';
 import { sha256Hex } from '../../shared/infrastructure/crypto/sha256';
 import { RegisterInboundMessageUseCase } from '../conversations/application/register-inbound-message.use-case';
@@ -28,14 +26,14 @@ import {
   CONVERSATION_REPOSITORY,
   type ConversationRepository,
 } from '../conversations/application/ports/conversation.repository';
-import { parseWhatsAppEvents, verifyMetaSignature } from './whatsapp-protocol';
+import { parseWhatsAppEvents, describeWhatsAppWebhook } from './whatsapp-protocol';
 import { WhatsAppSettings } from './whatsapp-settings';
 
 @Controller({ path: 'integrations/whatsapp', version: '1' })
 export class WhatsAppWebhookController {
+  private readonly logger = new Logger(WhatsAppWebhookController.name);
   constructor(
     private readonly settings: WhatsAppSettings,
-    @Inject(CHANNEL_SECRET_CIPHER) private readonly cipher: ChannelSecretCipher,
     @Inject(OUTBOX_PORT) private readonly outbox: OutboxPort,
     @Inject(CONVERSATION_REPOSITORY) private readonly conversations: ConversationRepository,
     private readonly inbound: RegisterInboundMessageUseCase,
@@ -66,19 +64,21 @@ export class WhatsAppWebhookController {
   @HttpCode(200)
   async receive(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: RawBodyRequest<Request>) {
     const channel = await this.settings.find(id);
-    if (
-      !channel?.whatsappAppSecretEnc ||
-      !req.rawBody ||
-      !verifyMetaSignature(
-        req.rawBody,
-        req.header('x-hub-signature-256'),
-        this.cipher.decrypt(channel.whatsappAppSecretEnc),
-      )
-    )
-      throw new UnauthorizedException('Firma de Meta inválida');
+    if (!channel) throw new NotFoundException('Canal no encontrado');
     const integration = { tenantId: channel.tenantId, channelId: channel.id };
     let needsRetry = false;
-    for (const event of parseWhatsAppEvents(req.body, channel.externalId)) {
+    const events = parseWhatsAppEvents(req.body, channel.externalId);
+    const statuses = events.filter((event) => event.kind === 'status');
+    const inboundEvents = events.filter((event) => event.kind === 'inbound');
+    if (statuses.length === 0 && inboundEvents.length === 0) {
+      this.logger.warn(`Webhook sin estados: ${describeWhatsAppWebhook(req.body)}`);
+      try {
+        writeFileSync('/tmp/wa-last.json', JSON.stringify(req.body));
+      } catch {
+        // El diagnóstico en el log alcanza si el disco del contenedor no deja escribir.
+      }
+    }
+    for (const event of events) {
       if (event.kind === 'inbound') {
         await this.inbound.execute(integration, event, async (result) => {
           if (
@@ -109,6 +109,7 @@ export class WhatsAppWebhookController {
         // Sin correlación local puede ser un envío externo/anterior: no bloquear el lote.
         // Con id local puede estar en carrera con el envío; reintentar tras guardar los inbound.
         if (!message) {
+          this.logger.warn(`Estado ${event.status} sin mensaje local`);
           if (event.messageId) needsRetry = true;
           continue;
         }

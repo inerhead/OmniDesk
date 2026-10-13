@@ -3,7 +3,7 @@ import { Bot, UserRound } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { Badge } from '@/shared/ui/badge';
 
-/** Quién atiende: la IA, el agente asignado o "Cerrada". El mismo chip en lista, cabecera y panel. */
+/** Quién atiende: la IA, un agente, un mensaje directo sin IA, o "Cerrada". */
 export function StatusChip({
   conversation,
   className,
@@ -29,7 +29,7 @@ export function StatusChip({
   if (!conversation.aiActive)
     return (
       <Badge variant="outline" className={className}>
-        Sin asignar
+        Sin IA
       </Badge>
     );
   return (

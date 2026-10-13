@@ -51,6 +51,79 @@ describe('Webhook de Meta', () => {
       status: 'DELIVERED',
     });
   });
+  it('acepta el estado si la hora o el phone_number_id llegan como número', () => {
+    const events = parseWhatsAppEvents(
+      {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            changes: [
+              {
+                value: {
+                  metadata: { phone_number_id: 1322469280958506 },
+                  statuses: [
+                    {
+                      id: 'wamid.out',
+                      status: 'delivered',
+                      timestamp: 1791857764,
+                      biz_opaque_callback_data: '',
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      },
+      '1322469280958506',
+    );
+    expect(events).toEqual([
+      expect.objectContaining({
+        kind: 'status',
+        providerMessageId: 'wamid.out',
+        status: 'DELIVERED',
+      }),
+    ]);
+    expect(events[0]).not.toHaveProperty('messageId');
+  });
+  it('sigue leyendo el estado cuando el contacto no trae nombre', () => {
+    const events = parseWhatsAppEvents(
+      {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '573001167601',
+                    phone_number_id: '1322469280958506',
+                  },
+                  contacts: [{ wa_id: '573008018173' }],
+                  statuses: [
+                    {
+                      id: 'wamid.out',
+                      status: 'read',
+                      timestamp: '1791857764',
+                      recipient_id: '573008018173',
+                      conversation: { id: 'abc', origin: { type: 'service' } },
+                      pricing: { billable: true, pricing_model: 'PMP', category: 'service' },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      },
+      '1322469280958506',
+    );
+    expect(events).toEqual([
+      expect.objectContaining({ kind: 'status', providerMessageId: 'wamid.out', status: 'READ' }),
+    ]);
+  });
   it('ignora notificaciones ajenas y tipos sin soporte', () => {
     expect(parseWhatsAppEvents({ object: 'other', entry: [] }, 'own')).toEqual([]);
     expect(

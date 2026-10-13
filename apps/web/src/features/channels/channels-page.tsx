@@ -1,6 +1,8 @@
 import type { Channel, ChannelCredentialsResponse } from '@omnidesk/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type FormEvent, type ComponentProps } from 'react';
+import { ChevronDown } from 'lucide-react';
+import { useState, type FormEvent, type ComponentProps, type KeyboardEvent } from 'react';
+import { cn } from '@/shared/lib/utils';
 import { activeMembership, isManagerRole, useMe } from '@/features/auth/api/use-me';
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
@@ -136,7 +138,16 @@ function ChannelCard({ channel, refresh }: { channel: Channel; refresh: () => Pr
   const [appSecret, setAppSecret] = useState('');
   const [verifyToken, setVerifyToken] = useState('');
   const [confirmRotate, setConfirmRotate] = useState(false);
+  const [open, setOpen] = useState(false);
   const direct = channel.provider === 'WHATSAPP_CLOUD';
+  function toggle() {
+    setOpen((value) => !value);
+  }
+  function toggleOnKey(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    toggle();
+  }
   async function run(work: () => Promise<void>) {
     setPending(true);
     setNotice('');
@@ -164,10 +175,31 @@ function ChannelCard({ channel, refresh }: { channel: Channel; refresh: () => Pr
   }
   return (
     <Card>
-      <CardHeader>
+      <CardHeader
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={toggle}
+        onKeyDown={toggleOnKey}
+        className="cursor-pointer"
+      >
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle>{channel.name}</CardTitle>
-          <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+          <CardTitle className="flex min-w-0 items-center gap-2">
+            <ChevronDown
+              className={cn('size-4 shrink-0 transition-transform', open && 'rotate-180')}
+              aria-hidden
+            />
+            <span className="truncate">{channel.name}</span>
+          </CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(event) => {
+              event.stopPropagation();
+              setEditing(true);
+            }}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
             Editar
           </Button>
         </div>
@@ -175,7 +207,7 @@ function ChannelCard({ channel, refresh }: { channel: Channel; refresh: () => Pr
           {channel.phoneNumber ?? 'Sin número'} · {direct ? 'WhatsApp Cloud' : channel.provider}
         </p>
       </CardHeader>
-      <CardContent className="flex flex-col gap-5">
+      <CardContent hidden={!open} className="flex flex-col gap-5">
         {direct && (
           <>
             <div className="rounded-lg border p-4">

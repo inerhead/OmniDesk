@@ -50,6 +50,9 @@ describe('describeEvent', () => {
 describe('statusLabel', () => {
   it('IA activa, Asignada a … y Cerrada', () => {
     expect(statusLabel({ status: 'OPEN', aiActive: true, assignedAgent: null })).toBe('IA activa');
+    expect(statusLabel({ status: 'OPEN', aiActive: false, assignedAgent: null })).toBe(
+      'Mensaje directo sin IA',
+    );
     expect(statusLabel({ status: 'OPEN', aiActive: false, assignedAgent: laura })).toBe(
       'Asignada a Laura',
     );

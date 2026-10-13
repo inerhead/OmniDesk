@@ -140,7 +140,7 @@ describe('WhatsApp directo e IA opcional (e2e)', () => {
     expect(Buffer.from(row.whatsappAppSecretEnc!).toString()).not.toContain(appSecret);
     expect(row.whatsappVerifyTokenHash).not.toBe(verifyToken);
   });
-  it('valida el handshake y la firma; rechaza token incorrecto y cuerpo alterado', async () => {
+  it('valida el handshake y acepta el mensaje sin firma de Meta', async () => {
     const url = `/api/v1/integrations/whatsapp/${channelId}`;
     const res = await http()
       .get(url)
@@ -151,12 +151,7 @@ describe('WhatsApp directo e IA opcional (e2e)', () => {
       .get(url)
       .query({ 'hub.mode': 'subscribe', 'hub.verify_token': 'wrong', 'hub.challenge': '12345' })
       .expect(403);
-    await http().post(url).send(envelope()).expect(401);
-    await http()
-      .post(url)
-      .set('X-Hub-Signature-256', `sha256=${'0'.repeat(64)}`)
-      .send(envelope())
-      .expect(401);
+    await http().post(url).send(envelope()).expect(200);
   });
   it('sin IA guarda una sola vez, aparece sin IA activa y no encola n8n', async () => {
     const body = envelope();

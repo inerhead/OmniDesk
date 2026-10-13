@@ -86,12 +86,13 @@ describe('Webhook de Meta', () => {
     ]);
     expect(events[0]).not.toHaveProperty('messageId');
   });
-  it('sigue leyendo el estado cuando el contacto no trae nombre', () => {
+  it('lee el estado aunque el contacto no traiga profile, como lo manda Meta', () => {
     const events = parseWhatsAppEvents(
       {
         object: 'whatsapp_business_account',
         entry: [
           {
+            id: '28766413009634402',
             changes: [
               {
                 field: 'messages',
@@ -101,15 +102,20 @@ describe('Webhook de Meta', () => {
                     display_phone_number: '573001167601',
                     phone_number_id: '1322469280958506',
                   },
-                  contacts: [{ wa_id: '573008018173' }],
+                  contacts: [{ wa_id: '573008018173', user_id: 'CO.2045529856001704' }],
                   statuses: [
                     {
                       id: 'wamid.out',
-                      status: 'read',
-                      timestamp: '1791857764',
+                      status: 'delivered',
+                      timestamp: '1791838326',
                       recipient_id: '573008018173',
-                      conversation: { id: 'abc', origin: { type: 'service' } },
-                      pricing: { billable: true, pricing_model: 'PMP', category: 'service' },
+                      recipient_user_id: 'CO.2045529856001704',
+                      pricing: {
+                        billable: false,
+                        pricing_model: 'PMP',
+                        category: 'service',
+                        type: 'free_customer_service',
+                      },
                     },
                   ],
                 },
@@ -121,7 +127,60 @@ describe('Webhook de Meta', () => {
       '1322469280958506',
     );
     expect(events).toEqual([
-      expect.objectContaining({ kind: 'status', providerMessageId: 'wamid.out', status: 'READ' }),
+      expect.objectContaining({
+        kind: 'status',
+        providerMessageId: 'wamid.out',
+        status: 'DELIVERED',
+      }),
+    ]);
+  });
+  it('acepta el mensaje entrante que Meta envía, con username y user_id', () => {
+    const events = parseWhatsAppEvents(
+      {
+        object: 'whatsapp_business_account',
+        entry: [
+          {
+            id: '28766413009634402',
+            changes: [
+              {
+                field: 'messages',
+                value: {
+                  messaging_product: 'whatsapp',
+                  metadata: {
+                    display_phone_number: '573001167601',
+                    phone_number_id: '1322469280958506',
+                  },
+                  contacts: [
+                    {
+                      profile: { name: 'Gossio', username: 'gossio' },
+                      wa_id: '573008018173',
+                      user_id: 'CO.2045529856001704',
+                    },
+                  ],
+                  messages: [
+                    {
+                      from: '573008018173',
+                      from_user_id: 'CO.2045529856001704',
+                      id: 'wamid.HBgMNTczMDA4MDE4MTczFQIAERgS4M0EzQkVBQjgzMEI5OEQxNTgA',
+                      timestamp: '1791754355',
+                      text: { body: 'Man' },
+                      type: 'text',
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      },
+      '1322469280958506',
+    );
+    expect(events).toEqual([
+      expect.objectContaining({
+        kind: 'inbound',
+        from: { externalId: '+573008018173', displayName: 'Gossio' },
+        text: 'Man',
+      }),
     ]);
   });
   it('ignora notificaciones ajenas y tipos sin soporte', () => {

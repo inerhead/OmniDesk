@@ -263,6 +263,19 @@ describe('Identidad y tenancy (e2e)', () => {
       expect(res.body.code).toBe('SLUG_TAKEN');
     });
 
+    it('un AGENT o ADMIN de una empresa ajena no crea empresas (403 TENANT_CREATION_FORBIDDEN)', async () => {
+      const { client } = await newCompany();
+      const agent = await join(client, 'AGENT');
+      const admin = await join(client, 'ADMIN');
+
+      for (const member of [agent, admin]) {
+        const res = await member.client
+          .post('/api/v1/tenants', { name: 'Propia', slug: `propia-${unique()}` })
+          .expect(403);
+        expect(res.body.code).toBe('TENANT_CREATION_FORBIDDEN');
+      }
+    });
+
     it('cambia de empresa activa y la bandeja muestra solo la nueva', async () => {
       const { client, tenantId: first } = await newCompany();
       const second = (

@@ -1,4 +1,6 @@
 import { LogOut, Monitor, Moon, Sun } from 'lucide-react';
+import { useLocation } from 'react-router';
+import { cn } from '@/shared/lib/utils';
 import { ConnectionDot } from '@/shared/realtime/connection-badge';
 import { CONNECTION_LABEL, useConnectionStatus } from '@/shared/realtime/connection-status';
 import { setThemePref, parseThemePref, useThemePref } from '@/shared/theme/theme-store';
@@ -19,19 +21,22 @@ import { useLogout } from '../api/use-session-actions';
 import { SettingsMenuItems, TenantMenuItems } from './account-menu-items';
 
 /**
- * Avatar del usuario con el estado de conexión en la esquina; abre tema y cerrar sesión. En el rail,
- * empresa y ajustes tienen su propio botón; en la barra móvil van dentro de este menú.
+ * Perfil: avatar con el estado de conexión en la esquina (con anillo en `/settings/*`). Su menú reúne, en este orden, la cuenta, la
+ * empresa (cambiar o crear), los ajustes de la empresa activa (Owner y Admin), el tema y cerrar sesión.
  */
 export function UserMenu({ variant }: { variant: 'rail' | 'bar' }) {
   const { data: me } = useMe();
   const logout = useLogout();
   const theme = useThemePref();
   const connection = CONNECTION_LABEL[useConnectionStatus()];
+  const inSettings = useLocation().pathname.startsWith('/settings');
   if (!me) return null;
 
   const side = variant === 'rail' ? 'right' : 'top';
   const membership = activeMembership(me);
-  const label = `${me.user.displayName} · ${connection}`;
+  const label = [me.user.displayName, membership?.tenantName, connection]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <DropdownMenu>
@@ -39,7 +44,10 @@ export function UserMenu({ variant }: { variant: 'rail' | 'bar' }) {
         <Tooltip content={label} side={side}>
           <DropdownMenuTrigger
             aria-label={`Menú de usuario: ${me.user.displayName}`}
-            className="focus-visible:ring-ring/50 rounded-full outline-none focus-visible:ring-[3px]"
+            className={cn(
+              'focus-visible:ring-ring/50 rounded-full outline-none focus-visible:ring-[3px]',
+              inSettings && 'ring-primary ring-offset-sidebar ring-2 ring-offset-2',
+            )}
           >
             <Avatar
               id={me.user.id}
@@ -52,7 +60,7 @@ export function UserMenu({ variant }: { variant: 'rail' | 'bar' }) {
         </Tooltip>
         <ConnectionDot className="ring-sidebar absolute -right-0.5 -bottom-0.5 ring-2" />
       </span>
-      <DropdownMenuContent side={side} align="end" className="w-64">
+      <DropdownMenuContent side={side} align="end" className="w-72">
         <div className="flex items-center gap-3 px-2 py-2">
           <Avatar
             id={me.user.id}
@@ -67,18 +75,14 @@ export function UserMenu({ variant }: { variant: 'rail' | 'bar' }) {
         </div>
         <DropdownMenuSeparator />
 
-        {variant === 'bar' && (
+        <TenantMenuItems me={me} />
+        {membership && isManagerRole(membership.role) && (
           <>
-            <TenantMenuItems me={me} />
             <DropdownMenuSeparator />
-            {membership && isManagerRole(membership.role) && (
-              <>
-                <SettingsMenuItems />
-                <DropdownMenuSeparator />
-              </>
-            )}
+            <SettingsMenuItems tenantName={membership.tenantName} />
           </>
         )}
+        <DropdownMenuSeparator />
 
         <DropdownMenuLabel>Tema</DropdownMenuLabel>
         <DropdownMenuRadioGroup

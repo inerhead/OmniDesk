@@ -1,7 +1,7 @@
 import { TenantSlugSchema } from '@omnidesk/contracts';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router';
+import { Navigate, useNavigate } from 'react-router';
 import { ApiCodeError } from '@/shared/api/api-error';
 import { Button } from '@/shared/ui/button';
 import { Input } from '@/shared/ui/input';
@@ -9,9 +9,13 @@ import { fetchMe, postTenant } from '../api/auth-api';
 import { useMe } from '../api/use-me';
 import { resetSessionCache, useLogout } from '../api/use-session-actions';
 import { slugify } from '../model/slugify';
+import { canCreateTenant } from '../model/tenant-permissions';
 import { AuthCard } from './auth-card';
 
-/** "Crea tu empresa": quien la crea queda OWNER y pasa a ser su empresa activa. */
+/**
+ * "Crea tu empresa": quien la crea queda OWNER y pasa a ser su empresa activa. Si no puede crear
+ * (solo es AGENT o ADMIN), vuelve a la bandeja.
+ */
 export function OnboardingPage() {
   const { data: me } = useMe();
   const navigate = useNavigate();
@@ -32,6 +36,8 @@ export function OnboardingPage() {
   });
   const slugTaken = create.error instanceof ApiCodeError && create.error.code === 'SLUG_TAKEN';
 
+  if (me && !canCreateTenant(me)) return <Navigate to="/conversations" replace />;
+
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (name.trim().length < 2 || !slugValid) return;
@@ -43,7 +49,7 @@ export function OnboardingPage() {
       title="Crea tu empresa"
       description={
         me?.memberships.length
-          ? 'Crea otra empresa; podrás cambiar entre ellas desde el menú de usuario.'
+          ? 'Crea otra empresa; podrás cambiar entre ellas desde el menú de empresa.'
           : 'Todavía no perteneces a ninguna empresa. Crea la tuya o abre el enlace de invitación que te compartieron.'
       }
     >

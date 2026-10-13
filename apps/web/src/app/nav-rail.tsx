@@ -1,6 +1,5 @@
 import { NavLink } from 'react-router';
 import { ChannelSwitcher } from '@/features/conversations/ui/channel-switcher';
-import { CompanyMenu } from '@/features/auth/ui/company-menu';
 import { UserMenu } from '@/features/auth/ui/user-menu';
 import { cn } from '@/shared/lib/utils';
 import { InstallPrompt } from '@/shared/pwa/install-prompt';
@@ -8,7 +7,7 @@ import { Tooltip } from '@/shared/ui/tooltip';
 import { NAV_ITEMS } from './nav-items';
 import { publicAsset } from '@/shared/config/env';
 
-/** Rail vertical de 64 px (≥ md): navegación y canales arriba; instalar, empresa y usuario abajo. */
+/** Rail vertical de 64 px (≥ md): navegación y canales arriba; instalar y perfil abajo. */
 export function NavRail() {
   return (
     <nav
@@ -39,7 +38,6 @@ export function NavRail() {
       </div>
       <div className="mt-auto flex w-full flex-col items-center gap-2 border-t pt-3">
         <InstallPrompt />
-        <CompanyMenu />
         <UserMenu variant="rail" />
       </div>
     </nav>

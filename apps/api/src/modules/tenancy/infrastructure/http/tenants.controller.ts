@@ -2,6 +2,7 @@ import { Body, Controller, HttpStatus, Post, UseGuards } from '@nestjs/common';
 import {
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiForbiddenResponse,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -27,6 +28,9 @@ export class TenantsController {
   @Post()
   @ApiCreatedResponse({ type: TenantDto.Output, description: 'Empresa creada y activa.' })
   @ApiConflictResponse({ description: 'El slug ya existe (`SLUG_TAKEN`).' })
+  @ApiForbiddenResponse({
+    description: 'Solo quien no tiene empresa o es OWNER en alguna (`TENANT_CREATION_FORBIDDEN`).',
+  })
   async create(
     @CurrentSession() session: SessionContext,
     @Body() body: CreateTenantRequestDto,
@@ -34,6 +38,13 @@ export class TenantsController {
     const result = await this.createTenant.execute(session, body);
     if (result.kind === 'slug-taken') {
       throw apiError(HttpStatus.CONFLICT, 'SLUG_TAKEN', 'Ese identificador ya está en uso');
+    }
+    if (result.kind === 'forbidden') {
+      throw apiError(
+        HttpStatus.FORBIDDEN,
+        'TENANT_CREATION_FORBIDDEN',
+        'Solo un OWNER puede crear otra empresa',
+      );
     }
     if (result.kind === 'user-not-found') {
       throw apiError(HttpStatus.UNAUTHORIZED, 'UNAUTHENTICATED', 'Inicia sesión para continuar');

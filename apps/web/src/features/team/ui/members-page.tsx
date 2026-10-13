@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ShieldOff, X } from 'lucide-react';
 import { useState } from 'react';
 import { useCurrentActor } from '@/features/auth/api/use-current-actor';
+import { ROLE_LABEL } from '@/features/auth/model/role-label';
 import { ApiCodeError } from '@/shared/api/api-error';
 import { Avatar } from '@/shared/ui/avatar';
 import { Badge } from '@/shared/ui/badge';
@@ -20,7 +21,6 @@ import {
 } from '../model/team-permissions';
 import { InviteDialog } from './invite-dialog';
 
-const ROLE_LABEL: Record<MemberRole, string> = { OWNER: 'Owner', ADMIN: 'Admin', AGENT: 'Agente' };
 const dateFormat = new Intl.DateTimeFormat('es', { dateStyle: 'medium' });
 
 function errorNotice(error: unknown): string {

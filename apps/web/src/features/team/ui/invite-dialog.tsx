@@ -2,6 +2,7 @@ import type { MemberRole } from '@omnidesk/contracts';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, UserPlus } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
+import { ROLE_LABEL } from '@/features/auth/model/role-label';
 import { ApiCodeError } from '@/shared/api/api-error';
 import { Button } from '@/shared/ui/button';
 import {
@@ -15,7 +16,6 @@ import { Input } from '@/shared/ui/input';
 import { postInvitation } from '../api/team-api';
 import { invitableRoles } from '../model/team-permissions';
 
-const ROLE_LABEL = { ADMIN: 'Admin', AGENT: 'Agente' } as const;
 const COPIED_MS = 1500;
 
 function CopyLink({ url }: { url: string }) {

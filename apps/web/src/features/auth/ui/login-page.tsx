@@ -7,10 +7,9 @@ import { Skeleton } from '@/shared/ui/skeleton';
 import { fetchAuthProviders, postDevLogin } from '../api/auth-api';
 import { resetSessionCache } from '../api/use-session-actions';
 import { DEFAULT_NEXT_PATH, safeNextPath } from '../model/next-path';
+import { ROLE_LABEL } from '../model/role-label';
 import { AuthCard } from './auth-card';
 import { GoogleButton } from './google-button';
-
-const ROLE_LABEL = { OWNER: 'Supervisor', ADMIN: 'Admin', AGENT: 'Agente' } as const;
 
 const ERROR_MESSAGE: Record<string, string> = {
   oauth: 'No se pudo completar el login con Google. Inténtalo de nuevo.',

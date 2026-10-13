@@ -12,8 +12,9 @@ import {
 } from '@/shared/ui/dropdown-menu';
 import { useSwitchTenant } from '../api/use-session-actions';
 import { ROLE_LABEL } from '../model/role-label';
+import { canCreateTenant } from '../model/tenant-permissions';
 
-/** Empresas del usuario (la activa marcada) y «Crear empresa». */
+/** Empresas del usuario (la activa marcada) y «Crear empresa» si puede (`canCreateTenant`). */
 export function TenantMenuItems({ me, label = 'Empresa' }: { me: MeResponse; label?: string }) {
   const navigate = useNavigate();
   const switchTenant = useSwitchTenant();
@@ -59,20 +60,22 @@ export function TenantMenuItems({ me, label = 'Empresa' }: { me: MeResponse; lab
           );
         })}
       </DropdownMenuRadioGroup>
-      <DropdownMenuItem onSelect={() => void navigate('/onboarding')}>
-        <Plus aria-hidden />
-        Crear empresa
-      </DropdownMenuItem>
+      {canCreateTenant(me) && (
+        <DropdownMenuItem onSelect={() => void navigate('/onboarding')}>
+          <Plus aria-hidden />
+          Crear empresa
+        </DropdownMenuItem>
+      )}
     </>
   );
 }
 
-/** Ajustes de la empresa: solo para Owner y Admin. */
-export function SettingsMenuItems() {
+/** Ajustes de la empresa activa: solo para Owner y Admin. */
+export function SettingsMenuItems({ tenantName }: { tenantName: string }) {
   const navigate = useNavigate();
   return (
     <>
-      <DropdownMenuLabel>Ajustes</DropdownMenuLabel>
+      <DropdownMenuLabel className="truncate">Ajustes de {tenantName}</DropdownMenuLabel>
       <DropdownMenuItem onSelect={() => void navigate('/settings/members')}>
         <Users aria-hidden />
         Miembros

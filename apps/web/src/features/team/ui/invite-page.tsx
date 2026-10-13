@@ -2,14 +2,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router';
 import { fetchAuthProviders, fetchMe } from '@/features/auth/api/auth-api';
 import { resetSessionCache, useLogout } from '@/features/auth/api/use-session-actions';
+import { ROLE_LABEL } from '@/features/auth/model/role-label';
 import { AuthCard } from '@/features/auth/ui/auth-card';
 import { GoogleButton } from '@/features/auth/ui/google-button';
 import { ApiCodeError, isStatus } from '@/shared/api/api-error';
 import { Button } from '@/shared/ui/button';
 import { Skeleton } from '@/shared/ui/skeleton';
 import { fetchInvitationPreview, postAcceptInvitation } from '../api/team-api';
-
-const ROLE_LABEL = { ADMIN: 'Admin', AGENT: 'Agente' } as const;
 
 function acceptErrorMessage(error: unknown, emailMasked: string): string {
   if (error instanceof ApiCodeError) {

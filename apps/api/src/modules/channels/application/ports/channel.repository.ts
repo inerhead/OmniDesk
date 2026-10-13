@@ -38,7 +38,7 @@ export interface ChannelRepository {
   update(
     tenantId: string,
     channelId: string,
-    patch: { name?: string; webhookUrl?: string },
+    patch: { name?: string; webhookUrl?: string | null },
   ): Promise<Channel | null>;
   /**
    * Nueva API key y nuevo secreto. Las credenciales vigentes vencen en `previousValidUntil` y el

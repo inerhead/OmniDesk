@@ -21,6 +21,7 @@ enum ChannelProvider {
   /// Adaptador simulado (canal demo, desarrollo).
   SIMULATED
   N8N
+  WHATSAPP_CLOUD
   /// Se conserva, sin adaptador todavía.
   CUSTOM
 }
@@ -83,23 +84,27 @@ model Tenant {
 }
 
 model Channel {
-  id         String          @id @default(uuid(7)) @db.Uuid
-  tenantId   String          @map("tenant_id") @db.Uuid
-  name       String
-  type       ChannelType
-  provider   ChannelProvider
+  id                      String          @id @default(uuid(7)) @db.Uuid
+  tenantId                String          @map("tenant_id") @db.Uuid
+  name                    String
+  type                    ChannelType
+  provider                ChannelProvider
   /// Id del número en el proveedor (phone_number_id de Meta).
-  externalId String          @map("external_id")
+  externalId              String          @map("external_id")
   /// Número público en E.164, para mostrar.
-  phoneNumber          String?   @map("phone_number")
-  webhookUrl           String?   @map("webhook_url")
+  phoneNumber             String?         @map("phone_number")
+  webhookUrl              String?         @map("webhook_url")
+  aiEnabled               Boolean         @default(false) @map("ai_enabled")
+  whatsappAccessTokenEnc  Bytes?          @map("whatsapp_access_token_enc")
+  whatsappAppSecretEnc    Bytes?          @map("whatsapp_app_secret_enc")
+  whatsappVerifyTokenHash String?         @map("whatsapp_verify_token_hash")
   /// AES-256-GCM: iv (12 B) || ciphertext || tag (16 B).
-  hmacSecretEnc        Bytes?    @map("hmac_secret_enc")
-  hmacSecretPrevEnc    Bytes?    @map("hmac_secret_prev_enc")
-  hmacSecretPrevUntil  DateTime? @map("hmac_secret_prev_until") @db.Timestamptz(3)
-  credentialsRotatedAt DateTime? @map("credentials_rotated_at") @db.Timestamptz(3)
-  createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  hmacSecretEnc           Bytes?          @map("hmac_secret_enc")
+  hmacSecretPrevEnc       Bytes?          @map("hmac_secret_prev_enc")
+  hmacSecretPrevUntil     DateTime?       @map("hmac_secret_prev_until") @db.Timestamptz(3)
+  credentialsRotatedAt    DateTime?       @map("credentials_rotated_at") @db.Timestamptz(3)
+  createdAt               DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   tenant        Tenant                  @relation(fields: [tenantId], references: [id])
   credentials   IntegrationCredential[]

@@ -4,7 +4,7 @@
  * Llamadas anidadas reutilizan la transacción activa.
  */
 export interface TransactionRunner {
-  run<T>(work: () => Promise<T>): Promise<T>;
+  run<T>(work: () => Promise<T>, options?: { timeoutMs: number }): Promise<T>;
   /**
    * Ejecuta `work` fuera de la transacción activa. Para callbacks diferidos (temporizadores) creados
    * dentro de una transacción: heredarían la ya cerrada.

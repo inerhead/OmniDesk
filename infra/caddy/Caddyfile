@@ -1,6 +1,6 @@
 # Gateway local de mismo origen (docs/arquitectura.md §4.3), bajo la subruta /omnidesk como en el VPS.
 # HTTP en localhost: ya es un contexto seguro para instalar la PWA en escritorio.
-# El HTTPS para el celular lo pone el túnel (profile `tunnel`).
+# El HTTPS público lo pone cloudflared, que comparte la red de este contenedor.
 {
 	admin off
 	auto_https off
@@ -12,7 +12,12 @@
 	redir / /omnidesk/ 301
 	redir /omnidesk /omnidesk/ 301
 
-	# El API sigue sirviendo /api/*: se quita el prefijo (también para /omnidesk/api/realtime).
+	# En omnidesk.gastromesa.com el API se publica en /api (sin el prefijo /omnidesk).
+	handle /api/* {
+		reverse_proxy api:5001
+	}
+
+	# En localhost el mismo API sigue bajo /omnidesk/api: se quita el prefijo.
 	handle /omnidesk/api/* {
 		uri strip_prefix /omnidesk
 		reverse_proxy api:5001

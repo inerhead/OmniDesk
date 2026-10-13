@@ -93,43 +93,37 @@ Los usuarios autorizados asignan conversaciones a agentes para que estos tomen e
 
 ## 4. Arquitectura lógica
 
-### 4.1 Flujo inicial (con n8n)
+### 4.1 Flujo WhatsApp Cloud con IA opcional (SPEC 09)
 
 ```mermaid
 sequenceDiagram
     participant WA as WhatsApp Cloud API
-    participant N8N as n8n
     participant API as OmniDesk API
     participant DB as PostgreSQL
+    participant N8N as n8n IA opcional
     participant PWA as OmniDesk PWA
-
-    WA->>N8N: webhook (mensaje del cliente)
-    N8N->>API: POST /integrations/messages/inbound
-    API->>DB: Inbox + Contact + Conversation + Message (tx)
-    API-->>N8N: { conversationId, aiAllowed, controlVersion }
-    API--)PWA: evento en tiempo real (vía Outbox)
-    alt aiAllowed = true
-        N8N->>N8N: genera respuesta IA
-        N8N->>API: POST /integrations/messages/outbound { controlVersion }
-        API-->>N8N: { messageId, sendAllowed }
-        opt sendAllowed = true
-            N8N->>WA: envía mensaje
-            N8N->>API: POST /integrations/messages/status (SENT/FAILED)
-        end
-    else aiAllowed = false (agente asignado)
-        PWA->>API: POST /conversations/:id/messages
-        API->>DB: Message PENDING + OutboxEvent (tx)
-        API->>N8N: MessagingProvider (adaptador n8n)
-        N8N->>WA: envía mensaje
-        N8N->>API: POST /integrations/messages/status
+    WA->>API: Webhook nativo firmado por Meta
+    API->>DB: Mensaje + solicitud IA opcional (tx)
+    API-->>WA: 200
+    API--)PWA: conversation.changed
+    opt IA habilitada y conversación sin agente
+        API->>N8N: ai.reply firmado + Idempotency-Key
+        N8N-->>API: Respuesta completa { text }
+        API->>DB: Validar controlVersion, registrar IA y encolar envío
+        API->>WA: Graph API messages
     end
+    PWA->>API: Mensaje humano (tras tomar conversación)
+    API->>DB: Mensaje + Outbox
+    API->>WA: Graph API messages
+    WA->>API: Estados de entrega firmados
+    API--)PWA: conversation.changed
 ```
 
-### 4.2 Flujo futuro
+Settings muestra el callback público de OmniDesk y configura las credenciales de Meta por canal. La IA está desactivada por defecto. Sin IA los mensajes quedan en **Sin asignar** para atención humana. OWNER/ADMIN puede activar el webhook de n8n; n8n devuelve texto y no envía a WhatsApp.
 
-`WhatsApp Cloud API → Custom AI Service (webhook, reglas, modelo, envío) ↔ OmniDesk API ↔ PWA`
+### 4.2 Compatibilidad y evolución
 
-Los contratos de OmniDesk se mantienen estables, así el motor se puede reemplazar sin reescribir la interfaz. El servicio propio será un nuevo adaptador de `MessagingProvider` y un nuevo `InboundEventNormalizer`, configurables por canal.
+Los canales `N8N` existentes conservan el flujo anterior y el demo usa `SIMULATED`. Los nuevos canales directos usan `WHATSAPP_CLOUD`. El motor de IA puede reemplazarse conservando el contrato HTTP de respuesta; la recepción y el envío siguen siendo responsabilidad de OmniDesk.
 
 ### 4.3 Topología de la web y el API
 
@@ -323,6 +317,10 @@ Prefijo común: `/api/v1`. Los esquemas de cada contrato viven en `@omnidesk/con
 
 | Método y ruta | Función | Incremento |
 | --- | --- | --- |
+| `GET/POST /integrations/whatsapp/:channelId` | Handshake y webhook nativo de Meta con firma propia | SPEC 09 |
+| `GET/POST /channels`, `PATCH /channels/:id` | Gestión de canales OWNER/ADMIN | SPEC 09 |
+| `PATCH /channels/:id/whatsapp` | Secretos Meta write-only y activación IA | SPEC 09 |
+| `POST /channels/:id/credentials`, `POST /channels/:id/test` | Generar/rotar HMAC y probar n8n | SPEC 09 |
 | `GET /health` | Estado del API y de la base de datos | 0 |
 | `GET /auth/google?next=`, `GET /auth/google/callback` | Login con Google (`next` en un `state` firmado) | 3 |
 | `POST /auth/dev-login`, `GET /auth/providers` | Login de desarrollo (solo `DEMO_MODE`) y botones de la pantalla de login | 3 |
@@ -343,7 +341,7 @@ Prefijo común: `/api/v1`. Los esquemas de cada contrato viven en `@omnidesk/con
 | `POST /conversations/:id/reopen` | Reabrir | 4 |
 | `POST /conversations/:id/messages` | Crear mensaje de agente y solicitar envío | 6 |
 
-- Los endpoints de integración se autentican con `Authorization: Bearer <credencial del canal>`.
+- Los endpoints legados `/integrations/messages/*` se autentican con `Authorization: Bearer <credencial del canal>`.
 - Cuando aplica, se verifica la firma HMAC en `X-OmniDesk-Signature` con timestamp.
 - El tenant y el canal se derivan de la credencial. Los eventos se deduplican por identificador externo.
 - Los comandos aceptan `Idempotency-Key`.
@@ -360,14 +358,13 @@ Prefijo común: `/api/v1`. Los esquemas de cada contrato viven en `@omnidesk/con
 - **Trazabilidad.** `x-request-id` viaja en logs, eventos y llamadas a proveedores. No se pierde ningún mensaje ante caídas temporales.
 - **Privacidad.** Se consideran retención, exportación y protección de datos personales. La política concreta se define en el incremento 7.
 
-## 13. Desacoplamiento de n8n y migración futura
+## 13. Proveedores e IA opcional
 
-- No se introducen conceptos de n8n en el modelo de dominio ni en la UI.
-- El envío saliente pasa por el puerto `MessagingProvider`; el primer adaptador es `N8nMessagingProvider`.
-- La recepción pasa por `InboundEventNormalizer` por proveedor. Todos producen el mismo comando canónico `RegisterInboundMessage`.
-- El proveedor se configura por canal (`Channel.provider`), lo que permite migrar canal por canal.
-- Durante la migración se preservan los IDs externos, el historial y los estados.
-- Hay pruebas de contrato compartidas, que se ejecutan contra el adaptador n8n y contra el futuro servicio propio.
+- `MessagingProviderRegistry` resuelve por canal: `WhatsAppCloudProvider`, `N8nMessagingProvider` legado o `SimulatedMessagingProvider`.
+- La recepción nativa valida la firma de Meta y traduce textos/estados al dominio existente. El `phone_number_id` debe coincidir con el canal de la ruta.
+- IA es configuración independiente del transporte. El worker recibe `ai.reply_requested`, consulta n8n y valida configuración/controlVersion antes de registrar y enviar la respuesta.
+- El dispatcher procesa un evento por transacción (hasta 100 por tick), con timeout de 20 s para llamadas HTTP limitadas a 10 s. Los fallos de IA se reintentan de forma durable y no eliminan el inbound.
+- El contrato completo, firma, rotación y configuración están en [integracion-n8n.md](integracion-n8n.md).
 
 ## 14. Plan de entregas incrementales
 
@@ -382,16 +379,17 @@ Cada incremento se especifica en `specs/NN-*.md` justo antes de implementarlo. S
 | 4 | SPEC 04 | Asignación | **Implementado.** `assign`/`release`/`close`/`reopen` con `controlVersion`, eventos en el historial y permisos por rol (`TenantMember`; el actor sale de la sesión desde SPEC 07). Bandejas IA/Mías/Todas/Cerradas, reapertura automática por un inbound y suspensión inmediata de la IA. |
 | 5 | SPEC 08 | Despliegue | VPS propio con Docker Compose: dos entornos aislados (`dev`, `prod`) en la subruta `/omnidesk` de `dev.gastromesa.com` y `gastromesa.com`, tras el Nginx existente, con web y API en el mismo origen. Imágenes de producción (API no root con migraciones al arrancar; gateway Caddy con la PWA, caché y CSP), backup diario con 7 copias y despliegue manual con `deploy.sh`. La conexión con n8n y WhatsApp reales pasa a SPEC 09. |
 | 6 | SPEC 05 | Atención humana | **Completa el ciclo del MVP en local.** El agente asignado responde desde la PWA: el mensaje se registra `PENDING`, el dispatcher del Outbox lo envía por el puerto `MessagingProvider` (adaptador simulado) con reintentos de 1/2/4/8/16 s y los estados `SENT`/`DELIVERED`/`READ`/`FAILED` se ven en tiempo real, con reintento manual. `POST /integrations/messages/status` (deduplicado en `EventInbox`, transiciones monótonas) recibe los estados de las respuestas de IA. El adaptador n8n/WhatsApp real llega con la integración real, sin tocar el dominio. |
+| 6b | SPEC 09 | WhatsApp e IA opcional | Settings de canales, webhook nativo Meta, envío Graph directo, IA n8n opcional y HMAC. |
 | 7 | — | Robustez | E2E con Playwright (también en viewport móvil), rate limiting, evaluación de RLS, métricas, política de retención y notificaciones Web Push (requieren la PWA instalada en iOS) |
 
 ## 15. Escenario de aceptación de extremo a extremo
 
 1. Sésamo registra su empresa e invita agentes.
-2. Un cliente escribe por WhatsApp. n8n recibe el webhook, registra el mensaje y la IA registra y envía su respuesta.
+2. Un cliente escribe por WhatsApp. OmniDesk recibe y guarda el mensaje. Si el canal tiene IA habilitada, consulta n8n, registra su respuesta y la envía a Meta.
 3. OmniDesk muestra ambos mensajes en tiempo real.
 4. Un supervisor asigna el chat a Laura. El backend suspende la IA para ese chat e incrementa `controlVersion`. Una respuesta de IA que estuviera en curso se rechaza con `409` y no se envía.
 5. Laura responde desde la PWA. El mensaje se envía por WhatsApp y queda en el mismo historial con su estado.
-6. Al liberar el chat, la IA vuelve a atender los mensajes siguientes.
+6. Al liberar el chat, queda sin asignar; la IA atiende los mensajes siguientes solo si el canal la tiene habilitada.
 
 ## 16. Fuera del alcance inicial
 

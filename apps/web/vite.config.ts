@@ -5,8 +5,8 @@ import { defineConfig, loadEnv } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { parseWebEnv } from './src/shared/config/env-schema.ts';
 
-// `localhost` para Caddy y escritorio; `.trycloudflare.com` para el túnel HTTPS hacia el celular.
-const allowedHosts = ['localhost', '.trycloudflare.com'];
+// `localhost` para Caddy; `.gastromesa.com` para el túnel con dominio fijo.
+const allowedHosts = ['localhost', '.trycloudflare.com', '.gastromesa.com'];
 
 export default defineConfig(({ mode }) => {
   // Un VITE_API_URL o BASE_PATH inválido hace fallar `vite build` y `vite dev`.

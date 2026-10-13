@@ -53,6 +53,9 @@ export class ChannelCredentialGuard implements CanActivate {
       throw new UnauthorizedException('Credencial de integración inválida');
     }
 
+    const channel = await this.channels.findForSend(integration.tenantId, integration.channelId);
+    if (channel?.provider === 'WHATSAPP_CLOUD')
+      throw new UnauthorizedException('Usa el webhook nativo de WhatsApp para este canal');
     const secrets = await this.channels.findSigningSecrets(integration.channelId);
     const accepted = secrets ? acceptedSigningSecrets(secrets, now) : [];
     // Solo el canal demo (SIMULATED) no tiene secreto: ahí no se exige firma.

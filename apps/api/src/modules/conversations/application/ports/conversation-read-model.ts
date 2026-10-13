@@ -13,7 +13,7 @@ export interface ConversationSummaryView {
   assignedAgent: MemberRef | null;
   controlVersion: number;
   contact: { id: string; displayName: string | null; externalId: string };
-  channel: { id: string; name: string; type: 'WHATSAPP' };
+  channel: { id: string; name: string; type: 'WHATSAPP'; aiEnabled?: boolean };
   lastMessageAt: Date;
   lastMessagePreview: string;
   createdAt: Date;

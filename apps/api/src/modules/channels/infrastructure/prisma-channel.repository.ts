@@ -29,6 +29,10 @@ function summarySelect(now: Date) {
   return {
     ...channelSelect,
     hmacSecretEnc: true,
+    aiEnabled: true,
+    whatsappAccessTokenEnc: true,
+    whatsappAppSecretEnc: true,
+    whatsappVerifyTokenHash: true,
     credentialsRotatedAt: true,
     credentials: { where: activeCredentialWhere(now), select: { id: true }, take: 1 },
   } satisfies Prisma.ChannelSelect;
@@ -36,8 +40,23 @@ function summarySelect(now: Date) {
 
 type SummaryRow = Prisma.ChannelGetPayload<{ select: ReturnType<typeof summarySelect> }>;
 
-function toSummary({ hmacSecretEnc, credentials, ...row }: SummaryRow): ChannelSummary {
-  return { ...row, hasCredentials: credentials.length > 0 && hmacSecretEnc !== null };
+function toSummary({
+  hmacSecretEnc,
+  credentials,
+  whatsappAccessTokenEnc,
+  whatsappAppSecretEnc,
+  whatsappVerifyTokenHash,
+  ...row
+}: SummaryRow): ChannelSummary {
+  return {
+    ...row,
+    hasCredentials: credentials.length > 0 && hmacSecretEnc !== null,
+    hasWhatsAppCredentials: !!(
+      whatsappAccessTokenEnc &&
+      whatsappAppSecretEnc &&
+      whatsappVerifyTokenHash
+    ),
+  };
 }
 
 @Injectable()
@@ -113,11 +132,11 @@ export class PrismaChannelRepository implements ChannelRepository {
   async update(
     tenantId: string,
     channelId: string,
-    patch: { name?: string; webhookUrl?: string },
+    patch: { name?: string; webhookUrl?: string | null },
   ): Promise<Channel | null> {
     const { count } = await this.db.client.channel.updateMany({
       where: { id: channelId, tenantId },
-      data: patch,
+      data: { ...patch, ...(patch.webhookUrl === null && { aiEnabled: false }) },
     });
     if (count === 0) return null;
     return this.db.client.channel.findUnique({ where: { id: channelId }, select: channelSelect });

@@ -8,6 +8,8 @@ export interface ConversationSummary extends ConversationSummaryView {
 export function toConversationSummary(view: ConversationSummaryView): ConversationSummary {
   return {
     ...view,
-    aiActive: isAiActive({ status: view.status, assignedAgentId: view.assignedAgent?.id ?? null }),
+    aiActive:
+      view.channel.aiEnabled !== false &&
+      isAiActive({ status: view.status, assignedAgentId: view.assignedAgent?.id ?? null }),
   };
 }

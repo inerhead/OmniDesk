@@ -8,7 +8,7 @@ export function StatusChip({
   conversation,
   className,
 }: {
-  conversation: Pick<ConversationSummary, 'status' | 'assignedAgent'>;
+  conversation: Pick<ConversationSummary, 'status' | 'assignedAgent' | 'aiActive'>;
   className?: string;
 }) {
   if (conversation.status === 'CLOSED') {
@@ -26,6 +26,12 @@ export function StatusChip({
       </Badge>
     );
   }
+  if (!conversation.aiActive)
+    return (
+      <Badge variant="outline" className={className}>
+        Sin asignar
+      </Badge>
+    );
   return (
     <Badge variant="brand" className={className}>
       <Bot aria-hidden />

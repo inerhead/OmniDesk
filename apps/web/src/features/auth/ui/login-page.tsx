@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router';
+import { basePath } from '@/shared/config/env';
 import { Avatar } from '@/shared/ui/avatar';
 import { Button } from '@/shared/ui/button';
 import { Skeleton } from '@/shared/ui/skeleton';
@@ -18,7 +19,7 @@ const ERROR_MESSAGE: Record<string, string> = {
 
 export function LoginPage() {
   const [params] = useSearchParams();
-  const next = safeNextPath(params.get('next')) ?? DEFAULT_NEXT_PATH;
+  const next = safeNextPath(params.get('next'), basePath) ?? DEFAULT_NEXT_PATH;
   const error = ERROR_MESSAGE[params.get('error') ?? ''];
   const navigate = useNavigate();
   const queryClient = useQueryClient();

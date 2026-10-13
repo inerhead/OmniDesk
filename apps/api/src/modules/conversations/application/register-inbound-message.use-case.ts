@@ -46,8 +46,15 @@ export class RegisterInboundMessageUseCase {
   execute(
     integration: IntegrationContext,
     input: InboundMessageInput,
+    onRegistered?: (result: InboundMessageResult) => Promise<void>,
   ): Promise<InboundMessageResult> {
-    return retryOnConflict(() => this.tx.run(() => this.register(integration, input)));
+    return retryOnConflict(() =>
+      this.tx.run(async () => {
+        const result = await this.register(integration, input);
+        await onRegistered?.(result);
+        return result;
+      }),
+    );
   }
 
   private async register(

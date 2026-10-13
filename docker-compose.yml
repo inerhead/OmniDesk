@@ -49,6 +49,7 @@ services:
       - api
     volumes:
       - ./apps/web/src:/repo/apps/web/src
+      - ./apps/web/vite.config.ts:/repo/apps/web/vite.config.ts
       - ./apps/web/public:/repo/apps/web/public
       - ./packages/contracts/src:/repo/packages/contracts/src
 
@@ -84,17 +85,19 @@ services:
       - '4173:4173'
     volumes:
       - ./apps/web/src:/repo/apps/web/src
+      - ./apps/web/vite.config.ts:/repo/apps/web/vite.config.ts
       - ./apps/web/public:/repo/apps/web/public
       - ./packages/contracts/src:/repo/packages/contracts/src
 
-  # URL HTTPS pública temporal hacia caddy, para instalar la PWA en un celular.
-  # La URL aparece en: docker compose logs cloudflared
+  # Túnel con dominio fijo (el hostname se configura en Cloudflare). Comparte la red de
+  # caddy: en el panel del túnel, el servicio público debe apuntar a http://localhost:80.
   cloudflared:
-    profiles: [tunnel]
-    image: cloudflare/cloudflared:2026.9.3
-    command: tunnel --no-autoupdate --url http://caddy:80
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    network_mode: service:caddy
     depends_on:
       - caddy
+    command: tunnel --protocol ${CLOUDFLARE_TUNNEL_PROTOCOL:-http2} --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
 
 volumes:
   pgdata:

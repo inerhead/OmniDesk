@@ -236,3 +236,12 @@ Todos los servicios tienen `restart: unless-stopped`: vuelven solos tras reinici
 - Despliegue sin caída (blue/green).
 - Varias instancias del API, que requieren el adapter Redis de Socket.IO.
 - Monitoreo y alertas (SPEC 11).
+
+
+## Secretos de canales y WhatsApp (SPEC 09)
+
+`CHANNEL_SECRETS_KEY` cifra HMAC, access tokens y app secrets de Meta. Guarda una copia segura de la clave de cada entorno separada del backup de PostgreSQL. Restaurar solo la base sin la misma clave deja los secretos ilegibles. Si se pierde la clave, configura una nueva, vuelve a introducir los secretos Meta desde Settings y rota las credenciales de integración; actualiza n8n con el nuevo HMAC.
+
+Las imágenes del API aplican las migraciones al arrancar. La migración de WhatsApp añade `WHATSAPP_CLOUD` y sus campos de configuración sin modificar los canales N8N existentes. `WHATSAPP_GRAPH_VERSION` se pasa al API desde Compose de producción; por defecto usa `v25.0`. `APP_URL` debe coincidir con el dominio y subruta públicos: de él sale el callback que se muestra en Settings.
+
+Mantén el reloj del servidor sincronizado (NTP) para la tolerancia HMAC de ±300 segundos. La conexión de WhatsApp y n8n se configura por empresa siguiendo [la guía de integración](integracion-n8n.md).

@@ -1,3 +1,4 @@
+import { ChannelsPage } from '@/features/channels/channels-page';
 import { createBrowserRouter, Navigate } from 'react-router';
 import { AuthGate, RequireActiveTenant } from '@/features/auth/ui/auth-gate';
 import { LoginPage } from '@/features/auth/ui/login-page';
@@ -40,6 +41,7 @@ export const router = createBrowserRouter(
             },
             { path: 'status', element: <StatusPage /> },
             { path: 'settings/members', element: <MembersPage /> },
+            { path: 'settings/channels', element: <ChannelsPage /> },
             { path: '*', element: <NotFoundPage /> },
           ],
         },

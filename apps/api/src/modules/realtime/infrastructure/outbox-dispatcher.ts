@@ -1,10 +1,12 @@
 import {
   Inject,
+  Optional,
   Injectable,
   Logger,
   type OnApplicationBootstrap,
   type OnModuleDestroy,
 } from '@nestjs/common';
+import { AiReplyWorker } from '../../whatsapp/ai-reply-worker';
 import { RealtimeEventSchema } from '@omnidesk/contracts';
 import { MESSAGE_SEND_REQUESTED } from '../../conversations/application/enqueue-send-requested';
 import {
@@ -48,6 +50,7 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
     @Inject(OUTBOX_EVENT_STORE) private readonly store: OutboxEventStore,
     @Inject(REALTIME_PUBLISHER) private readonly publisher: RealtimePublisher,
     @Inject(OUTBOUND_MESSAGE_SENDER) private readonly sender: OutboundMessageSender,
+    @Optional() private readonly ai?: AiReplyWorker,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -65,17 +68,21 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
 
   /** Procesa un lote. Devuelve cuántos eventos se publicaron. */
   async tick(now: Date = new Date()): Promise<number> {
-    return this.tx.run(async () => {
-      const events = await this.store.lockPending(BATCH_SIZE, now);
-      if (events.length === BATCH_SIZE) {
-        this.logger.warn(`Lote lleno (${BATCH_SIZE}): el dispatcher puede estar atrasado`);
-      }
-      let published = 0;
-      for (const event of events) {
-        if (await this.dispatch(event, now)) published += 1;
-      }
-      return published;
-    });
+    let published = 0;
+    // Una transacción por evento: una llamada HTTP lenta no acumula todo el lote en una transacción.
+    for (let index = 0; index < BATCH_SIZE; index += 1) {
+      const result = await this.tx.run(
+        async () => {
+          const [event] = await this.store.lockPending(1, now);
+          if (!event) return null;
+          return this.dispatch(event, now);
+        },
+        { timeoutMs: 20_000 },
+      );
+      if (result === null) break;
+      if (result) published += 1;
+    }
+    return published;
   }
 
   /** Borra los eventos publicados hace más de 24 h. */
@@ -94,7 +101,8 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (event.type === MESSAGE_SEND_REQUESTED) return this.failSend(event, message, now);
+      if (event.type === MESSAGE_SEND_REQUESTED || event.type === 'ai.reply_requested')
+        return this.failSend(event, message, now);
 
       const attempts = event.attempts + 1;
       const delaySeconds = Math.min(2 ** attempts, MAX_BACKOFF_SECONDS);
@@ -112,6 +120,10 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
     switch (event.type) {
       case 'conversation.changed':
         this.publisher.publish(event.tenantId, RealtimeEventSchema.parse(event.payload));
+        return;
+      case 'ai.reply_requested':
+        if (!this.ai) throw new Error('Worker IA no disponible');
+        await this.ai.process(event.tenantId, event.payload);
         return;
       case MESSAGE_SEND_REQUESTED:
         await this.sender.send(event.tenantId, event.payload);
@@ -137,7 +149,8 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
       return false;
     }
     this.logger.warn(`Outbox ${event.id}: envío abandonado tras ${event.attempts} reintentos`);
-    await this.sender.fail(event.tenantId, event.payload, reason);
+    if (event.type === MESSAGE_SEND_REQUESTED)
+      await this.sender.fail(event.tenantId, event.payload, reason);
     await this.store.markPublished(event.id, now, reason);
     return false;
   }

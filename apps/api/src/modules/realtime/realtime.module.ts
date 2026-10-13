@@ -1,3 +1,4 @@
+import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { Module } from '@nestjs/common';
 import { IdentityModule } from '../identity/identity.module';
 import { DispatchOutboundMessageUseCase } from '../messaging/application/dispatch-outbound-message.use-case';
@@ -11,7 +12,7 @@ import { RealtimeGateway } from './infrastructure/realtime.gateway';
 import { SocketIoRealtimePublisher } from './infrastructure/socket-io-realtime-publisher';
 
 @Module({
-  imports: [IdentityModule, MessagingModule],
+  imports: [IdentityModule, MessagingModule, WhatsAppModule],
   providers: [
     RealtimeGateway,
     SocketIoRealtimePublisher,

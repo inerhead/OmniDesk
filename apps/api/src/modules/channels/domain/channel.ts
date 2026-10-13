@@ -2,7 +2,7 @@
 export type SecretBlob = Uint8Array<ArrayBuffer>;
 
 export type ChannelType = 'WHATSAPP';
-export type ChannelProvider = 'SIMULATED' | 'N8N' | 'CUSTOM';
+export type ChannelProvider = 'SIMULATED' | 'N8N' | 'CUSTOM' | 'WHATSAPP_CLOUD';
 
 export interface Channel {
   id: string;
@@ -25,6 +25,8 @@ export interface ChannelSummary extends Channel {
   /** Tiene una API key vigente y un secreto HMAC. */
   hasCredentials: boolean;
   credentialsRotatedAt: Date | null;
+  aiEnabled?: boolean;
+  hasWhatsAppCredentials?: boolean;
 }
 
 /** Secretos HMAC cifrados de un canal. */

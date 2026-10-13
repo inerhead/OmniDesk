@@ -58,8 +58,8 @@ export interface CreateChannelInput {
   name: string;
   phoneNumber: string;
   externalId: string;
-  provider: 'N8N';
-  webhookUrl: string;
+  provider: 'N8N' | 'WHATSAPP_CLOUD';
+  webhookUrl?: string;
 }
 
 /** Alta de un canal de WhatsApp por n8n, sin credenciales (se emiten aparte). */
@@ -78,8 +78,10 @@ export class CreateChannelUseCase {
     { kind: 'ok'; channel: ChannelSummary } | Forbidden | InvalidWebhook | { kind: 'conflict' }
   > {
     if (!canManageChannels(actor.role)) return { kind: 'forbidden' };
-    const check = this.webhookUrls.check(input.webhookUrl);
-    if (!check.ok) return { kind: 'invalid-webhook', reason: check.reason };
+    if (input.webhookUrl) {
+      const check = this.webhookUrls.check(input.webhookUrl);
+      if (!check.ok) return { kind: 'invalid-webhook', reason: check.reason };
+    }
     const created = await this.channels.create(actor.tenantId, { ...input, type: 'WHATSAPP' });
     if (!created) return { kind: 'conflict' };
     const channel = await this.channels.findSummary(actor.tenantId, created.id, this.clock.now());
@@ -98,10 +100,14 @@ export class UpdateChannelUseCase {
   async execute(
     actor: ActorContext,
     channelId: string,
-    patch: { name?: string; webhookUrl?: string },
+    patch: { name?: string; webhookUrl?: string | null },
   ): Promise<{ kind: 'ok'; channel: ChannelSummary } | Forbidden | NotFound | InvalidWebhook> {
     if (!canManageChannels(actor.role)) return { kind: 'forbidden' };
-    if (patch.webhookUrl !== undefined) {
+    if (patch.webhookUrl === null) {
+      const current = await this.channels.findForSend(actor.tenantId, channelId);
+      if (current?.provider === 'N8N') return { kind: 'invalid-webhook', reason: 'invalid' };
+    }
+    if (patch.webhookUrl) {
       const check = this.webhookUrls.check(patch.webhookUrl);
       if (!check.ok) return { kind: 'invalid-webhook', reason: check.reason };
     }

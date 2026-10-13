@@ -1,7 +1,7 @@
 import { InboxSchema, canViewInbox, type Inbox, type MemberRole } from '@omnidesk/contracts';
 
 export const INBOX_LABEL: Record<Inbox, string> = {
-  ai: 'IA',
+  ai: 'Sin asignar',
   mine: 'Mías',
   all: 'Todas',
   closed: 'Cerradas',
@@ -21,7 +21,7 @@ export function parseInbox(param: string | null, role: MemberRole): Inbox {
 }
 
 export const EMPTY_INBOX_MESSAGE: Record<Inbox, string> = {
-  ai: 'No hay conversaciones atendidas por la IA.',
+  ai: 'No hay conversaciones sin asignar.',
   mine: 'No tienes conversaciones asignadas.',
   all: 'No hay conversaciones abiertas.',
   closed: 'No hay conversaciones cerradas.',

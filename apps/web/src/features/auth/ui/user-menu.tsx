@@ -1,4 +1,4 @@
-import { LogOut, Monitor, Moon, Plus, Sun, Users } from 'lucide-react';
+import { MessageSquare, LogOut, Monitor, Moon, Plus, Sun, Users } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { setThemePref, parseThemePref, useThemePref } from '@/shared/theme/theme-store';
 import { Avatar } from '@/shared/ui/avatar';
@@ -91,6 +91,12 @@ export function UserMenu({ side = 'right' }: { side?: 'right' | 'top' }) {
           <DropdownMenuItem onSelect={() => void navigate('/settings/members')}>
             <Users aria-hidden />
             Miembros
+          </DropdownMenuItem>
+        )}
+        {membership && isManagerRole(membership.role) && (
+          <DropdownMenuItem onSelect={() => void navigate('/settings/channels')}>
+            <MessageSquare aria-hidden />
+            Canales
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />

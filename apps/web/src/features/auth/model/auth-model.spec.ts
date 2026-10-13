@@ -1,3 +1,4 @@
+import { createMemoryRouter } from 'react-router';
 import { TenantSlugSchema } from '@omnidesk/contracts';
 import { describe, expect, it } from 'vitest';
 import { loginPathFor, safeNextPath } from './next-path';
@@ -41,4 +42,30 @@ describe('slugify', () => {
       expect(TenantSlugSchema.safeParse(slugify(name)).success).toBe(true);
     }
   });
+});
+
+describe('rutas de login bajo una subruta pública', () => {
+  it('quita la base pública del destino antes de navegar dentro del router', () => {
+    expect(safeNextPath('/omnidesk/', '/omnidesk')).toBe('/');
+    expect(safeNextPath('/omnidesk/settings/channels?tab=ai#setup', '/omnidesk')).toBe(
+      '/settings/channels?tab=ai#setup',
+    );
+    expect(safeNextPath('/omnidesk-other', '/omnidesk')).toBe('/omnidesk-other');
+    expect(safeNextPath('/omnidesk//evil.com', '/omnidesk')).toBeNull();
+  });
+});
+
+it('el ciclo 401 → login → destino no duplica basename', async () => {
+  const router = createMemoryRouter([{ path: '*', element: null }], {
+    basename: '/omnidesk',
+    initialEntries: ['/omnidesk/'],
+  });
+  expect(router.state.location.pathname).toBe('/omnidesk/');
+  const currentPath = safeNextPath(router.state.location.pathname, '/omnidesk')!;
+  await router.navigate(loginPathFor(currentPath));
+  expect(router.state.location.pathname).toBe('/omnidesk/login');
+  const next = new URLSearchParams(router.state.location.search).get('next');
+  await router.navigate(safeNextPath(next, '/omnidesk')!);
+  expect(router.state.location.pathname).toBe('/omnidesk');
+  router.dispose();
 });

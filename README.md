@@ -36,7 +36,7 @@ Abre <http://localhost:8080/omnidesk> (el gateway; usa siempre esta URL). La app
 | Swagger       | <http://localhost:5001/api/docs>      | Documentación del API generada desde `@omnidesk/contracts`                             |
 | `postgres`    | `localhost:5532`                      | PostgreSQL 18                                                                          |
 | `web-preview` | <http://localhost:4173/omnidesk/>     | Build de producción de la web (profile `pwa`)                                          |
-| `cloudflared` | URL `https://*.trycloudflare.com`     | Túnel HTTPS hacia `caddy` (profile `tunnel`)                                           |
+| `cloudflared` | `https://<tu-dominio>/omnidesk`       | Túnel Cloudflare con dominio fijo hacia `caddy` (`CLOUDFLARE_TUNNEL_TOKEN`)            |
 
 ¿Algún puerto ya está ocupado en tu máquina? Cámbialo en `.env`: `GATEWAY_HOST_PORT`, `API_HOST_PORT` o `POSTGRES_HOST_PORT`. Si cambias el del gateway, añade su origen a `CORS_ORIGINS`.
 
@@ -183,25 +183,13 @@ En Chrome de escritorio, abre <http://localhost:8080/omnidesk> y pulsa **Instala
 
 ### Probar en el celular
 
-Un celular solo instala una PWA desde HTTPS. El profile `tunnel` publica el gateway en una URL HTTPS pública y temporal (cloudflared, sin cuenta):
+Un celular solo instala una PWA desde HTTPS, y Meta solo puede llamar al webhook por una URL pública. `cloudflared` publica Caddy en un dominio fijo:
 
-1. Levanta el stack con la PWA y el túnel:
+1. En Cloudflare Zero Trust crea un túnel y, en su hostname público, apunta el servicio a `http://localhost:80`.
+2. Pega el token en `CLOUDFLARE_TUNNEL_TOKEN` y pon `APP_URL=https://<tu-dominio>/omnidesk`.
+3. Levanta el stack. La app y el webhook quedan en `https://<tu-dominio>/omnidesk`.
 
-   ```bash
-   WEB_UPSTREAM=web-preview:4173 docker compose --profile pwa --profile tunnel up --build
-   ```
-
-2. Copia la URL `https://….trycloudflare.com` de los logs (la app está en `<URL>/omnidesk`):
-
-   ```bash
-   docker compose logs cloudflared | grep trycloudflare.com
-   ```
-
-3. Ábrela en el celular e instala la app:
-   - **Android (Chrome):** botón **Instalar app**.
-   - **iPhone (Safari):** Compartir → **Añadir a pantalla de inicio**. La app muestra esta instrucción.
-
-La URL del túnel cambia cada vez que se reinicia `cloudflared`. Si la cambias, reinstala la app en el celular.
+En el celular, abre esa URL e instala la app: en Android con Chrome, **Instalar app**; en iPhone, Compartir → **Añadir a pantalla de inicio**.
 
 ### Limpiar el service worker
 
@@ -232,6 +220,15 @@ El módulo `apps/api/src/modules/health` es la plantilla de referencia de un mó
 
 ## Problemas frecuentes
 
+- **`EADDRINUSE` al recompilar el API en Docker**: el script de desarrollo usa `nest start --watch --no-shell` para que Nest cierre directamente el proceso anterior, incluso en imágenes sin `ps`. Si tienes una imagen anterior, ejecuta `docker compose up -d --build --no-deps api`. El puerto interno 5001 no debe cambiarse.
 - **El hot reload no detecta cambios** (Docker Desktop en macOS): añade `CHOKIDAR_USEPOLLING=true` al `.env` y, si es la web, activa `server.watch.usePolling` en `apps/web/vite.config.ts`.
 - **El contenedor `api` termina al arrancar**: revisa el mensaje. Nombra la variable de entorno que falta o es inválida.
 - **pnpm rechaza una dependencia recién publicada**: pnpm exige que los paquetes tengan al menos 24 h de publicados. Fija la versión anterior.
+
+## Conectar WhatsApp e IA con n8n
+
+En el menú de usuario → **Canales**, un OWNER/ADMIN añade el número de WhatsApp y guarda el access token, app secret y verify token de Meta. Settings muestra la URL de OmniDesk que debes registrar como webhook en WhatsApp Cloud. Sin IA, los mensajes llegan a **Sin asignar** para atención humana.
+
+Para usar IA, configura el webhook de n8n, genera el secreto HMAC, prueba la conexión y activa el interruptor. n8n responde `{ "text": "respuesta completa" }`; OmniDesk registra y envía el mensaje a WhatsApp. Consulta [la guía de integración](docs/integracion-n8n.md) para la firma, los estados, el simulador y la compatibilidad con canales N8N legados.
+
+Aplica las migraciones del API antes de usar la pantalla. `WHATSAPP_GRAPH_VERSION` configura la versión de Graph; los secretos se cifran con `CHANNEL_SECRETS_KEY`.

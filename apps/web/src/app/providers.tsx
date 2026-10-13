@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
-import { loginPathFor } from '@/features/auth/model/next-path';
+import { basePath } from '@/shared/config/env';
+import { loginPathFor, safeNextPath } from '@/features/auth/model/next-path';
 import { setUnauthorizedHandler } from '@/shared/api/http-client';
 import { TooltipProvider } from '@/shared/ui/tooltip';
 import { router } from './router';
@@ -14,9 +15,11 @@ export function Providers({ children }: { children: ReactNode }) {
     () =>
       setUnauthorizedHandler(() => {
         queryClient.clear();
-        const { pathname, search } = router.state.location;
-        if (pathname.startsWith('/login') || pathname.startsWith('/invite/')) return;
-        void router.navigate(loginPathFor(`${pathname}${search}`), { replace: true });
+        const { pathname, search, hash } = router.state.location;
+        const currentPath = safeNextPath(`${pathname}${search}${hash}`, basePath) ?? '/';
+        const routePath = currentPath.split(/[?#]/)[0]!;
+        if (routePath === '/login' || routePath.startsWith('/invite/')) return;
+        void router.navigate(loginPathFor(currentPath), { replace: true });
       }),
     [queryClient],
   );

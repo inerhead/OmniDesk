@@ -1,5 +1,6 @@
 import {
   Body,
+  Inject,
   Controller,
   ForbiddenException,
   Get,
@@ -34,6 +35,7 @@ import {
   type ListChannelsResponse,
 } from '@omnidesk/contracts';
 import { createZodDto } from 'nestjs-zod';
+import { ENV, type Env } from '../../../../shared/config/env';
 import type { ActorContext } from '../../../../shared/application/request-context';
 import { apiError } from '../../../../shared/infrastructure/http/api-error';
 import { OriginGuard } from '../../../../shared/infrastructure/http/origin.guard';
@@ -56,7 +58,7 @@ class UpdateChannelRequestDto extends createZodDto(UpdateChannelRequestSchema) {
 class ChannelCredentialsResponseDto extends createZodDto(ChannelCredentialsResponseSchema) {}
 class ChannelTestResponseDto extends createZodDto(ChannelTestResponseSchema) {}
 
-function toChannel(channel: ChannelSummary): Channel {
+function toChannel(channel: ChannelSummary, appUrl: string): Channel {
   return {
     id: channel.id,
     name: channel.name,
@@ -66,6 +68,12 @@ function toChannel(channel: ChannelSummary): Channel {
     externalId: channel.externalId,
     webhookUrl: channel.webhookUrl,
     hasCredentials: channel.hasCredentials,
+    aiEnabled: channel.aiEnabled ?? false,
+    hasWhatsAppCredentials: channel.hasWhatsAppCredentials ?? false,
+    whatsappWebhookUrl:
+      channel.provider === 'WHATSAPP_CLOUD'
+        ? `${appUrl.replace(/\/$/, '')}/api/v1/integrations/whatsapp/${channel.id}`
+        : null,
     credentialsRotatedAt: channel.credentialsRotatedAt?.toISOString() ?? null,
   };
 }
@@ -83,6 +91,7 @@ function invalidWebhook(reason: Exclude<WebhookUrlCheck, { ok: true }>['reason']
 @Controller({ path: 'channels', version: '1' })
 export class ChannelsController {
   constructor(
+    @Inject(ENV) private readonly env: Env,
     private readonly listChannels: ListChannelsUseCase,
     private readonly createChannel: CreateChannelUseCase,
     private readonly updateChannel: UpdateChannelUseCase,
@@ -95,7 +104,7 @@ export class ChannelsController {
   async list(@Actor() actor: ActorContext): Promise<ListChannelsResponse> {
     const result = await this.listChannels.execute(actor);
     if (result.kind === 'forbidden') throw new ForbiddenException(FORBIDDEN);
-    return { items: result.items.map(toChannel) };
+    return { items: result.items.map((channel) => toChannel(channel, this.env.APP_URL)) };
   }
 
   @Post()
@@ -119,7 +128,7 @@ export class ChannelsController {
           'Ya hay un canal con ese phone_number_id',
         );
       case 'ok':
-        return toChannel(result.channel);
+        return toChannel(result.channel, this.env.APP_URL);
     }
   }
 
@@ -141,7 +150,7 @@ export class ChannelsController {
       case 'invalid-webhook':
         throw invalidWebhook(result.reason);
       case 'ok':
-        return toChannel(result.channel);
+        return toChannel(result.channel, this.env.APP_URL);
     }
   }
 

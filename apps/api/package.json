@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "prisma generate && nest build",
-    "dev": "prisma generate && nest start --watch",
+    "dev": "prisma generate && nest start --watch --no-shell",
     "start": "node dist/main.js",
     "lint": "eslint .",
     "typecheck": "prisma generate && tsc --noEmit",

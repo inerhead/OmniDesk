@@ -22,7 +22,7 @@ const summarySelect = {
   lastMessagePreview: true,
   createdAt: true,
   assignedAgent: { select: { id: true, displayName: true } },
-  channel: { select: { id: true, name: true, type: true } },
+  channel: { select: { id: true, name: true, type: true, provider: true, aiEnabled: true } },
   contact: {
     select: {
       id: true,
@@ -37,6 +37,12 @@ type SummaryRow = Prisma.ConversationGetPayload<{ select: typeof summarySelect }
 function toSummaryView({ channelId, contact, ...row }: SummaryRow): ConversationSummaryView {
   return {
     ...row,
+    channel: {
+      id: row.channel.id,
+      name: row.channel.name,
+      type: row.channel.type,
+      aiEnabled: row.channel.provider !== 'WHATSAPP_CLOUD' || row.channel.aiEnabled,
+    },
     contact: {
       id: contact.id,
       displayName: contact.displayName,

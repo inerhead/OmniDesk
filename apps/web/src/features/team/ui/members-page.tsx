@@ -8,6 +8,7 @@ import { Avatar } from '@/shared/ui/avatar';
 import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/card';
+import { ConfirmDialog } from '@/shared/ui/confirm-dialog';
 import { EmptyState } from '@/shared/ui/empty-state';
 import { Skeleton } from '@/shared/ui/skeleton';
 import { deleteInvitation, deleteMember, fetchInvitations, patchMemberRole } from '../api/team-api';
@@ -36,6 +37,7 @@ export function MembersPage() {
   const { actor, members, isLoading } = useCurrentActor();
   const queryClient = useQueryClient();
   const [notice, setNotice] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<Member | null>(null);
   const manager = actor !== null && canManageTeam(actor.role);
 
   const invitations = useQuery({
@@ -84,16 +86,6 @@ export function MembersPage() {
       </div>
     );
   }
-
-  const confirmRemove = (member: Member) => {
-    if (
-      window.confirm(
-        `¿Quitar a ${member.displayName}? Sus conversaciones abiertas vuelven a la IA y se cierra su sesión en esta empresa.`,
-      )
-    ) {
-      remove.mutate(member.id);
-    }
-  };
 
   return (
     <div className="h-full overflow-y-auto">
@@ -163,7 +155,7 @@ export function MembersPage() {
                       variant="ghost"
                       className="text-destructive hover:text-destructive"
                       disabled={pending}
-                      onClick={() => confirmRemove(member)}
+                      onClick={() => setRemoving(member)}
                     >
                       Quitar
                     </Button>
@@ -211,6 +203,22 @@ export function MembersPage() {
             )}
           </CardContent>
         </Card>
+        <ConfirmDialog
+          open={removing !== null}
+          title={removing ? `Quitar a ${removing.displayName}` : 'Quitar miembro'}
+          description="Sus conversaciones abiertas vuelven a la IA y se cierra su sesión en esta empresa."
+          confirmLabel="Quitar"
+          tone="destructive"
+          pending={remove.isPending}
+          onConfirm={() => {
+            if (!removing) return;
+            remove.mutate(removing.id);
+            setRemoving(null);
+          }}
+          onOpenChange={(open) => {
+            if (!open) setRemoving(null);
+          }}
+        />
       </section>
     </div>
   );

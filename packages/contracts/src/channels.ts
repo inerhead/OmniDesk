@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { ChannelTypeSchema } from './conversations';
 import { E164Schema, MessageTextSchema } from './integrations';
 
-export const ChannelProviderSchema = z.enum(['SIMULATED', 'N8N', 'CUSTOM']);
+export const ChannelProviderSchema = z.enum(['SIMULATED', 'N8N', 'CUSTOM', 'WHATSAPP_CLOUD']);
 export type ChannelProvider = z.infer<typeof ChannelProviderSchema>;
 
 /** Canal de la empresa (`GET /api/v1/channels`). Nunca incluye secretos. */
@@ -17,6 +17,9 @@ export const ChannelSchema = z.object({
   webhookUrl: z.url().nullable(),
   /** Tiene una API key vigente y un secreto HMAC. */
   hasCredentials: z.boolean(),
+  aiEnabled: z.boolean().default(false),
+  hasWhatsAppCredentials: z.boolean().default(false),
+  whatsappWebhookUrl: z.url().nullable().default(null),
   credentialsRotatedAt: z.iso.datetime().nullable(),
 });
 export type Channel = z.infer<typeof ChannelSchema>;
@@ -27,18 +30,23 @@ export type ListChannelsResponse = z.infer<typeof ListChannelsResponseSchema>;
 const ChannelNameSchema = z.string().trim().min(1).max(80);
 
 /** `POST /api/v1/channels` */
-export const CreateChannelRequestSchema = z.object({
-  name: ChannelNameSchema,
-  phoneNumber: E164Schema,
-  externalId: z.string().trim().min(1).max(64),
-  provider: z.literal('N8N'),
-  webhookUrl: z.url(),
-});
+export const CreateChannelRequestSchema = z
+  .object({
+    name: ChannelNameSchema,
+    phoneNumber: E164Schema,
+    externalId: z.string().trim().min(1).max(64),
+    provider: z.enum(['N8N', 'WHATSAPP_CLOUD']),
+    webhookUrl: z.url().optional(),
+  })
+  .refine((body) => body.provider !== 'N8N' || !!body.webhookUrl, {
+    message: 'N8N requiere webhookUrl',
+    path: ['webhookUrl'],
+  });
 export type CreateChannelRequest = z.infer<typeof CreateChannelRequestSchema>;
 
 /** `PATCH /api/v1/channels/:id` */
 export const UpdateChannelRequestSchema = z
-  .object({ name: ChannelNameSchema.optional(), webhookUrl: z.url().optional() })
+  .object({ name: ChannelNameSchema.optional(), webhookUrl: z.url().nullable().optional() })
   .refine((body) => body.name !== undefined || body.webhookUrl !== undefined, {
     message: 'Indica name o webhookUrl',
   });
@@ -86,3 +94,15 @@ export const N8nSendMessageResponseSchema = z.object({
   providerMessageId: z.string().min(1).max(200),
 });
 export type N8nSendMessageResponse = z.infer<typeof N8nSendMessageResponseSchema>;
+
+/** Secretos write-only: omitir un campo conserva su valor actual. */
+export const ConfigureWhatsAppRequestSchema = z
+  .object({
+    accessToken: z.string().trim().min(1).max(4096).optional(),
+    appSecret: z.string().trim().min(16).max(256).optional(),
+    verifyToken: z.string().trim().min(24).max(256).optional(),
+    aiEnabled: z.boolean().optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, { message: 'Indica una configuración' });
+export type ConfigureWhatsAppRequest = z.infer<typeof ConfigureWhatsAppRequestSchema>;
+export const N8nAiReplyResponseSchema = z.object({ text: MessageTextSchema });

@@ -57,7 +57,7 @@ export function ConversationActions({
   if (available.release) {
     buttons.push({
       key: 'release',
-      label: 'Liberar a IA',
+      label: 'Liberar',
       input: { command: 'release', controlVersion },
     });
   }

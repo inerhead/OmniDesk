@@ -1,3 +1,4 @@
+import { WhatsAppCloudProvider } from '../../whatsapp/whatsapp-cloud-provider';
 import { Inject, Injectable } from '@nestjs/common';
 import {
   CHANNEL_REPOSITORY,
@@ -30,6 +31,7 @@ export class ChannelMessagingProviderRegistry implements MessagingProviderRegist
     @Inject(CHANNEL_REPOSITORY) private readonly channels: ChannelRepository,
     private readonly simulated: SimulatedMessagingProvider,
     private readonly n8n: N8nMessagingProvider,
+    private readonly whatsapp: WhatsAppCloudProvider,
   ) {}
 
   async resolve(
@@ -41,6 +43,8 @@ export class ChannelMessagingProviderRegistry implements MessagingProviderRegist
     switch (channel.provider) {
       case 'SIMULATED':
         return { provider: this.simulated, channel };
+      case 'WHATSAPP_CLOUD':
+        return { provider: this.whatsapp, channel };
       case 'N8N':
         return { provider: this.n8n, channel };
       default:

@@ -49,6 +49,7 @@ import { PrismaConversationRepository } from './infrastructure/prisma-conversati
     FindOutboundForSendUseCase,
   ],
   exports: [
+    CONVERSATION_REPOSITORY,
     CONVERSATION_READ_MODEL,
     ReleaseConversationUseCase,
     RegisterInboundMessageUseCase,

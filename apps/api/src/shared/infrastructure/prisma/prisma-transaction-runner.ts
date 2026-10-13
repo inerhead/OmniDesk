@@ -20,9 +20,12 @@ export class PrismaDb {
 export class PrismaTransactionRunner implements TransactionRunner {
   constructor(private readonly prisma: PrismaService) {}
 
-  run<T>(work: () => Promise<T>): Promise<T> {
+  run<T>(work: () => Promise<T>, options?: { timeoutMs: number }): Promise<T> {
     if (activeTransaction.getStore()) return work();
-    return this.prisma.$transaction((tx) => activeTransaction.run(tx, work));
+    return this.prisma.$transaction(
+      (tx) => activeTransaction.run(tx, work),
+      options ? { timeout: options.timeoutMs } : undefined,
+    );
   }
 
   runDetached<T>(work: () => Promise<T>): Promise<T> {

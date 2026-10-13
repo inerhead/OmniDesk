@@ -1,3 +1,4 @@
+import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { Module } from '@nestjs/common';
 import { ChannelsModule } from '../channels/channels.module';
 import { ConversationsModule } from '../conversations/conversations.module';
@@ -9,7 +10,7 @@ import { SimulatedMessagingProvider } from './infrastructure/simulated-messaging
 
 /** Envío saliente: un adaptador por `Channel.provider` (arquitectura §13), elegido por el registro. */
 @Module({
-  imports: [ConversationsModule, ChannelsModule],
+  imports: [ConversationsModule, ChannelsModule, WhatsAppModule],
   providers: [
     SimulatedMessagingProvider,
     N8nMessagingProvider,

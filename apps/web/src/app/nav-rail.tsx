@@ -8,10 +8,8 @@ import { Tooltip } from '@/shared/ui/tooltip';
 import { NAV_ITEMS } from './nav-items';
 import { publicAsset } from '@/shared/config/env';
 
-/** Rail vertical de 64 px (≥ md): canales arriba; estado, conexión, instalar y usuario abajo. */
+/** Rail vertical de 64 px (≥ md): navegación y canales arriba; conexión, instalar y usuario abajo. */
 export function NavRail() {
-  const rest = NAV_ITEMS.filter((item) => item.to !== '/conversations');
-
   return (
     <nav
       aria-label="Principal"
@@ -19,8 +17,7 @@ export function NavRail() {
     >
       <img src={publicAsset('logo.svg')} alt="OmniDesk" className="mb-2 size-8" />
       <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-2 overflow-y-auto">
-        <ChannelSwitcher variant="rail" />
-        {rest.map(({ to, label, icon: Icon }) => (
+        {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
           <Tooltip key={to} content={label} side="right">
             <NavLink
               to={to}
@@ -38,6 +35,7 @@ export function NavRail() {
             </NavLink>
           </Tooltip>
         ))}
+        <ChannelSwitcher variant="rail" />
       </div>
       <div className="mt-auto flex flex-col items-center gap-1">
         <ConnectionBadge />

@@ -1,4 +1,4 @@
-import type { Inbox } from '@omnidesk/contracts';
+import type { Inbox, InboxChannel } from '@omnidesk/contracts';
 import {
   Archive,
   Bot,
@@ -15,12 +15,12 @@ import { Button } from '@/shared/ui/button';
 import { EmptyState } from '@/shared/ui/empty-state';
 import { Skeleton } from '@/shared/ui/skeleton';
 import { useConversations, useInboxChannels } from '../api/use-conversations';
-import { parseChannelId } from '../model/channel-selection';
+import { CHANNEL_TYPE_LABEL, parseChannelId } from '../model/channel-selection';
 import { formatListTime } from '../model/format-time';
 import { EMPTY_INBOX_MESSAGE, parseInbox, visibleInboxes } from '../model/inbox';
 import { normalizeSearch } from '../model/search';
 import { contactLabel } from '../model/to-bubble-view';
-import { ChannelSwitcher } from './channel-switcher';
+import { ChannelDot, ChannelSwitcher } from './channel-switcher';
 import { ConversationSearch } from './conversation-search';
 import { InboxTabs } from './inbox-tabs';
 import { StatusChip } from './status-chip';
@@ -60,8 +60,8 @@ export function ConversationList() {
   const channelId = parseChannelId(searchParams.get('channel'));
   const channels = useInboxChannels();
   const items = channels.data?.items ?? [];
-  const selected = items.find((channel) => channel.id === channelId);
-  const title = selected?.name ?? (items.length === 1 ? items[0]!.name : 'Conversaciones');
+  const multiChannel = items.length > 1;
+  const current = multiChannel ? items.find((channel) => channel.id === channelId) : items[0];
   const conversations = useConversations(inbox, q, channelId);
 
   if (actorLoading) return <ListSkeleton />;
@@ -86,7 +86,7 @@ export function ConversationList() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="bg-background flex shrink-0 flex-col gap-3 border-b px-4 pt-4 pb-3">
-        <h1 className="truncate text-lg font-semibold tracking-tight">{title}</h1>
+        <ListHeading channel={current} multiChannel={multiChannel} />
         <div className="md:hidden">
           <ChannelSwitcher variant="bar" />
         </div>
@@ -104,9 +104,32 @@ export function ConversationList() {
           inbox={inbox}
           q={q}
           search={search}
-          showChannel={!selected && items.length > 1}
+          showChannel={multiChannel && !current}
         />
       </div>
+    </div>
+  );
+}
+
+/** Qué canal se está viendo: su nombre y tipo, o «Todos los canales». */
+function ListHeading({
+  channel,
+  multiChannel,
+}: {
+  channel: InboxChannel | undefined;
+  multiChannel: boolean;
+}) {
+  const title = channel?.name ?? (multiChannel ? 'Todos los canales' : 'Conversaciones');
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <h1 className="truncate text-lg leading-tight font-semibold tracking-tight">{title}</h1>
+      {(channel || multiChannel) && (
+        <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
+          {channel && multiChannel && <ChannelDot channelId={channel.id} />}
+          Conversaciones
+          {channel && ` · ${CHANNEL_TYPE_LABEL[channel.type]}`}
+        </p>
+      )}
     </div>
   );
 }
@@ -197,12 +220,16 @@ function ListBody({
                   </span>
                   <span className="flex items-center justify-between gap-2">
                     <span className="text-muted-foreground truncate text-sm">
-                      {showChannel
-                        ? `${conversation.channel.name} · ${conversation.lastMessagePreview}`
-                        : conversation.lastMessagePreview}
+                      {conversation.lastMessagePreview}
                     </span>
                     <StatusChip conversation={conversation} />
                   </span>
+                  {showChannel && (
+                    <span className="text-muted-foreground flex min-w-0 items-center gap-1.5 text-xs">
+                      <ChannelDot channelId={conversation.channel.id} />
+                      <span className="truncate">{conversation.channel.name}</span>
+                    </span>
+                  )}
                 </span>
               </NavLink>
             </li>

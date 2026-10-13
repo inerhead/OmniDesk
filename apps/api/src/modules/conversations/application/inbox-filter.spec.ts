@@ -23,6 +23,14 @@ describe('inboxFilter', () => {
     expect(() => inboxFilter(laura, 'all')).toThrow(InboxForbiddenError);
   });
 
+  it('channelId se combina con la bandeja', () => {
+    expect(inboxFilter(laura, 'ai', undefined, 'canal-1')).toEqual({
+      status: 'OPEN',
+      assignedAgentId: null,
+      channelId: 'canal-1',
+    });
+  });
+
   it('closed: todas las cerradas para OWNER/ADMIN y solo las suyas para un AGENT', () => {
     expect(inboxFilter(owner, 'closed')).toEqual({ status: 'CLOSED' });
     expect(inboxFilter(laura, 'closed')).toEqual({ status: 'CLOSED', assignedAgentId: 'laura' });

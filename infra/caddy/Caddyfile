@@ -12,7 +12,7 @@
 	redir / /omnidesk/ 301
 	redir /omnidesk /omnidesk/ 301
 
-	# En omnidesk.gastromesa.com el API se publica en /api (sin el prefijo /omnidesk).
+	# También acepta /api directo (localhost). En www el túnel solo reenvía /omnidesk.
 	handle /api/* {
 		reverse_proxy api:5001
 	}

@@ -11,16 +11,19 @@ export function InboxTabs({
   inboxes,
   active,
   q,
+  channelId,
 }: {
   inboxes: Inbox[];
   active: Inbox;
   q: string | undefined;
+  channelId: string | undefined;
 }) {
   const { pathname } = useLocation();
   const searchFor = (inbox: Inbox) => {
     const params = new URLSearchParams();
     if (inbox !== 'ai') params.set('inbox', inbox);
     if (q) params.set('q', q);
+    if (channelId) params.set('channel', channelId);
     const search = params.toString();
     return search ? `?${search}` : '';
   };

@@ -30,6 +30,8 @@ export const ListConversationsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(30),
   /** Nombre del contacto o teléfono; se recorta. Vacío = sin filtro. */
   q: z.string().trim().min(2).max(100).optional(),
+  /** Si viene, solo conversaciones de ese canal. Ausente = todos los canales. */
+  channelId: z.uuid().optional(),
 });
 export type ListConversationsQuery = z.infer<typeof ListConversationsQuerySchema>;
 

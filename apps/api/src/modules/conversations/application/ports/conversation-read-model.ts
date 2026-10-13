@@ -38,6 +38,8 @@ export interface ConversationFilter {
   status: ConversationStatus;
   assignedAgentId?: string | null;
   search?: ConversationSearch;
+  /** Solo conversaciones de este canal. */
+  channelId?: string;
 }
 
 /** Evento ya resuelto con los nombres de actor y destino, para la línea de tiempo. */

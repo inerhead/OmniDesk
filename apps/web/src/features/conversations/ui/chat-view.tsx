@@ -153,7 +153,7 @@ export function ChatView({ conversationId }: { conversationId: string }) {
               <>
                 <p className="truncate font-semibold">{contactName}</p>
                 <p className="text-muted-foreground truncate text-xs tabular-nums">
-                  {summary.contact.externalId}
+                  {summary.channel.name} · {summary.contact.externalId}
                 </p>
               </>
             ) : (

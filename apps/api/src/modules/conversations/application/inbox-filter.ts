@@ -25,13 +25,21 @@ export function conversationSearch(q: string | undefined): ConversationSearch | 
  * Filtro de cada bandeja (docs/specs/04). Lanza `InboxForbiddenError` si el rol no puede verla.
  * - ai: abiertas sin agente · mine: abiertas asignadas al actor · all: abiertas (OWNER/ADMIN)
  * - closed: cerradas; un AGENT solo las que tienen su `assignedAgentId`.
- * `q` se combina con `AND` con la bandeja y los permisos.
+ * `q` y `channelId` se combinan con `AND` con la bandeja y los permisos.
  */
-export function inboxFilter(actor: ActorContext, inbox: Inbox, q?: string): ConversationFilter {
+export function inboxFilter(
+  actor: ActorContext,
+  inbox: Inbox,
+  q?: string,
+  channelId?: string,
+): ConversationFilter {
   if (!canViewInbox(actor, inbox)) throw new InboxForbiddenError();
   const search = conversationSearch(q);
-  const filter = byInbox(actor, inbox);
-  return search ? { ...filter, search } : filter;
+  return {
+    ...byInbox(actor, inbox),
+    ...(search && { search }),
+    ...(channelId && { channelId }),
+  };
 }
 
 function byInbox(actor: ActorContext, inbox: Inbox): ConversationFilter {

@@ -71,6 +71,13 @@ describe('ListConversationsQuerySchema inbox', () => {
   it('rechaza una bandeja desconocida', () => {
     expect(ListConversationsQuerySchema.safeParse({ inbox: 'otra' }).success).toBe(false);
   });
+
+  it('acepta un channelId uuid y lo omite si no viene', () => {
+    const channelId = '0199c0de-0000-7000-8000-0000000000aa';
+    expect(ListConversationsQuerySchema.parse({}).channelId).toBeUndefined();
+    expect(ListConversationsQuerySchema.parse({ channelId }).channelId).toBe(channelId);
+    expect(ListConversationsQuerySchema.safeParse({ channelId: 'no' }).success).toBe(false);
+  });
 });
 
 describe('comandos de conversación', () => {

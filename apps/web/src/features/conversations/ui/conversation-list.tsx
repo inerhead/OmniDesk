@@ -14,11 +14,13 @@ import { Avatar } from '@/shared/ui/avatar';
 import { Button } from '@/shared/ui/button';
 import { EmptyState } from '@/shared/ui/empty-state';
 import { Skeleton } from '@/shared/ui/skeleton';
-import { useConversations } from '../api/use-conversations';
+import { useConversations, useInboxChannels } from '../api/use-conversations';
+import { parseChannelId } from '../model/channel-selection';
 import { formatListTime } from '../model/format-time';
 import { EMPTY_INBOX_MESSAGE, parseInbox, visibleInboxes } from '../model/inbox';
 import { normalizeSearch } from '../model/search';
 import { contactLabel } from '../model/to-bubble-view';
+import { ChannelSwitcher } from './channel-switcher';
 import { ConversationSearch } from './conversation-search';
 import { InboxTabs } from './inbox-tabs';
 import { StatusChip } from './status-chip';
@@ -55,7 +57,12 @@ export function ConversationList() {
   const { search } = useLocation();
   const inbox = actor ? parseInbox(searchParams.get('inbox'), actor.role) : 'ai';
   const q = normalizeSearch(searchParams.get('q') ?? '');
-  const conversations = useConversations(inbox, q);
+  const channelId = parseChannelId(searchParams.get('channel'));
+  const channels = useInboxChannels();
+  const items = channels.data?.items ?? [];
+  const selected = items.find((channel) => channel.id === channelId);
+  const title = selected?.name ?? (items.length === 1 ? items[0]!.name : 'Conversaciones');
+  const conversations = useConversations(inbox, q, channelId);
 
   if (actorLoading) return <ListSkeleton />;
 
@@ -79,12 +86,26 @@ export function ConversationList() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="bg-background flex shrink-0 flex-col gap-3 border-b px-4 pt-4 pb-3">
-        <h1 className="text-lg font-semibold tracking-tight">Conversaciones</h1>
+        <h1 className="truncate text-lg font-semibold tracking-tight">{title}</h1>
+        <div className="md:hidden">
+          <ChannelSwitcher variant="bar" />
+        </div>
         <ConversationSearch />
-        <InboxTabs inboxes={visibleInboxes(actor.role)} active={inbox} q={q} />
+        <InboxTabs
+          inboxes={visibleInboxes(actor.role)}
+          active={inbox}
+          q={q}
+          channelId={channelId}
+        />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <ListBody conversations={conversations} inbox={inbox} q={q} search={search} />
+        <ListBody
+          conversations={conversations}
+          inbox={inbox}
+          q={q}
+          search={search}
+          showChannel={!selected && items.length > 1}
+        />
       </div>
     </div>
   );
@@ -95,11 +116,13 @@ function ListBody({
   inbox,
   q,
   search,
+  showChannel,
 }: {
   conversations: ReturnType<typeof useConversations>;
   inbox: Inbox;
   q: string | undefined;
   search: string;
+  showChannel: boolean;
 }) {
   if (conversations.isPending) return <ListSkeleton />;
 
@@ -174,7 +197,9 @@ function ListBody({
                   </span>
                   <span className="flex items-center justify-between gap-2">
                     <span className="text-muted-foreground truncate text-sm">
-                      {conversation.lastMessagePreview}
+                      {showChannel
+                        ? `${conversation.channel.name} · ${conversation.lastMessagePreview}`
+                        : conversation.lastMessagePreview}
                     </span>
                     <StatusChip conversation={conversation} />
                   </span>

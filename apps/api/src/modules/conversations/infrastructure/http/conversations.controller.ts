@@ -132,6 +132,7 @@ export class ConversationsController {
         query.cursor,
         query.limit,
         query.q,
+        query.channelId,
       );
       return { items: page.items.map(toSummaryDto), nextCursor: page.nextCursor };
     } catch (error) {

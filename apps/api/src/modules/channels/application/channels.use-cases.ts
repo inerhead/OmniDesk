@@ -38,6 +38,20 @@ export class WebhookUrlValidator {
   }
 }
 
+/** Canales que cualquier miembro elige en la bandeja: solo id, nombre y tipo. */
+@Injectable()
+export class ListInboxChannelsUseCase {
+  constructor(
+    @Inject(CHANNEL_REPOSITORY) private readonly channels: ChannelRepository,
+    @Inject(CLOCK) private readonly clock: Clock,
+  ) {}
+
+  async execute(actor: ActorContext): Promise<Array<Pick<ChannelSummary, 'id' | 'name' | 'type'>>> {
+    const items = await this.channels.listSummaries(actor.tenantId, this.clock.now());
+    return items.map(({ id, name, type }) => ({ id, name, type }));
+  }
+}
+
 @Injectable()
 export class ListChannelsUseCase {
   constructor(

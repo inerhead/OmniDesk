@@ -27,6 +27,19 @@ export type Channel = z.infer<typeof ChannelSchema>;
 export const ListChannelsResponseSchema = z.object({ items: z.array(ChannelSchema) });
 export type ListChannelsResponse = z.infer<typeof ListChannelsResponseSchema>;
 
+/** Canal que cualquier miembro puede elegir en la bandeja (`GET /api/v1/channels/inbox`). */
+export const InboxChannelSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  type: ChannelTypeSchema,
+});
+export type InboxChannel = z.infer<typeof InboxChannelSchema>;
+
+export const ListInboxChannelsResponseSchema = z.object({
+  items: z.array(InboxChannelSchema),
+});
+export type ListInboxChannelsResponse = z.infer<typeof ListInboxChannelsResponseSchema>;
+
 const ChannelNameSchema = z.string().trim().min(1).max(80);
 
 /** `POST /api/v1/channels` */

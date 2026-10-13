@@ -28,11 +28,13 @@ import {
   ChannelTestResponseSchema,
   CreateChannelRequestSchema,
   ListChannelsResponseSchema,
+  ListInboxChannelsResponseSchema,
   UpdateChannelRequestSchema,
   type Channel,
   type ChannelCredentialsResponse,
   type ChannelTestResponse,
   type ListChannelsResponse,
+  type ListInboxChannelsResponse,
 } from '@omnidesk/contracts';
 import { createZodDto } from 'nestjs-zod';
 import { ENV, type Env } from '../../../../shared/config/env';
@@ -45,6 +47,7 @@ import {
   CreateChannelUseCase,
   IssueChannelCredentialsUseCase,
   ListChannelsUseCase,
+  ListInboxChannelsUseCase,
   TestChannelConnectionUseCase,
   UpdateChannelUseCase,
 } from '../../application/channels.use-cases';
@@ -53,6 +56,7 @@ import { WEBHOOK_URL_MESSAGES, type WebhookUrlCheck } from '../../domain/channel
 
 class ChannelDto extends createZodDto(ChannelSchema) {}
 class ListChannelsResponseDto extends createZodDto(ListChannelsResponseSchema) {}
+class ListInboxChannelsResponseDto extends createZodDto(ListInboxChannelsResponseSchema) {}
 class CreateChannelRequestDto extends createZodDto(CreateChannelRequestSchema) {}
 class UpdateChannelRequestDto extends createZodDto(UpdateChannelRequestSchema) {}
 class ChannelCredentialsResponseDto extends createZodDto(ChannelCredentialsResponseSchema) {}
@@ -93,11 +97,21 @@ export class ChannelsController {
   constructor(
     @Inject(ENV) private readonly env: Env,
     private readonly listChannels: ListChannelsUseCase,
+    private readonly listInboxChannels: ListInboxChannelsUseCase,
     private readonly createChannel: CreateChannelUseCase,
     private readonly updateChannel: UpdateChannelUseCase,
     private readonly issueCredentials: IssueChannelCredentialsUseCase,
     private readonly testConnection: TestChannelConnectionUseCase,
   ) {}
+
+  @Get('inbox')
+  @ApiOkResponse({
+    type: ListInboxChannelsResponseDto.Output,
+    description: 'Id, nombre y tipo. Cualquier miembro de la empresa.',
+  })
+  async inbox(@Actor() actor: ActorContext): Promise<ListInboxChannelsResponse> {
+    return { items: await this.listInboxChannels.execute(actor) };
+  }
 
   @Get()
   @ApiOkResponse({ type: ListChannelsResponseDto.Output, description: 'Sin secretos.' })

@@ -3,7 +3,12 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useCurrentActor } from '@/features/auth/api/use-current-actor';
 import { ApiHttpError } from '@/shared/api/http-client';
 import { backupPollingInterval, useConnectionStatus } from '@/shared/realtime/connection-status';
-import { fetchConversation, fetchConversations, fetchTimeline } from './conversations-api';
+import {
+  fetchConversation,
+  fetchConversations,
+  fetchInboxChannels,
+  fetchTimeline,
+} from './conversations-api';
 
 // Con el socket conectado los eventos invalidan las queries; si no, hay un polling de respaldo.
 // Las claves empiezan por 'conversations' / 'timeline' para que `RealtimeProvider` las invalide por prefijo.
@@ -11,18 +16,34 @@ import { fetchConversation, fetchConversations, fetchTimeline } from './conversa
 export const conversationDetailKey = (actorId: string | undefined, conversationId: string) =>
   ['conversations', actorId, 'detail', conversationId] as const;
 
+/** Canales que el miembro puede atender. No incluye secretos. */
+export function useInboxChannels() {
+  const { actor } = useCurrentActor();
+  return useQuery({
+    queryKey: ['inbox-channels', actor?.id],
+    queryFn: fetchInboxChannels,
+    enabled: actor !== null,
+  });
+}
+
 /** `q` ya normalizado (`normalizeSearch`); sin `q`, la bandeja completa. */
-export function useConversations(inbox: Inbox, q: string | undefined) {
+export function useConversations(
+  inbox: Inbox,
+  q: string | undefined,
+  channelId: string | undefined,
+) {
   const { actor } = useCurrentActor();
   const connection = useConnectionStatus();
   return useInfiniteQuery({
-    queryKey: ['conversations', actor?.id, 'list', inbox, q ?? ''],
-    queryFn: ({ pageParam }) => fetchConversations(inbox, q, pageParam),
+    queryKey: ['conversations', actor?.id, 'list', inbox, q ?? '', channelId ?? ''],
+    queryFn: ({ pageParam }) => fetchConversations(inbox, q, channelId, pageParam),
     enabled: actor !== null,
     // Al escribir en el buscador se mantiene la lista anterior hasta tener resultados; al cambiar
-    // de bandeja o de actor, no: se ven los skeletons.
+    // de bandeja, canal o actor, no: se ven los skeletons.
     placeholderData: (previous, previousQuery) =>
-      previousQuery?.queryKey[1] === actor?.id && previousQuery?.queryKey[3] === inbox
+      previousQuery?.queryKey[1] === actor?.id &&
+      previousQuery?.queryKey[3] === inbox &&
+      previousQuery?.queryKey[5] === (channelId ?? '')
         ? previous
         : undefined,
     initialPageParam: undefined as string | undefined,

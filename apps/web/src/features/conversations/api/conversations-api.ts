@@ -2,22 +2,36 @@ import {
   ConversationSummarySchema,
   ConversationCommandRejectedSchema,
   ListConversationsResponseSchema,
+  ListInboxChannelsResponseSchema,
   ListTimelineResponseSchema,
   SendAgentMessageResponseSchema,
   type ConversationSummary,
   type Inbox,
   type ListConversationsResponse,
+  type ListInboxChannelsResponse,
   type ListTimelineResponse,
   type Message,
 } from '@omnidesk/contracts';
 import { ApiHttpError, getJson, postJson } from '@/shared/api/http-client';
 
+export async function fetchInboxChannels(): Promise<ListInboxChannelsResponse> {
+  const { status, body } = await getJson('/api/v1/channels/inbox');
+  if (status !== 200) throw new ApiHttpError(status);
+  return ListInboxChannelsResponseSchema.parse(body);
+}
+
 export async function fetchConversations(
   inbox: Inbox,
   q: string | undefined,
+  channelId: string | undefined,
   cursor?: string,
 ): Promise<ListConversationsResponse> {
-  const query = new URLSearchParams({ inbox, ...(q && { q }), ...(cursor && { cursor }) });
+  const query = new URLSearchParams({
+    inbox,
+    ...(q && { q }),
+    ...(channelId && { channelId }),
+    ...(cursor && { cursor }),
+  });
   const { status, body } = await getJson(`/api/v1/conversations?${query}`);
   if (status !== 200) throw new ApiHttpError(status);
   return ListConversationsResponseSchema.parse(body);

@@ -77,6 +77,7 @@ export class PrismaConversationReadModel implements ConversationReadModel {
         tenantId,
         status: filter.status,
         ...(filter.assignedAgentId !== undefined && { assignedAgentId: filter.assignedAgentId }),
+        ...(filter.channelId && { channelId: filter.channelId }),
         ...(filter.search && { contact: searchWhere(filter.search) }),
         ...(after && {
           OR: [

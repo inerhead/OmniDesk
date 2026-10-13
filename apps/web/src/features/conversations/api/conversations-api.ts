@@ -1,12 +1,14 @@
 import {
   ConversationSummarySchema,
   ConversationCommandRejectedSchema,
+  InboxCountsResponseSchema,
   ListConversationsResponseSchema,
   ListInboxChannelsResponseSchema,
   ListTimelineResponseSchema,
   SendAgentMessageResponseSchema,
   type ConversationSummary,
   type Inbox,
+  type InboxCountsResponse,
   type ListConversationsResponse,
   type ListInboxChannelsResponse,
   type ListTimelineResponse,
@@ -35,6 +37,16 @@ export async function fetchConversations(
   const { status, body } = await getJson(`/api/v1/conversations?${query}`);
   if (status !== 200) throw new ApiHttpError(status);
   return ListConversationsResponseSchema.parse(body);
+}
+
+/** Conversaciones por bandeja (sin `closed`); `all` solo para OWNER/ADMIN. */
+export async function fetchInboxCounts(
+  channelId: string | undefined,
+): Promise<InboxCountsResponse> {
+  const query = new URLSearchParams(channelId ? { channelId } : {});
+  const { status, body } = await getJson(`/api/v1/conversations/counts?${query}`);
+  if (status !== 200) throw new ApiHttpError(status);
+  return InboxCountsResponseSchema.parse(body);
 }
 
 /** Lanza `ApiHttpError(404)` si la conversación no existe o el actor no puede verla. */

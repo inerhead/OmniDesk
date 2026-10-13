@@ -27,6 +27,7 @@ import {
 import type {
   ConversationCommandResponse,
   ConversationSummary as ConversationSummaryResponse,
+  InboxCountsResponse,
   ListConversationsResponse,
   ListMessagesResponse,
   ListTimelineResponse,
@@ -40,6 +41,7 @@ import { Actor } from '../../../../shared/infrastructure/http/request-context.de
 import { SessionGuard } from '../../../identity/infrastructure/http/session.guard';
 import { AssignConversationUseCase } from '../../application/assign-conversation.use-case';
 import { CloseConversationUseCase } from '../../application/close-conversation.use-case';
+import { CountInboxesUseCase } from '../../application/count-inboxes.use-case';
 import { InvalidCursorError } from '../../application/conversation-cursor';
 import type { CommandResult } from '../../application/conversation-command-runner';
 import type { ConversationSummary } from '../../application/conversation-summary';
@@ -59,6 +61,8 @@ import {
   ConversationCommandRequestDto,
   ConversationCommandResponseDto,
   ConversationSummaryDto,
+  InboxCountsQueryDto,
+  InboxCountsResponseDto,
   ListConversationsQueryDto,
   ListConversationsResponseDto,
   ListMessagesQueryDto,
@@ -105,6 +109,7 @@ function toMessageDto(message: Message): MessageResponse {
 export class ConversationsController {
   constructor(
     private readonly listConversations: ListConversationsUseCase,
+    private readonly countInboxes: CountInboxesUseCase,
     private readonly listMessages: ListMessagesUseCase,
     private readonly listTimeline: ListTimelineUseCase,
     private readonly getSummary: GetConversationSummaryUseCase,
@@ -140,6 +145,19 @@ export class ConversationsController {
       if (error instanceof InboxForbiddenError) throw new ForbiddenException(error.message);
       throw error;
     }
+  }
+
+  /** Antes de `:id`: si no, `counts` se tomaría por un id. */
+  @Get('counts')
+  @ApiOkResponse({
+    type: InboxCountsResponseDto.Output,
+    description: 'Conversaciones por bandeja; `all` solo para OWNER/ADMIN.',
+  })
+  counts(
+    @Actor() actor: ActorContext,
+    @Query() query: InboxCountsQueryDto,
+  ): Promise<InboxCountsResponse> {
+    return this.countInboxes.execute(actor, query.channelId);
   }
 
   @Get(':id')

@@ -276,6 +276,54 @@ describe('Identidad y tenancy (e2e)', () => {
       }
     });
 
+    it('GET /conversations/counts cuenta por bandeja con los permisos del rol y el canal', async () => {
+      const company = await newCompany();
+      const key = `e2e-counts-key-${randomUUID()}`;
+      const channel = await prisma.channel.create({
+        data: {
+          tenantId: company.tenantId,
+          name: 'WhatsApp Conteo',
+          type: 'WHATSAPP',
+          provider: 'N8N',
+          externalId: `counts-${unique()}`,
+        },
+      });
+      await prisma.integrationCredential.create({
+        data: { tenantId: company.tenantId, channelId: channel.id, keyHash: sha256Hex(key) },
+      });
+      const agent = await join(company.client, 'AGENT');
+
+      const inbound = [];
+      for (let index = 0; index < 3; index++) {
+        const res = await http()
+          .post('/api/v1/integrations/messages/inbound')
+          .set('Authorization', `Bearer ${key}`)
+          .send({
+            externalMessageId: randomUUID(),
+            from: { externalId: phone(), displayName: 'Cliente' },
+            text: 'Hola',
+            sentAt: new Date().toISOString(),
+          })
+          .expect(201);
+        inbound.push(res.body as { conversationId: string; controlVersion: number });
+      }
+      await company.client
+        .post(`/api/v1/conversations/${inbound[0]!.conversationId}/assign`, {
+          memberId: agent.memberId,
+          controlVersion: inbound[0]!.controlVersion,
+        })
+        .expect(200);
+
+      const owner = await company.client.get('/api/v1/conversations/counts').expect(200);
+      expect(owner.body).toEqual({ ai: 2, mine: 0, all: 3 });
+      const mine = await agent.client.get('/api/v1/conversations/counts').expect(200);
+      expect(mine.body).toEqual({ ai: 2, mine: 1 });
+      const other = await company.client
+        .get(`/api/v1/conversations/counts?channelId=${randomUUID()}`)
+        .expect(200);
+      expect(other.body).toEqual({ ai: 0, mine: 0, all: 0 });
+    });
+
     it('cambia de empresa activa y la bandeja muestra solo la nueva', async () => {
       const { client, tenantId: first } = await newCompany();
       const second = (

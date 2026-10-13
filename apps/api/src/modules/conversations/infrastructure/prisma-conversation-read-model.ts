@@ -62,6 +62,16 @@ function searchWhere({ name, phoneDigits }: ConversationSearch): Prisma.ContactW
   };
 }
 
+function filterWhere(tenantId: string, filter: ConversationFilter): Prisma.ConversationWhereInput {
+  return {
+    tenantId,
+    status: filter.status,
+    ...(filter.assignedAgentId !== undefined && { assignedAgentId: filter.assignedAgentId }),
+    ...(filter.channelId && { channelId: filter.channelId }),
+    ...(filter.search && { contact: searchWhere(filter.search) }),
+  };
+}
+
 @Injectable()
 export class PrismaConversationReadModel implements ConversationReadModel {
   constructor(private readonly db: PrismaDb) {}
@@ -74,11 +84,7 @@ export class PrismaConversationReadModel implements ConversationReadModel {
   ): Promise<ConversationSummaryView[]> {
     const rows = await this.db.client.conversation.findMany({
       where: {
-        tenantId,
-        status: filter.status,
-        ...(filter.assignedAgentId !== undefined && { assignedAgentId: filter.assignedAgentId }),
-        ...(filter.channelId && { channelId: filter.channelId }),
-        ...(filter.search && { contact: searchWhere(filter.search) }),
+        ...filterWhere(tenantId, filter),
         ...(after && {
           OR: [
             { lastMessageAt: { lt: after.lastMessageAt } },
@@ -91,6 +97,10 @@ export class PrismaConversationReadModel implements ConversationReadModel {
       select: summarySelect,
     });
     return rows.map(toSummaryView);
+  }
+
+  countConversations(tenantId: string, filter: ConversationFilter): Promise<number> {
+    return this.db.client.conversation.count({ where: filterWhere(tenantId, filter) });
   }
 
   async getSummary(

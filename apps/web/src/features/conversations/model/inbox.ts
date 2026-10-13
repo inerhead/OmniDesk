@@ -26,3 +26,9 @@ export const EMPTY_INBOX_MESSAGE: Record<Inbox, string> = {
   all: 'No hay conversaciones abiertas.',
   closed: 'No hay conversaciones cerradas.',
 };
+
+/** Texto del contador de una pestaña: nada en 0 (o sin dato) y "99+" a partir de 100. */
+export function formatInboxCount(count: number | undefined): string | null {
+  if (!count) return null;
+  return count > 99 ? '99+' : String(count);
+}

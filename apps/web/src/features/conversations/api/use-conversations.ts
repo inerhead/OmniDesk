@@ -7,6 +7,7 @@ import {
   fetchConversation,
   fetchConversations,
   fetchInboxChannels,
+  fetchInboxCounts,
   fetchTimeline,
 } from './conversations-api';
 
@@ -48,6 +49,23 @@ export function useConversations(
         : undefined,
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    refetchInterval: backupPollingInterval(connection),
+    refetchIntervalInBackground: false,
+  });
+}
+
+/**
+ * Contadores de las pestañas. Con la clave bajo 'conversations' se refrescan con los mismos eventos
+ * que la lista (mensaje nuevo, tomar, liberar, cerrar). Mientras recarga se ven los anteriores.
+ */
+export function useInboxCounts(channelId: string | undefined) {
+  const { actor } = useCurrentActor();
+  const connection = useConnectionStatus();
+  return useQuery({
+    queryKey: ['conversations', actor?.id, 'counts', channelId ?? ''],
+    queryFn: () => fetchInboxCounts(channelId),
+    enabled: actor !== null,
+    placeholderData: (previous) => previous,
     refetchInterval: backupPollingInterval(connection),
     refetchIntervalInBackground: false,
   });

@@ -67,6 +67,24 @@ export const ListConversationsResponseSchema = z.object({
 });
 export type ListConversationsResponse = z.infer<typeof ListConversationsResponseSchema>;
 
+/** `GET /api/v1/conversations/counts` */
+export const InboxCountsQuerySchema = z.object({
+  /** Si viene, solo conversaciones de ese canal. Ausente = todos los canales. */
+  channelId: z.uuid().optional(),
+});
+export type InboxCountsQuery = z.infer<typeof InboxCountsQuerySchema>;
+
+/**
+ * Conversaciones por bandeja, con los mismos permisos que la lista: `all` solo para OWNER/ADMIN.
+ * `closed` no se cuenta: el histórico solo crece.
+ */
+export const InboxCountsResponseSchema = z.object({
+  ai: z.int().min(0),
+  mine: z.int().min(0),
+  all: z.int().min(0).optional(),
+});
+export type InboxCountsResponse = z.infer<typeof InboxCountsResponseSchema>;
+
 /** `GET /api/v1/conversations/:id/messages` */
 export const ListMessagesQuerySchema = z.object({
   /** Devuelve los mensajes con `sequence` menor. Sin `before`: la página más reciente. */

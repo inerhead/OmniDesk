@@ -14,7 +14,7 @@ import { Avatar } from '@/shared/ui/avatar';
 import { Button } from '@/shared/ui/button';
 import { EmptyState } from '@/shared/ui/empty-state';
 import { Skeleton } from '@/shared/ui/skeleton';
-import { useConversations, useInboxChannels } from '../api/use-conversations';
+import { useConversations, useInboxChannels, useInboxCounts } from '../api/use-conversations';
 import { CHANNEL_TYPE_LABEL, parseChannelId } from '../model/channel-selection';
 import { formatListTime } from '../model/format-time';
 import { EMPTY_INBOX_MESSAGE, parseInbox, visibleInboxes } from '../model/inbox';
@@ -63,6 +63,7 @@ export function ConversationList() {
   const multiChannel = items.length > 1;
   const current = multiChannel ? items.find((channel) => channel.id === channelId) : items[0];
   const conversations = useConversations(inbox, q, channelId);
+  const counts = useInboxCounts(channelId);
 
   if (actorLoading) return <ListSkeleton />;
 
@@ -96,6 +97,7 @@ export function ConversationList() {
           active={inbox}
           q={q}
           channelId={channelId}
+          counts={counts.data}
         />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">

@@ -7,6 +7,7 @@ import { CloseConversationUseCase } from './application/close-conversation.use-c
 import { ConversationCommandRunner } from './application/conversation-command-runner';
 import { FindOutboundForSendUseCase } from './application/find-outbound-for-send.use-case';
 import { GetConversationSummaryUseCase } from './application/get-conversation-summary.use-case';
+import { CountInboxesUseCase } from './application/count-inboxes.use-case';
 import { ListConversationsUseCase } from './application/list-conversations.use-case';
 import { ListMessagesUseCase } from './application/list-messages.use-case';
 import { EVENT_INBOX } from './application/ports/event-inbox';
@@ -35,6 +36,7 @@ import { PrismaConversationRepository } from './infrastructure/prisma-conversati
     RegisterInboundMessageUseCase,
     RegisterAiReplyUseCase,
     ListConversationsUseCase,
+    CountInboxesUseCase,
     ListMessagesUseCase,
     ListTimelineUseCase,
     GetConversationSummaryUseCase,

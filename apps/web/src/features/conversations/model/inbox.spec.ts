@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseInbox, visibleInboxes } from './inbox';
+import { formatInboxCount, parseInbox, visibleInboxes } from './inbox';
 
 describe('visibleInboxes', () => {
   it('OWNER y ADMIN ven las 4 pestañas', () => {
@@ -22,5 +22,18 @@ describe('parseInbox', () => {
     expect(parseInbox(null, 'OWNER')).toBe('ai');
     expect(parseInbox('otra', 'OWNER')).toBe('ai');
     expect(parseInbox('all', 'AGENT')).toBe('ai');
+  });
+});
+
+describe('formatInboxCount', () => {
+  it('sin número en 0 o si aún no se sabe', () => {
+    expect(formatInboxCount(0)).toBeNull();
+    expect(formatInboxCount(undefined)).toBeNull();
+  });
+
+  it('el número tal cual hasta 99 y luego "99+"', () => {
+    expect(formatInboxCount(1)).toBe('1');
+    expect(formatInboxCount(99)).toBe('99');
+    expect(formatInboxCount(100)).toBe('99+');
   });
 });

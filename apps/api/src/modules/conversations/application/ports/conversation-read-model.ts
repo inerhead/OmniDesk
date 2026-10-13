@@ -62,6 +62,8 @@ export interface ConversationReadModel {
     take: number,
   ): Promise<ConversationSummaryView[]>;
   getSummary(tenantId: string, conversationId: string): Promise<ConversationSummaryView | null>;
+  /** Cuántas conversaciones cumplen el filtro (los contadores de las bandejas). */
+  countConversations(tenantId: string, filter: ConversationFilter): Promise<number>;
   /** Conversaciones abiertas asignadas al miembro (para devolverlas a la IA al quitarlo). */
   listAssignedOpen(
     tenantId: string,

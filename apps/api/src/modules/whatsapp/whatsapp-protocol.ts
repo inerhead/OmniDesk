@@ -132,7 +132,9 @@ export function describeWhatsAppWebhook(body: unknown): string {
       ? (entry as { changes: unknown[] }).changes[0]
       : undefined;
   const value =
-    change && typeof change === 'object' ? (change as { field?: unknown; value?: unknown }).value : undefined;
+    change && typeof change === 'object'
+      ? (change as { field?: unknown; value?: unknown }).value
+      : undefined;
   const record = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
   const status = asList(record.statuses)[0];
   const types =

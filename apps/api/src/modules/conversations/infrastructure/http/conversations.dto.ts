@@ -4,6 +4,8 @@ import {
   ConversationSummarySchema,
   ConversationCommandRequestSchema,
   ConversationCommandResponseSchema,
+  InboxCountsQuerySchema,
+  InboxCountsResponseSchema,
   ListConversationsQuerySchema,
   ListConversationsResponseSchema,
   ListMessagesQuerySchema,
@@ -17,6 +19,8 @@ import { createZodDto } from 'nestjs-zod';
 
 export class ListConversationsQueryDto extends createZodDto(ListConversationsQuerySchema) {}
 export class ListConversationsResponseDto extends createZodDto(ListConversationsResponseSchema) {}
+export class InboxCountsQueryDto extends createZodDto(InboxCountsQuerySchema) {}
+export class InboxCountsResponseDto extends createZodDto(InboxCountsResponseSchema) {}
 export class ConversationSummaryDto extends createZodDto(ConversationSummarySchema) {}
 export class ListMessagesQueryDto extends createZodDto(ListMessagesQuerySchema) {}
 export class ListMessagesResponseDto extends createZodDto(ListMessagesResponseSchema) {}

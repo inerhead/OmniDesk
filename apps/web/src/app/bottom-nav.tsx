@@ -2,7 +2,6 @@ import { NavLink } from 'react-router';
 import { UserMenu } from '@/features/auth/ui/user-menu';
 import { cn } from '@/shared/lib/utils';
 import { InstallPrompt } from '@/shared/pwa/install-prompt';
-import { ConnectionBadge } from '@/shared/realtime/connection-badge';
 import { NAV_ITEMS } from './nav-items';
 
 /** Barra inferior en móvil (< md), con los mismos destinos que el rail. */
@@ -27,9 +26,8 @@ export function BottomNav() {
           {label}
         </NavLink>
       ))}
-      <ConnectionBadge side="top" />
       <InstallPrompt side="top" />
-      <UserMenu side="top" />
+      <UserMenu variant="bar" />
     </nav>
   );
 }

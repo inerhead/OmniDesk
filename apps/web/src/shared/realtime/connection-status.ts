@@ -2,6 +2,12 @@ import { useSyncExternalStore } from 'react';
 
 export type ConnectionStatus = 'connecting' | 'live' | 'reconnecting';
 
+export const CONNECTION_LABEL: Record<ConnectionStatus, string> = {
+  live: 'En vivo',
+  reconnecting: 'Reconectando…',
+  connecting: 'Conectando…',
+};
+
 /** Cada cuánto se refresca la bandeja mientras el socket no está conectado. */
 export const BACKUP_POLLING_INTERVAL_MS = 15_000;
 

@@ -51,11 +51,13 @@ function DropdownMenuRadioGroup(props: ComponentProps<typeof DropdownMenuPrimiti
   return <DropdownMenuPrimitive.RadioGroup data-slot="dropdown-menu-radio-group" {...props} />;
 }
 
+/** `indicator="pulse"`: el punto late en bucle, para destacar la opción activa (p. ej. la empresa). */
 function DropdownMenuRadioItem({
   className,
   children,
+  indicator = 'dot',
   ...props
-}: ComponentProps<typeof DropdownMenuPrimitive.RadioItem>) {
+}: ComponentProps<typeof DropdownMenuPrimitive.RadioItem> & { indicator?: 'dot' | 'pulse' }) {
   return (
     <DropdownMenuPrimitive.RadioItem
       data-slot="dropdown-menu-radio-item"
@@ -64,7 +66,14 @@ function DropdownMenuRadioItem({
     >
       <span className="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
         <DropdownMenuPrimitive.ItemIndicator>
-          <CircleIcon className="size-2 fill-current" />
+          {indicator === 'pulse' ? (
+            <span className="relative flex size-2">
+              <span className="bg-primary/60 absolute inset-0 animate-ping rounded-full [animation-duration:1.6s] motion-reduce:animate-none" />
+              <span className="bg-primary relative size-2 rounded-full" />
+            </span>
+          ) : (
+            <CircleIcon className="size-2 fill-current" />
+          )}
         </DropdownMenuPrimitive.ItemIndicator>
       </span>
       {children}

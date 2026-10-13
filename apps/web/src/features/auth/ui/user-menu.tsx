@@ -1,5 +1,6 @@
-import { MessageSquare, LogOut, Monitor, Moon, Plus, Sun, Users } from 'lucide-react';
-import { useNavigate } from 'react-router';
+import { LogOut, Monitor, Moon, Sun } from 'lucide-react';
+import { ConnectionDot } from '@/shared/realtime/connection-badge';
+import { CONNECTION_LABEL, useConnectionStatus } from '@/shared/realtime/connection-status';
 import { setThemePref, parseThemePref, useThemePref } from '@/shared/theme/theme-store';
 import { Avatar } from '@/shared/ui/avatar';
 import {
@@ -14,40 +15,43 @@ import {
 } from '@/shared/ui/dropdown-menu';
 import { Tooltip } from '@/shared/ui/tooltip';
 import { activeMembership, isManagerRole, useMe } from '../api/use-me';
-import { useLogout, useSwitchTenant } from '../api/use-session-actions';
+import { useLogout } from '../api/use-session-actions';
+import { SettingsMenuItems, TenantMenuItems } from './account-menu-items';
 
-const ROLE_LABEL = { OWNER: 'Owner', ADMIN: 'Admin', AGENT: 'Agente' } as const;
-
-/** Menú de usuario del rail: empresa activa, tema, miembros y cerrar sesión. */
-export function UserMenu({ side = 'right' }: { side?: 'right' | 'top' }) {
+/**
+ * Avatar del usuario con el estado de conexión en la esquina; abre tema y cerrar sesión. En el rail,
+ * empresa y ajustes tienen su propio botón; en la barra móvil van dentro de este menú.
+ */
+export function UserMenu({ variant }: { variant: 'rail' | 'bar' }) {
   const { data: me } = useMe();
-  const navigate = useNavigate();
-  const switchTenant = useSwitchTenant();
   const logout = useLogout();
   const theme = useThemePref();
+  const connection = CONNECTION_LABEL[useConnectionStatus()];
   if (!me) return null;
 
+  const side = variant === 'rail' ? 'right' : 'top';
   const membership = activeMembership(me);
-  const label = membership
-    ? `${me.user.displayName} · ${membership.tenantName}`
-    : me.user.displayName;
+  const label = `${me.user.displayName} · ${connection}`;
 
   return (
     <DropdownMenu>
-      <Tooltip content={label} side={side}>
-        <DropdownMenuTrigger
-          aria-label={`Menú de usuario: ${label}`}
-          className="focus-visible:ring-ring/50 rounded-full outline-none focus-visible:ring-[3px]"
-        >
-          <Avatar
-            id={me.user.id}
-            name={me.user.displayName}
-            fallback={me.user.email}
-            imageUrl={me.user.avatarUrl}
-            size="sm"
-          />
-        </DropdownMenuTrigger>
-      </Tooltip>
+      <span className="relative flex">
+        <Tooltip content={label} side={side}>
+          <DropdownMenuTrigger
+            aria-label={`Menú de usuario: ${me.user.displayName}`}
+            className="focus-visible:ring-ring/50 rounded-full outline-none focus-visible:ring-[3px]"
+          >
+            <Avatar
+              id={me.user.id}
+              name={me.user.displayName}
+              fallback={me.user.email}
+              imageUrl={me.user.avatarUrl}
+              size="sm"
+            />
+          </DropdownMenuTrigger>
+        </Tooltip>
+        <ConnectionDot className="ring-sidebar absolute -right-0.5 -bottom-0.5 ring-2" />
+      </span>
       <DropdownMenuContent side={side} align="end" className="w-64">
         <div className="flex items-center gap-3 px-2 py-2">
           <Avatar
@@ -63,43 +67,18 @@ export function UserMenu({ side = 'right' }: { side?: 'right' | 'top' }) {
         </div>
         <DropdownMenuSeparator />
 
-        <DropdownMenuLabel>Empresa</DropdownMenuLabel>
-        <DropdownMenuRadioGroup
-          value={me.activeTenantId ?? ''}
-          onValueChange={(tenantId) => {
-            if (tenantId !== me.activeTenantId) switchTenant.mutate(tenantId);
-          }}
-        >
-          {me.memberships.map((item) => (
-            <DropdownMenuRadioItem
-              key={item.tenantId}
-              value={item.tenantId}
-              disabled={switchTenant.isPending}
-            >
-              <span className="flex min-w-0 flex-col">
-                <span className="truncate">{item.tenantName}</span>
-                <span className="text-muted-foreground text-xs">{ROLE_LABEL[item.role]}</span>
-              </span>
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-        <DropdownMenuItem onSelect={() => void navigate('/onboarding')}>
-          <Plus aria-hidden />
-          Crear empresa
-        </DropdownMenuItem>
-        {membership && isManagerRole(membership.role) && (
-          <DropdownMenuItem onSelect={() => void navigate('/settings/members')}>
-            <Users aria-hidden />
-            Miembros
-          </DropdownMenuItem>
+        {variant === 'bar' && (
+          <>
+            <TenantMenuItems me={me} />
+            <DropdownMenuSeparator />
+            {membership && isManagerRole(membership.role) && (
+              <>
+                <SettingsMenuItems />
+                <DropdownMenuSeparator />
+              </>
+            )}
+          </>
         )}
-        {membership && isManagerRole(membership.role) && (
-          <DropdownMenuItem onSelect={() => void navigate('/settings/channels')}>
-            <MessageSquare aria-hidden />
-            Canales
-          </DropdownMenuItem>
-        )}
-        <DropdownMenuSeparator />
 
         <DropdownMenuLabel>Tema</DropdownMenuLabel>
         <DropdownMenuRadioGroup

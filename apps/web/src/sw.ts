@@ -4,14 +4,16 @@ import { NavigationRoute, registerRoute } from 'workbox-routing';
 
 declare const self: ServiceWorkerGlobalScope;
 
-precacheAndRoute(self.__WB_MANIFEST);
+// Una sola lectura: injectManifest exige que `self.__WB_MANIFEST` aparezca una vez.
+const manifest = self.__WB_MANIFEST;
+precacheAndRoute(manifest);
 cleanupOutdatedCaches();
 
 const base = import.meta.env.BASE_URL;
 const indexUrl = `${base}index.html`;
 // En desarrollo el manifiesto llega vacío. createHandlerBoundToURL lanza y el
 // worker no llega a instalarse, así que el navegador no puede suscribirse.
-const hasAppShell = self.__WB_MANIFEST.some((entry) => {
+const hasAppShell = manifest.some((entry) => {
   const url = typeof entry === 'string' ? entry : entry.url;
   return url === indexUrl || url === 'index.html';
 });

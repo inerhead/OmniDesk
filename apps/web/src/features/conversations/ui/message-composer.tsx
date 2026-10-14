@@ -265,14 +265,13 @@ export function MessageComposer({
   };
 
   const roundAction =
-    'size-11 shrink-0 rounded-full bg-[#25D366] text-white shadow-sm hover:bg-[#1ebe5a] disabled:opacity-50';
-  const circleButton =
-    'border-input bg-background size-11 shrink-0 rounded-full border shadow-xs';
+    'size-9 shrink-0 rounded-full bg-[#25D366] text-white hover:bg-[#1ebe5a] disabled:opacity-50';
+  const circleButton = 'text-muted-foreground size-9 shrink-0 rounded-full';
   const voicing = phase === 'recording' || phase === 'paused' || phase === 'encoding';
 
   return (
     <form
-      className="shrink-0 px-2 pt-2 pb-2 md:px-4"
+      className="shrink-0 px-2 py-1.5 md:px-4"
       onSubmit={(event) => {
         event.preventDefault();
         submit();
@@ -327,7 +326,7 @@ export function MessageComposer({
           </ul>
         </div>
       )}
-      <div className="flex items-end gap-2">
+      <div className="flex items-end gap-1.5">
         {voicing ? (
           <>
             <Button
@@ -342,7 +341,7 @@ export function MessageComposer({
               <Trash2 aria-hidden />
             </Button>
             <div
-              className="border-input bg-background flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-full border px-4 shadow-xs"
+              className="border-input bg-background flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-full border px-3"
               role="status"
             >
               <span
@@ -395,12 +394,12 @@ export function MessageComposer({
               setTrayOpen((open) => !open);
             }}
           >
-            <Plus aria-hidden />
+            <Plus className="size-6" aria-hidden />
           </Button>
         )}
 
         {!voicing && (
-          <div className="border-input bg-background focus-within:border-ring focus-within:ring-ring/40 relative flex min-h-11 flex-1 items-end rounded-3xl border pr-1 pl-4 shadow-xs transition-[color,box-shadow] focus-within:ring-[3px]">
+          <div className="border-input bg-background relative flex min-h-9 flex-1 items-end rounded-full border pr-0.5 pl-3">
             <textarea
               ref={textareaRef}
               value={text}
@@ -408,7 +407,7 @@ export function MessageComposer({
               maxLength={maxLength}
               aria-label={file ? 'Texto del adjunto' : 'Escribe un mensaje'}
               placeholder={file ? 'Añade un texto (opcional)…' : 'Escribe un mensaje'}
-              className="placeholder:text-muted-foreground max-h-40 min-h-11 flex-1 resize-none bg-transparent py-3 text-base outline-none md:text-sm"
+              className="placeholder:text-muted-foreground max-h-40 min-h-9 flex-1 resize-none bg-transparent py-1.5 text-base leading-6 outline-none md:text-sm"
               onChange={(event) => setText(event.target.value)}
               onKeyDown={onKeyDown}
               onFocus={() => setEmojiOpen(false)}
@@ -417,7 +416,7 @@ export function MessageComposer({
               type="button"
               size="icon"
               variant="ghost"
-              className="mb-1 rounded-full"
+              className="text-muted-foreground mb-0.5 size-8 rounded-full"
               aria-label="Emojis"
               aria-expanded={emojiOpen}
               disabled={sending}
@@ -465,7 +464,7 @@ export function MessageComposer({
               aria-label="Grabar audio"
               onClick={() => void startRecording()}
             >
-              <Mic aria-hidden />
+              <Mic className="size-5" aria-hidden />
             </Button>
           ))}
       </div>

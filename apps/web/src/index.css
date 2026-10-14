@@ -10,7 +10,8 @@
   /* En el iPhone el navegador a menudo informa 0. Sin este mínimo la barra y la
      caja de texto quedan encima del indicador de inicio. El teclado lo anula. */
   --safe-bottom: max(2.75rem, env(safe-area-inset-bottom, 0px));
-  --keyboard-lift: 0px;
+  --vv-top: 0px;
+  --vv-height: 100%;
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.21 0.02 270);
@@ -152,13 +153,17 @@ html[data-keyboard] {
     overscroll-behavior: none;
   }
   #root {
-    /* Caja fija al alto útil. Sin viewport-fit=cover el iPhone ya deja el indicador
-       de inicio fuera de la página; un padding ahí se veía como franja vacía. */
+    /* inset, no un alto en %, para que el chat tenga altura real. Si no, la
+       cabecera y la caja de texto se montan arriba. */
     position: fixed;
     inset: 0;
-    bottom: var(--keyboard-lift);
     overflow: hidden;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+  }
+  html[data-keyboard] #root {
+    top: var(--vv-top);
+    height: var(--vv-height);
+    bottom: auto;
   }
 }
 

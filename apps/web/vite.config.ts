@@ -61,7 +61,14 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
     },
-    server: { host: true, port: 5173, strictPort: true, allowedHosts },
+    server: {
+      host: true,
+      port: 5173,
+      strictPort: true,
+      allowedHosts,
+      // El iPhone (Safari y la app del inicio) se queda con la página anterior.
+      headers: { 'Cache-Control': 'no-store' },
+    },
     preview: { host: true, port: 4173, strictPort: true, allowedHosts },
   };
 });

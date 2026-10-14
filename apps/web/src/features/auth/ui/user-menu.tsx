@@ -46,9 +46,12 @@ export function UserMenu({ variant }: { variant: 'rail' | 'bar' }) {
           <DropdownMenuTrigger
             aria-label={`Menú de usuario: ${me.user.displayName}`}
             className={cn(
-              'focus-visible:ring-ring/50 flex size-10 cursor-pointer items-center justify-center rounded-lg transition-colors outline-none focus-visible:ring-[3px]',
+              'focus-visible:ring-ring/50 flex size-10 cursor-pointer items-center justify-center transition-colors outline-none focus-visible:ring-[3px]',
+              variant === 'bar' ? 'rounded-full' : 'rounded-lg',
               inSettings
-                ? 'bg-primary/12 dark:bg-primary/20'
+                ? variant === 'bar'
+                  ? 'bg-muted'
+                  : 'bg-primary/12 dark:bg-primary/20'
                 : 'hover:bg-accent data-[state=open]:bg-accent',
             )}
           >
@@ -61,7 +64,12 @@ export function UserMenu({ variant }: { variant: 'rail' | 'bar' }) {
             />
           </DropdownMenuTrigger>
         </Tooltip>
-        <ConnectionDot className="ring-sidebar absolute right-0.5 bottom-0.5 ring-2" />
+        <ConnectionDot
+          className={cn(
+            'absolute right-0.5 bottom-0.5 ring-2',
+            variant === 'bar' ? 'ring-background' : 'ring-sidebar',
+          )}
+        />
       </span>
       <DropdownMenuContent side={side} align="end" className="w-72">
         <div className="flex items-center gap-3 px-2 py-2">

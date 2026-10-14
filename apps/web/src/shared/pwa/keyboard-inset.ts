@@ -1,22 +1,24 @@
 /**
- * El iPhone no siempre encoge el layout al abrir el teclado. Si ya lo encogió,
- * subir la caja otra vez dejaría un hueco; si no, la caja sigue a pantalla completa
- * y el campo queda tapado o con una franja.
+ * Con el teclado abierto el iPhone a veces encoge el layout y a veces solo desplaza
+ * el viewport. La caja debe ocupar exactamente el rectángulo visible: así la cabecera
+ * sigue arriba y el composer queda pegado al teclado.
  */
-export function keyboardLift(
+export function keyboardFrame(
   baseline: number,
-  innerHeight: number,
   viewportHeight: number,
   viewportOffsetTop: number,
   textFocused: boolean,
-): { lift: number; open: boolean } {
-  // En la PWA del iPhone el viewport visible ya es más bajo que innerHeight
-  // (notch + indicador de inicio). Sin un campo enfocado eso no es el teclado.
-  if (!textFocused) return { lift: 0, open: false };
+): { top: number; height: number | null; open: boolean } {
+  // En la PWA el viewport visible ya es más bajo (notch + indicador). Sin un campo
+  // enfocado eso no es el teclado.
+  if (!textFocused) return { top: 0, height: null, open: false };
   const keyboard = Math.max(0, Math.round(baseline - viewportHeight - viewportOffsetTop));
-  const open = keyboard > 80;
-  const layoutShrunk = innerHeight < baseline - 40;
-  return { lift: open && !layoutShrunk ? keyboard : 0, open };
+  if (keyboard <= 80) return { top: 0, height: null, open: false };
+  return {
+    top: Math.max(0, Math.round(viewportOffsetTop)),
+    height: Math.round(viewportHeight),
+    open: true,
+  };
 }
 
 function editingText(): boolean {
@@ -39,7 +41,7 @@ function editingText(): boolean {
   ].includes(el.type);
 }
 
-/** Sigue al teclado: sube `#root` solo si el viewport de layout no se encogió, y anula el hueco del home indicator. */
+/** Pega `#root` al viewport visible mientras se escribe, y anula el hueco del indicador de inicio. */
 export function bindKeyboardInset(): () => void {
   const viewport = window.visualViewport;
   if (!viewport) return () => undefined;
@@ -49,15 +51,17 @@ export function bindKeyboardInset(): () => void {
   const sync = () => {
     const focused = editingText();
     if (!focused) baseline = Math.max(baseline, window.innerHeight, viewport.height);
-    const { lift, open } = keyboardLift(
+    const { top, height, open } = keyboardFrame(
       baseline,
-      window.innerHeight,
       viewport.height,
       viewport.offsetTop,
       focused,
     );
-    root.style.setProperty('--keyboard-lift', `${lift}px`);
+    root.style.setProperty('--vv-top', `${top}px`);
+    root.style.setProperty('--vv-height', height === null ? '100%' : `${height}px`);
     root.toggleAttribute('data-keyboard', open);
+    // Safari desplaza la página para mostrar el campo y se lleva la cabecera.
+    if (open && window.scrollY !== 0) window.scrollTo(0, 0);
   };
 
   const onOrientation = () => {
@@ -79,7 +83,8 @@ export function bindKeyboardInset(): () => void {
     document.removeEventListener('focusin', sync);
     document.removeEventListener('focusout', sync);
     window.removeEventListener('orientationchange', onOrientation);
-    root.style.removeProperty('--keyboard-lift');
+    root.style.removeProperty('--vv-top');
+    root.style.removeProperty('--vv-height');
     root.removeAttribute('data-keyboard');
   };
 }

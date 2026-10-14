@@ -160,10 +160,12 @@ html[data-keyboard] {
     overflow: hidden;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
   }
+  /* `top` en un fixed no se mueve con el teclado del iPhone; translateY sí. */
   html[data-keyboard] #root {
-    top: var(--vv-top);
-    height: var(--vv-height);
+    top: 0;
     bottom: auto;
+    height: var(--vv-height);
+    transform: translateY(var(--vv-top));
   }
 }
 

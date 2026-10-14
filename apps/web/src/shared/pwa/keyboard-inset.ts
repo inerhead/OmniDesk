@@ -12,7 +12,9 @@ export function keyboardFrame(
   // En la PWA el viewport visible ya es más bajo (notch + indicador). Sin un campo
   // enfocado eso no es el teclado.
   if (!textFocused) return { top: 0, height: null, open: false };
-  const keyboard = Math.max(0, Math.round(baseline - viewportHeight - viewportOffsetTop));
+  // No restar el desplazamiento: en el iPhone el viewport se mueve tanto que esa
+  // resta deja el teclado en cero y la caja sigue flotando.
+  const keyboard = Math.max(0, Math.round(baseline - viewportHeight));
   if (keyboard <= 80) return { top: 0, height: null, open: false };
   return {
     top: Math.max(0, Math.round(viewportOffsetTop)),
@@ -60,8 +62,6 @@ export function bindKeyboardInset(): () => void {
     root.style.setProperty('--vv-top', `${top}px`);
     root.style.setProperty('--vv-height', height === null ? '100%' : `${height}px`);
     root.toggleAttribute('data-keyboard', open);
-    // Safari desplaza la página para mostrar el campo y se lleva la cabecera.
-    if (open && window.scrollY !== 0) window.scrollTo(0, 0);
   };
 
   const onOrientation = () => {

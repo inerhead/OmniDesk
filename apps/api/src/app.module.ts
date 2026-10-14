@@ -1,6 +1,7 @@
 import { DynamicModule, Module } from '@nestjs/common';
 import { APP_PIPE } from '@nestjs/core';
 import { ZodValidationPipe } from 'nestjs-zod';
+import { AttachmentsModule } from './modules/attachments/attachments.module';
 import { ConversationsModule } from './modules/conversations/conversations.module';
 import { DemoModule } from './modules/demo/demo.module';
 import { HealthModule } from './modules/health/health.module';
@@ -32,6 +33,7 @@ export class AppModule {
         MembersModule,
         TeamModule,
         ConversationsModule,
+        AttachmentsModule,
         IntegrationsModule,
         MessagingModule,
         RealtimeModule,

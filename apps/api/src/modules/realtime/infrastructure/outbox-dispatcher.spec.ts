@@ -1,6 +1,8 @@
 import type { RealtimeEvent } from '@omnidesk/contracts';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { PermanentDownloadError } from '../../attachments/domain/attachment-errors';
 import type { TransactionRunner } from '../../../shared/application/transaction-runner.port';
+import type { AttachmentDownloader } from '../application/ports/attachment-downloader';
 import type { OutboxEventStore, PendingOutboxEvent } from '../application/ports/outbox-event-store';
 import type { OutboundMessageSender } from '../application/ports/outbound-message-sender';
 import type { RealtimePublisher } from '../application/ports/realtime-publisher';
@@ -99,6 +101,21 @@ class FakeSender implements OutboundMessageSender {
     this.calls += 1;
     if (this.calls <= this.failures) throw new Error(`proveedor caído (${this.calls})`);
     this.sent.push(payload);
+  }
+
+  async fail(_tenantId: string, payload: unknown, reason: string) {
+    this.failed.push({ payload, reason });
+  }
+}
+
+class FakeDownloader implements AttachmentDownloader {
+  calls = 0;
+  error: Error | null = null;
+  readonly failed: { payload: unknown; reason: string }[] = [];
+
+  async process() {
+    this.calls += 1;
+    if (this.error) throw this.error;
   }
 
   async fail(_tenantId: string, payload: unknown, reason: string) {
@@ -290,6 +307,52 @@ describe('OutboxDispatcher', () => {
 
       expect(store.events).toEqual([recent, pending]);
       expect(store.events).not.toContain(old);
+    });
+  });
+
+  describe('attachment.download_requested', () => {
+    let downloader: FakeDownloader;
+    const downloadEvent = () =>
+      store.add({
+        type: 'attachment.download_requested',
+        payload: {
+          attachmentId: '0199c0de-0000-7000-8000-0000000000f1',
+          channelId: '0199c0de-0000-7000-8000-0000000000c1',
+        },
+      });
+
+    beforeEach(() => {
+      downloader = new FakeDownloader();
+      dispatcher = new OutboxDispatcher(noTransaction, store, publisher, sender, undefined, downloader);
+    });
+
+    it('descarga y cierra el evento', async () => {
+      const event = downloadEvent();
+      expect(await dispatcher.tick(T0)).toBe(1);
+      expect(downloader.calls).toBe(1);
+      expect(event.publishedAt).toEqual(T0);
+    });
+
+    it('un error transitorio se reintenta 5 veces y después marca FAILED', async () => {
+      const event = downloadEvent();
+      downloader.error = new Error('Graph caído');
+      let now = T0;
+      for (let call = 0; call <= SEND_MAX_RETRIES; call += 1) {
+        await dispatcher.tick(now);
+        now = event.nextAttemptAt;
+      }
+      expect(downloader.calls).toBe(6);
+      expect(downloader.failed).toEqual([{ payload: event.payload, reason: 'Graph caído' }]);
+      expect(event.publishedAt).not.toBeNull();
+    });
+
+    it('un error permanente marca FAILED sin reintentar', async () => {
+      const event = downloadEvent();
+      downloader.error = new PermanentDownloadError('TOO_LARGE: 99 bytes');
+      await dispatcher.tick(T0);
+      expect(downloader.calls).toBe(1);
+      expect(downloader.failed).toHaveLength(1);
+      expect(event.publishedAt).toEqual(T0);
     });
   });
 });

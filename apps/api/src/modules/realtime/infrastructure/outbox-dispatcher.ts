@@ -8,7 +8,13 @@ import {
 } from '@nestjs/common';
 import { AiReplyWorker } from '../../whatsapp/ai-reply-worker';
 import { RealtimeEventSchema } from '@omnidesk/contracts';
+import { ATTACHMENT_DOWNLOAD_REQUESTED } from '../../attachments/application/enqueue-attachment-download';
+import { PermanentDownloadError } from '../../attachments/domain/attachment-errors';
 import { MESSAGE_SEND_REQUESTED } from '../../conversations/application/enqueue-send-requested';
+import {
+  ATTACHMENT_DOWNLOADER,
+  type AttachmentDownloader,
+} from '../application/ports/attachment-downloader';
 import {
   TRANSACTION_RUNNER,
   type TransactionRunner,
@@ -51,6 +57,7 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
     @Inject(REALTIME_PUBLISHER) private readonly publisher: RealtimePublisher,
     @Inject(OUTBOUND_MESSAGE_SENDER) private readonly sender: OutboundMessageSender,
     @Optional() private readonly ai?: AiReplyWorker,
+    @Optional() @Inject(ATTACHMENT_DOWNLOADER) private readonly downloads?: AttachmentDownloader,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -101,6 +108,8 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      if (event.type === ATTACHMENT_DOWNLOAD_REQUESTED)
+        return this.failDownload(event, message, error instanceof PermanentDownloadError, now);
       if (event.type === MESSAGE_SEND_REQUESTED || event.type === 'ai.reply_requested')
         return this.failSend(event, message, now);
 
@@ -128,6 +137,10 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
       case MESSAGE_SEND_REQUESTED:
         await this.sender.send(event.tenantId, event.payload);
         return;
+      case ATTACHMENT_DOWNLOAD_REQUESTED:
+        if (!this.downloads) throw new Error('Worker de adjuntos no disponible');
+        await this.downloads.process(event.tenantId, event.payload);
+        return;
       default:
         throw new Error(`Tipo de evento no soportado: ${event.type}`);
     }
@@ -151,6 +164,29 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
     this.logger.warn(`Outbox ${event.id}: envío abandonado tras ${event.attempts} reintentos`);
     if (event.type === MESSAGE_SEND_REQUESTED)
       await this.sender.fail(event.tenantId, event.payload, reason);
+    await this.store.markPublished(event.id, now, reason);
+    return false;
+  }
+
+  /** Mismo backoff que los envíos (1 a 16 s); un error permanente no se reintenta. */
+  private async failDownload(
+    event: PendingOutboxEvent,
+    reason: string,
+    permanent: boolean,
+    now: Date,
+  ): Promise<boolean> {
+    if (!permanent && event.attempts < SEND_MAX_RETRIES) {
+      const attempts = event.attempts + 1;
+      this.logger.warn(`Outbox ${event.id}: descarga fallida (reintento ${attempts}): ${reason}`);
+      await this.store.scheduleRetry(event.id, {
+        attempts,
+        error: reason,
+        at: new Date(now.getTime() + 2 ** (attempts - 1) * 1000),
+      });
+      return false;
+    }
+    this.logger.warn(`Outbox ${event.id}: descarga abandonada: ${reason}`);
+    await this.downloads?.fail(event.tenantId, event.payload, reason);
     await this.store.markPublished(event.id, now, reason);
     return false;
   }

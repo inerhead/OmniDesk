@@ -6,6 +6,7 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
+import { AttachmentDownloadWorker } from '../src/modules/whatsapp/attachment-download-worker';
 import { OutboxDispatcher } from '../src/modules/realtime/infrastructure/outbox-dispatcher';
 import { PrismaService } from '../src/shared/infrastructure/prisma/prisma.service';
 import { sessionFor, WEB_ORIGIN } from './support/session';
@@ -180,5 +181,44 @@ describe('Adjuntos de WhatsApp (e2e)', () => {
     expect(messages.map((m) => m.text)).toEqual(['[Mensaje de WhatsApp no soportado: location]']);
     expect(await countEvents('ai.reply_requested')).toBe(0);
     expect(await countEvents('attachment.download_requested')).toBe(0);
+  });
+
+  const stubGraphDownload = (bytes: Buffer) =>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string | URL) =>
+        String(url).includes('graph.facebook.com')
+          ? Response.json({
+              url: 'https://lookaside.fbsbx.com/x',
+              mime_type: 'image/jpeg',
+              sha256: sha256B64(bytes),
+              file_size: bytes.length,
+            })
+          : new Response(new Uint8Array(bytes)),
+      ),
+    );
+  const downloadPending = async () => {
+    const event = await db.outboxEvent.findFirstOrThrow({
+      where: { tenantId, type: 'attachment.download_requested' },
+    });
+    await app.get(AttachmentDownloadWorker).process(tenantId, event.payload);
+  };
+
+  it('descarga la imagen, la marca READY y la timeline la expone sin storageKey', async () => {
+    await post(envelope(imageMessage())).expect(200);
+    stubGraphDownload(jpeg);
+    await downloadPending();
+
+    const conversation = await db.conversation.findFirstOrThrow({ where: { tenantId } });
+    const timeline = await http()
+      .get(`/api/v1/conversations/${conversation.id}/timeline`)
+      .set('Cookie', cookie)
+      .expect(200);
+    expect(timeline.body.items[0].attachment).toMatchObject({
+      kind: 'IMAGE',
+      status: 'READY',
+      sizeBytes: jpeg.length,
+    });
+    expect(JSON.stringify(timeline.body)).not.toContain('storageKey');
   });
 });

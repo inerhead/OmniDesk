@@ -12,6 +12,7 @@ import { toAttachmentView } from '../model/attachment-view';
 export function MessageAttachment({ attachment }: { attachment: Attachment }) {
   const view = toAttachmentView(attachment, apiBase);
   const [open, setOpen] = useState(false);
+  const [missing, setMissing] = useState(false);
   const name = view.label.toLowerCase();
 
   if (view.state === 'pending')
@@ -21,11 +22,11 @@ export function MessageAttachment({ attachment }: { attachment: Attachment }) {
         Descargando {name}…
       </p>
     );
-  if (view.state === 'failed')
+  if (view.state === 'failed' || missing)
     return (
       <p className="flex items-center gap-2 text-sm opacity-80">
         <ImageOff className="size-4" aria-hidden />
-        No se pudo descargar {name}
+        {missing ? `No se encuentra ${name}` : `No se pudo descargar ${name}`}
       </p>
     );
 
@@ -44,6 +45,7 @@ export function MessageAttachment({ attachment }: { attachment: Attachment }) {
               alt={view.label}
               loading="lazy"
               className="max-h-72 w-full max-w-xs object-cover"
+              onError={() => setMissing(true)}
             />
           </button>
           <Dialog open={open} onOpenChange={setOpen}>
@@ -58,7 +60,15 @@ export function MessageAttachment({ attachment }: { attachment: Attachment }) {
         </>
       );
     case 'sticker':
-      return <img src={view.src} alt="Sticker" loading="lazy" className="size-32 object-contain" />;
+      return (
+        <img
+          src={view.src}
+          alt="Sticker"
+          loading="lazy"
+          className="size-32 object-contain"
+          onError={() => setMissing(true)}
+        />
+      );
     case 'video':
       return (
         <video

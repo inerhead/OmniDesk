@@ -98,7 +98,7 @@ export function NotificationsPage() {
   });
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-2xl flex-col gap-4 overflow-y-auto p-4">
+    <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col gap-4 overflow-y-auto p-4">
       <Card>
         <CardHeader>
           <CardTitle>Notificaciones</CardTitle>

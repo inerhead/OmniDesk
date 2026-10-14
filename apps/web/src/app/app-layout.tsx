@@ -24,7 +24,7 @@ export function AppLayout() {
         <div className="flex min-w-0 flex-1 flex-col">
           <OfflineBanner />
           {/* Cada página controla su propio scroll: la bandeja usa paneles con scroll independiente. */}
-          <main className="min-h-0 flex-1 overflow-hidden">
+          <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <Outlet />
           </main>
           {!inChat && <BottomNav />}

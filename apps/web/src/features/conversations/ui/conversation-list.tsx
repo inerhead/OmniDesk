@@ -85,8 +85,8 @@ export function ConversationList() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="bg-background flex shrink-0 flex-col gap-3 border-b px-4 pt-4 pb-3">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="bg-background flex min-w-0 shrink-0 flex-col gap-3 border-b px-4 pt-4 pb-3">
         <ListHeading channel={current} multiChannel={multiChannel} />
         <div className="md:hidden">
           <ChannelSwitcher variant="bar" />

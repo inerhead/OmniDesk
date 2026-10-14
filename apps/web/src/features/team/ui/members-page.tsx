@@ -88,7 +88,7 @@ export function MembersPage() {
   }
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="min-h-0 flex-1 overflow-y-auto">
       <section className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 md:px-8 md:py-10">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex flex-col gap-1">

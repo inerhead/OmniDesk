@@ -5,7 +5,7 @@ import { EmptyState } from '@/shared/ui/empty-state';
 
 export function NotFoundPage() {
   return (
-    <div className="flex h-full items-center justify-center">
+    <div className="flex min-h-0 flex-1 items-center justify-center">
       <EmptyState
         icon={Compass}
         title={<span className="text-2xl font-semibold tracking-tight">Página no encontrada</span>}

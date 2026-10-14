@@ -10,10 +10,10 @@ export function ConversationsPage() {
   const { conversationId } = useParams();
 
   return (
-    <div className="flex h-full min-h-0">
+    <div className="flex min-h-0 flex-1">
       <aside
         className={cn(
-          'min-h-0 w-full flex-col md:flex md:w-80 md:shrink-0 md:border-r lg:w-96',
+          'min-h-0 min-w-0 w-full flex-col overflow-hidden md:flex md:w-80 md:shrink-0 md:border-r lg:w-96',
           conversationId ? 'hidden' : 'flex',
         )}
         aria-label="Conversaciones"

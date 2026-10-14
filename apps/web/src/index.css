@@ -7,8 +7,9 @@
 
 :root {
   color-scheme: light;
-  /* El teclado lo pone a 0 `bindKeyboardInset`: si no, el indicador de inicio queda como hueco encima del teclado. */
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* En el iPhone el navegador a menudo informa 0. Sin este mínimo la barra y la
+     caja de texto quedan encima del indicador de inicio. El teclado lo anula. */
+  --safe-bottom: max(2.75rem, env(safe-area-inset-bottom, 0px));
   --keyboard-lift: 0px;
   --radius: 0.625rem;
   --background: oklch(1 0 0);
@@ -127,6 +128,13 @@
   --color-bubble-agent-foreground: var(--bubble-agent-foreground);
 }
 
+/* En escritorio no hace falta ese margen. */
+@media (min-width: 768px) {
+  :root {
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
 /* Fuera de @layer: si no, el valor de :root gana y el hueco del indicador sigue encima del teclado. */
 html[data-keyboard] {
   --safe-bottom: 0px;
@@ -144,9 +152,8 @@ html[data-keyboard] {
     overscroll-behavior: none;
   }
   #root {
-    /* Caja fija al alto de la pantalla: el padding de body se sumaba y la PWA hacía scroll.
-       El indicador de inicio no va aquí; si no, queda una franja vacía bajo la barra.
-       Lo absorben la barra y el compositor, que sí pintan hasta el borde. */
+    /* Caja fija al alto útil. Sin viewport-fit=cover el iPhone ya deja el indicador
+       de inicio fuera de la página; un padding ahí se veía como franja vacía. */
     position: fixed;
     inset: 0;
     bottom: var(--keyboard-lift);

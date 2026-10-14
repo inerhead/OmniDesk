@@ -272,7 +272,7 @@ export function MessageComposer({
 
   return (
     <form
-      className="bg-background/80 shrink-0 px-2 pt-2 pb-[max(0.5rem,var(--safe-bottom))] md:px-4"
+      className="shrink-0 px-2 pt-2 pb-2 md:px-4"
       onSubmit={(event) => {
         event.preventDefault();
         submit();
@@ -305,13 +305,13 @@ export function MessageComposer({
         </p>
       )}
       {trayOpen && phase === 'idle' && (
-        <div id="attachment-tray" className="bg-muted mb-2 rounded-2xl p-2">
-          <ul className="grid grid-cols-2 gap-1">
+        <div id="attachment-tray" className="bg-muted mb-2 rounded-2xl p-2 md:w-fit">
+          <ul className="grid grid-cols-2 gap-1 md:flex md:flex-wrap">
             {ATTACHMENT_ACTIONS.map((action) => (
               <li key={action.label}>
                 <button
                   type="button"
-                  className="hover:bg-background/70 flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-sm disabled:opacity-50"
+                  className="hover:bg-background/70 flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-sm md:w-auto disabled:opacity-50"
                   disabled={sending}
                   onClick={() => pick(action.accept, action.capture)}
                 >

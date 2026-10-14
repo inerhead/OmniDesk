@@ -29,6 +29,12 @@ import { SystemLine } from './system-line';
 const STICK_THRESHOLD_PX = 80;
 /** Distancia al final (px) a partir de la cual aparece "Ir al final". */
 const JUMP_THRESHOLD_PX = 200;
+/**
+ * En claro la barra es casi opaca: sobre un fondo plano el cristal se confunde con el chat.
+ * En oscuro sí se transparenta, como en WhatsApp.
+ */
+const FROST =
+  'border-border/70 bg-background/95 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-background/60 dark:shadow-none dark:backdrop-blur-xl';
 
 function BackLink() {
   // Vuelve a la misma bandeja (`?inbox=`, `?q=`) desde la que se abrió la conversación.
@@ -66,6 +72,9 @@ export function ChatView({ conversationId }: { conversationId: string }) {
   const panelVisible = isXl ? panelOpen : sheetOpen;
   const togglePanel = () => (isXl ? setContactPanelOpen(!panelOpen) : setSheetOpen(!sheetOpen));
 
+  const frameRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const dockRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
@@ -97,15 +106,24 @@ export function ChatView({ conversationId }: { conversationId: string }) {
     if (element && stickToBottom.current) element.scrollTop = element.scrollHeight;
   }, [newest?.id]);
 
-  // Una foto o un audio crecen después del primer pintado y dejarían el último mensaje cortado.
+  // Una foto, un audio o el compositor al crecer dejarían el último mensaje cortado.
   useEffect(() => {
     const content = contentRef.current;
-    if (!content) return;
-    const observer = new ResizeObserver(() => {
+    const header = headerRef.current;
+    const dock = dockRef.current;
+    const frame = frameRef.current;
+    if (!content || !header || !dock || !frame) return;
+    const pin = () => {
+      frame.style.setProperty('--chat-header', `${header.offsetHeight}px`);
+      frame.style.setProperty('--chat-dock', `${dock.offsetHeight}px`);
       const element = scrollRef.current;
       if (element && stickToBottom.current) element.scrollTop = element.scrollHeight;
-    });
+    };
+    pin();
+    const observer = new ResizeObserver(pin);
     observer.observe(content);
+    observer.observe(header);
+    observer.observe(dock);
     return () => observer.disconnect();
   }, [conversationId]);
 
@@ -154,8 +172,17 @@ export function ChatView({ conversationId }: { conversationId: string }) {
 
   return (
     <div className="flex h-full min-h-0">
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex min-h-16 shrink-0 items-center gap-2 border-b px-2 py-2 md:gap-3 md:px-4">
+      <div
+        ref={frameRef}
+        className="bg-muted/70 relative min-h-0 min-w-0 flex-1 dark:bg-muted/25 [--chat-dock:4.5rem] [--chat-header:4rem]"
+      >
+        <div ref={headerRef} className="absolute inset-x-0 top-0 z-20">
+        <header
+          className={cn(
+            FROST,
+            'flex min-h-16 items-center gap-2 border-b px-2 py-2 md:gap-3 md:px-4',
+          )}
+        >
           <BackLink />
           {summary ? (
             <Avatar
@@ -208,7 +235,7 @@ export function ChatView({ conversationId }: { conversationId: string }) {
         {notice && (
           <div
             role="status"
-            className="bg-warning text-warning-foreground flex shrink-0 items-center justify-between gap-2 px-4 py-2 text-sm"
+            className="bg-warning text-warning-foreground flex items-center justify-between gap-2 px-4 py-2 text-sm"
           >
             <span>{notice}</span>
             <Button
@@ -222,13 +249,13 @@ export function ChatView({ conversationId }: { conversationId: string }) {
             </Button>
           </div>
         )}
+        </div>
 
-        <div className="relative min-h-0 flex-1">
-          <div
-            ref={scrollRef}
-            onScroll={onScroll}
-            className="h-full overflow-y-auto px-3 pb-4 md:px-6"
-          >
+        <div
+          ref={scrollRef}
+          onScroll={onScroll}
+          className="absolute inset-0 overflow-y-auto px-3 pt-[var(--chat-header)] pb-[calc(var(--chat-dock)+1rem)] md:px-6"
+        >
             <div ref={contentRef} className="mx-auto w-full max-w-3xl">
               {timeline.isPending && (
                 <p className="text-muted-foreground py-4 text-center text-sm">Cargando mensajes…</p>
@@ -263,7 +290,7 @@ export function ChatView({ conversationId }: { conversationId: string }) {
 
               {groupTimelineByDay(items, new Date()).map((day) => (
                 <section key={`${day.dayLabel}-${day.items[0]!.id}`} aria-label={day.dayLabel}>
-                  <div className="sticky top-0 z-10 flex justify-center pt-4 pb-1">
+                  <div className="sticky top-[var(--chat-header)] z-10 flex justify-center pt-4 pb-1">
                     <span className="bg-muted text-muted-foreground rounded-full px-3 py-0.5 text-xs font-medium shadow-xs">
                       {day.dayLabel}
                     </span>
@@ -295,21 +322,27 @@ export function ChatView({ conversationId }: { conversationId: string }) {
             <Button
               size="sm"
               variant={newCount > 0 ? 'default' : 'outline'}
-              className="animate-in fade-in-0 absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full shadow-md"
+              className="animate-in fade-in-0 absolute bottom-[calc(var(--chat-dock)+1rem)] left-1/2 z-20 -translate-x-1/2 rounded-full shadow-md"
               onClick={jumpToEnd}
             >
               <ArrowDown aria-hidden />
               {newCount > 0 ? newMessagesLabel(newCount) : 'Ir al final'}
             </Button>
           )}
-        </div>
 
+        <div
+          ref={dockRef}
+          className={cn(
+            'absolute inset-x-0 bottom-0 z-20',
+            mode.kind !== 'none' && cn(FROST, 'pb-[var(--safe-bottom)]'),
+          )}
+        >
         {mode.kind === 'compose' && (
           <MessageComposer sending={messaging.sending} onSend={messaging.send} />
         )}
 
         {mode.kind === 'take' && summary && actor && (
-          <div className="bg-background shrink-0 border-t px-3 pt-3 pb-[max(0.75rem,var(--safe-bottom))] md:px-6">
+          <div className="px-3 pt-3 pb-3 md:px-6">
             <Button
               className="w-full"
               disabled={command.pending}
@@ -327,16 +360,17 @@ export function ChatView({ conversationId }: { conversationId: string }) {
         )}
 
         {mode.kind === 'assigned-other' && (
-          <p className="text-muted-foreground bg-background shrink-0 border-t px-3 pt-3 pb-[max(0.75rem,var(--safe-bottom))] text-center text-sm md:px-6">
+          <p className="text-muted-foreground px-3 pt-3 pb-3 text-center text-sm md:px-6">
             Asignada a {mode.name}
           </p>
         )}
 
         {mode.kind === 'window-closed' && (
-          <p className="text-muted-foreground bg-background shrink-0 border-t px-3 pt-3 pb-[max(0.75rem,var(--safe-bottom))] text-center text-sm md:px-6">
+          <p className="text-muted-foreground px-3 pt-3 pb-3 text-center text-sm md:px-6">
             {WINDOW_CLOSED_NOTICE}
           </p>
         )}
+        </div>
       </div>
 
       {isXl && panelOpen && (

@@ -31,14 +31,17 @@ function SegmentedControl<T extends string>({
     <nav
       aria-label={label}
       data-slot="segmented-control"
-      className={cn('bg-muted text-muted-foreground flex rounded-lg p-0.5', className)}
+      className={cn(
+        'bg-muted text-muted-foreground flex min-w-0 overflow-x-auto rounded-lg p-0.5',
+        className,
+      )}
     >
       {options.map((option) => {
         const active = option.value === value;
         return renderOption(option, {
           active,
           className: cn(
-            'flex-1 rounded-md px-2 py-1 text-center text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px]',
+            'min-w-fit flex-1 rounded-md px-2 py-1 text-center text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px]',
             active
               ? 'bg-background text-foreground shadow-xs dark:bg-accent'
               : 'hover:text-foreground',

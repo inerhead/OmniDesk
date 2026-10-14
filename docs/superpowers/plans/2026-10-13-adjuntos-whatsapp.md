@@ -10,6 +10,8 @@
 
 **Spec:** `specs/14-adjuntos-whatsapp.md`
 
+**Orden de ejecución:** tareas 1 a 9, después la **12** (ventana de 18 h), después la 10 y la 11.
+
 ## Restricciones globales
 
 - El paquete `@omnidesk/contracts` se consume desde `dist/`. Tras cada cambio en `packages/contracts/src`, ejecuta `pnpm --filter @omnidesk/contracts build` antes de probar el API o la web.
@@ -22,6 +24,8 @@
 - Textos de la UI y comentarios en español, con el estilo actual: comentarios solo para restricciones que el código no muestra.
 - La migración nueva va después de `20261015010000_rate_limit_buckets` (trabajo de SPEC 10, aún sin commitear): carpeta `20261016000000_message_attachments`.
 - No toques el rate limiting de SPEC 10. Reutiliza `@RateLimit('send-message')`.
+- Ventana de respuesta: **18 h** (`REPLY_WINDOW_HOURS = 18`) desde el último mensaje entrante. Fuera de ella OmniDesk no envía nada; motivo de rechazo `WINDOW_CLOSED` (tarea 12).
+- El servicio `minio` del compose local lleva `container_name: omnidesk-minio`, igual que el resto de servicios.
 
 ## Foco de revisión
 
@@ -3874,7 +3878,7 @@ En `nginx-omnidesk.conf.example`, dentro de `location /omnidesk/`, después de `
   - Entrante: webhook → `MessageAttachment PENDING` → `attachment.download_requested` → Graph → MinIO → `READY` → `conversation.changed`.
   - Saliente: multipart → MinIO → `message.send_requested` → Graph `/media` → `/messages`.
   - Explica también el endpoint de contenido y la decisión de no pasar adjuntos a la IA.
-- `docs/integracion-n8n.md:121`: sustituye "Solo texto libre. No se gestionan plantillas, multimedia…" por "Solo texto libre hacia la IA: los mensajes con adjunto (SPEC 14) o de tipos no soportados no se envían a n8n y quedan para atención humana. No se gestionan plantillas ni la ventana de atención de Meta."
+- `docs/integracion-n8n.md:121`: sustituye "Solo texto libre. No se gestionan plantillas, multimedia…" por "Solo texto libre hacia la IA: los mensajes con adjunto (SPEC 14) o de tipos no soportados no se envían a n8n y quedan para atención humana. No se gestionan plantillas. Pasadas 18 h desde el último mensaje del cliente, `POST /integrations/messages/outbound` responde `409 { sendAllowed: false, reason: 'WINDOW_CLOSED' }` y la IA no debe enviar (SPEC 14)." Añade `WINDOW_CLOSED` también a la tabla de motivos de rechazo de ese documento, si la hay.
 - `README.md`: añade a la tabla de variables `ATTACHMENT_STORAGE_DRIVER`, las `S3_*`, `MINIO_*` y `ATTACHMENT_INBOUND_MAX_BYTES`, y la consola de MinIO en `http://localhost:9051`.
 - `specs/09-…`, "Fuera de alcance": cambia "multimedia" por "multimedia (cubierto por SPEC 14)".
 - `specs/12-retencion-rls.md`, en el job de retención, añade: "Antes de borrar mensajes, borra del bucket los `message_attachments.storage_key` no nulos (SPEC 14). La fila cae en cascada; el objeto no." Si RLS se aplica, incluye `message_attachments` en la lista de tablas con `tenant_id`.
@@ -3916,4 +3920,173 @@ Esperado: todo en verde. Si SPEC 10 ya trae `pnpm e2e` (Playwright), ejecútalo 
 ```bash
 git add specs/14-adjuntos-whatsapp.md
 git commit -m "docs(spec-14): record attachment verification"
+```
+
+---
+
+### Tarea 12: Ventana de respuesta de 18 h
+
+Se ejecuta después de la tarea 9 y antes de la 10. Pasadas **18 h** desde el último mensaje del cliente, OmniDesk no envía nada: ni texto ni adjuntos del agente, ni reintentos, ni respuestas de la IA.
+
+**Archivos:**
+- Modificar: `packages/contracts/src/conversations.ts` (+ `conversations.spec.ts`), `packages/contracts/src/integrations.ts`
+- Modificar: `apps/api/prisma/schema.prisma`
+- Crear: `apps/api/prisma/migrations/20261017000000_conversation_last_inbound_at/migration.sql`
+- Modificar: `apps/api/src/modules/conversations/domain/conversation.ts` (+ spec), `infrastructure/prisma-conversation.repository.ts`, `testing/in-memory.ts`
+- Modificar: `send-agent-message.use-case.ts`, `retry-failed-message.use-case.ts`, `register-ai-reply.use-case.ts`, `apps/api/src/modules/attachments/application/send-agent-attachment.use-case.ts` y sus specs
+- Modificar: lectura de la lista (`ports/conversation-read-model.ts`, `infrastructure/prisma-conversation-read-model.ts`) y el DTO de resumen en `conversations.controller.ts`
+- Modificar: `apps/api/src/modules/integrations/infrastructure/http/outbound-messages.controller.ts` (solo si el tipo de `reason` lo exige)
+- Crear: `apps/api/test/reply-window.e2e-spec.ts`
+- Modificar: `apps/web/src/features/conversations/model/composer-mode.ts` (+ spec), `ui/chat-view.tsx`; mover `useNow` de `apps/web/src/features/health/api/use-health-monitor.ts` a `apps/web/src/shared/lib/use-now.ts`
+- Modificar: los fixtures de la web que construyen un `ConversationSummary` (busca `lastMessagePreview:` en `apps/web/src/**/*.spec.ts*`)
+
+**Interfaces:**
+- Produce (contracts): `REPLY_WINDOW_HOURS = 18`, `REPLY_WINDOW_MS`, `isReplyWindowOpen(lastInboundAt: Date | string | null, now: Date): boolean`, `ConversationSummarySchema.lastInboundAt: string | null`. `ConversationCommandRejectedSchema.reason` y `OutboundAiMessageRejectedSchema.reason` ganan `'WINDOW_CLOSED'`.
+- Produce (API): `Conversation.lastInboundAt: Date | null`. Los resultados `rejected` de los cuatro casos de uso de envío admiten `reason: 'WINDOW_CLOSED'`.
+- Produce (web): `ComposerMode` gana `{ kind: 'window-closed' }`; `composerMode(conversation, actor, now)`.
+
+- [ ] **Paso 1: contratos (prueba primero)**
+
+En `packages/contracts/src/conversations.spec.ts`:
+
+```ts
+describe('isReplyWindowOpen', () => {
+  const now = new Date('2026-10-13T20:00:00.000Z');
+  const hoursAgo = (h: number) => new Date(now.getTime() - h * 3_600_000);
+
+  it('abierta antes de 18 h, cerrada desde las 18 h', () => {
+    expect(isReplyWindowOpen(hoursAgo(17.99), now)).toBe(true);
+    expect(isReplyWindowOpen(hoursAgo(18), now)).toBe(false);
+    expect(isReplyWindowOpen(hoursAgo(30).toISOString(), now)).toBe(false);
+  });
+
+  it('sin mensajes del cliente está cerrada', () => {
+    expect(isReplyWindowOpen(null, now)).toBe(false);
+  });
+});
+```
+
+Añade también `lastInboundAt: '2026-10-12T09:00:00.000Z'` al fixture de resumen del spec existente.
+
+En `conversations.ts`, junto a `ConversationSummarySchema`:
+
+```ts
+/** OmniDesk deja de enviar a las 18 h del último mensaje del cliente; Meta corta a las 24 h. */
+export const REPLY_WINDOW_HOURS = 18;
+export const REPLY_WINDOW_MS = REPLY_WINDOW_HOURS * 60 * 60 * 1000;
+
+export function isReplyWindowOpen(lastInboundAt: Date | string | null, now: Date): boolean {
+  if (lastInboundAt === null) return false;
+  return now.getTime() - new Date(lastInboundAt).getTime() < REPLY_WINDOW_MS;
+}
+```
+
+`ConversationSummarySchema` gana, tras `lastMessagePreview`:
+
+```ts
+  /** Último mensaje del cliente; `null` si no hay. Marca la ventana de respuesta. */
+  lastInboundAt: z.iso.datetime().nullable(),
+```
+
+`ConversationCommandRejectedSchema.reason`: `z.enum(['CONTROL_CHANGED', 'INVALID_STATE', 'WINDOW_CLOSED'])`. `OutboundAiMessageRejectedSchema.reason` (integrations.ts): `z.enum(['CONTROL_CHANGED', 'CONVERSATION_CLOSED', 'WINDOW_CLOSED'])`.
+
+```bash
+pnpm --filter @omnidesk/contracts test && pnpm --filter @omnidesk/contracts build
+```
+
+- [ ] **Paso 2: columna y migración**
+
+`schema.prisma`, en `Conversation` tras `lastMessagePreview`:
+
+```prisma
+  /// Último mensaje entrante del cliente: abre la ventana de respuesta de 18 h.
+  lastInboundAt      DateTime?          @map("last_inbound_at") @db.Timestamptz(3)
+```
+
+`migration.sql` (escrita a mano, como las demás; comprueba con `prisma migrate diff` que el esquema coincide):
+
+```sql
+ALTER TABLE "conversations" ADD COLUMN "last_inbound_at" TIMESTAMPTZ(3);
+
+UPDATE "conversations" AS c
+SET "last_inbound_at" = m.last_at
+FROM (
+  SELECT "conversation_id", MAX("created_at") AS last_at
+  FROM "messages"
+  WHERE "direction" = 'INBOUND'
+  GROUP BY "conversation_id"
+) AS m
+WHERE m."conversation_id" = c."id";
+```
+
+```bash
+pnpm --filter @omnidesk/api exec prisma migrate dev --skip-seed && pnpm --filter @omnidesk/api exec prisma generate
+```
+
+- [ ] **Paso 3: dominio y repositorios**
+
+- `Conversation` gana `lastInboundAt: Date | null`; `conversationSelect` lo incluye.
+- `PrismaConversationRepository.appendMessage`: en el `update` de la conversación añade `...(message.direction === 'INBOUND' && { lastInboundAt: at })`. El doble en memoria hace lo mismo. `createOpen` deja `lastInboundAt` en `null` (el mensaje entrante que sigue lo rellena).
+- En `conversation.ts`, junto a `decideAiReply`:
+
+```ts
+/** Fuera de la ventana de 18 h, OmniDesk no envía nada a la conversación. */
+export function canSendNow(conversation: Pick<Conversation, 'lastInboundAt'>, now: Date): boolean {
+  return isReplyWindowOpen(conversation.lastInboundAt, now);
+}
+```
+
+  `decideAiReply(conversation, controlVersion, now)` comprueba la ventana después del estado y del control: devuelve `{ allowed: false, reason: 'WINDOW_CLOSED' }`. Amplía `AiReplyDecision` y su spec (cerrada → `CONVERSATION_CLOSED` tiene prioridad; control cambiado → `CONTROL_CHANGED`; 18 h → `WINDOW_CLOSED`).
+- Los fixtures de pruebas unitarias del API que crean conversaciones a mano (busca `lastMessagePreview:` en `apps/api/src/**/*.spec.ts` y `testing/`) ganan `lastInboundAt`. Usa una fecha reciente salvo en las pruebas de ventana cerrada.
+
+- [ ] **Paso 4: casos de uso (prueba primero)**
+
+En cada uno, la comprobación va **después** de la idempotencia (un reintento del mismo `clientMessageId`/`idempotencyKey` sigue devolviendo el mensaje existente) y **después** del estado `OPEN`, con el mismo `now` que se usa para `appendMessage`:
+
+- `SendAgentMessageUseCase` y `SendAgentAttachmentUseCase`: `if (!canSendNow(conversation, now)) return { kind: 'rejected', reason: 'WINDOW_CLOSED' };`. En el de adjuntos, el objeto subido a MinIO se borra igual que en los demás rechazos.
+- `RetryFailedMessageUseCase`: tras `status !== 'FAILED'`, mismo rechazo.
+- `RegisterAiReplyUseCase`: pasa `now` a `decideAiReply`; el rechazo sale como `rejected` con `WINDOW_CLOSED`.
+
+Pruebas en los specs existentes (`human-messages.spec.ts`, `use-cases.spec.ts` o el que corresponda, y el del caso de uso de adjuntos): con `lastInboundAt` de hace 19 h, cada caso de uso devuelve `{ kind: 'rejected', reason: 'WINDOW_CLOSED' }` y no añade mensajes ni eventos al Outbox; con 17 h, envía. Un entrante nuevo (registro de mensaje entrante) actualiza `lastInboundAt` y vuelve a permitir enviar.
+
+- [ ] **Paso 5: controladores y lista**
+
+- Los controladores ya traducen `rejected` a `409 { reason }`; comprueba que el de adjuntos (tarea 7) también lo hace y que la documentación OpenAPI (`@ApiConflictResponse`) menciona `WINDOW_CLOSED`.
+- `outbound-messages.controller.ts` devuelve `{ sendAllowed: false, reason: 'WINDOW_CLOSED' }` con `409`.
+- El read model de la lista y el DTO de resumen exponen `lastInboundAt` como ISO o `null`.
+
+- [ ] **Paso 6: e2e**
+
+`apps/api/test/reply-window.e2e-spec.ts`, con los mismos helpers que `human-messages`/`attachments.e2e-spec.ts`. Para simular el paso del tiempo, actualiza la columna con Prisma: `lastInboundAt: new Date(Date.now() - 19 * 3_600_000)`.
+
+1. Conversación tomada por el agente con la ventana vencida: `POST /messages` → `409 { reason: 'WINDOW_CLOSED' }`; `POST /messages/attachments` → `409`; reintentar un mensaje `FAILED` → `409`. Ninguno crea `message.send_requested` en `outbox_events`.
+2. El cliente escribe de nuevo (webhook): `lastInboundAt` se actualiza y `POST /messages` → `201`.
+3. IA: con la ventana vencida, `POST /integrations/messages/outbound` → `409 { sendAllowed: false, reason: 'WINDOW_CLOSED' }`.
+4. `GET /conversations` devuelve `lastInboundAt` en ISO.
+
+```bash
+pnpm --filter @omnidesk/api test && pnpm --filter @omnidesk/api test:e2e
+```
+
+- [ ] **Paso 7: web**
+
+- Mueve `useNow` a `apps/web/src/shared/lib/use-now.ts` (exportado, con el intervalo por parámetro) y úsalo desde `use-health-monitor.ts`.
+- `composerMode(conversation, actor, now)`: `conversation` gana `lastInboundAt`. Si el actor es el agente asignado y `!isReplyWindowOpen(conversation.lastInboundAt, now)`, devuelve `{ kind: 'window-closed' }`. El resto no cambia (con la IA atendiendo se puede seguir tomando). Pruebas en `composer-mode.spec.ts`: asignado con 17 h → `compose`; con 19 h → `window-closed`; sin entrantes → `window-closed`.
+- `chat-view.tsx`: `const now = useNow(60_000)`; pasa `new Date(now)` a `composerMode`. Para `window-closed`, muestra en el sitio del composer, con el mismo contenedor que el aviso "Asignada a…":
+
+  `Han pasado más de 18 h desde el último mensaje del cliente. Podrás responder cuando vuelva a escribir.`
+
+  El botón "Reintentar" de las burbujas ya solo aparece con `compose`: no hay que tocarlo.
+- Si el envío o el reintento devuelven `409 WINDOW_CLOSED` (la ventana venció entre el render y el clic), el toast de error muestra el mismo texto. Busca dónde `use-send-message.ts` traduce los errores.
+- Actualiza los fixtures de la web con `lastInboundAt`.
+
+```bash
+pnpm --filter @omnidesk/web test && pnpm --filter @omnidesk/web typecheck
+```
+
+- [ ] **Paso 8: commit**
+
+```bash
+git add packages/contracts apps/api apps/web
+git commit -m "feat(conversations): stop sending 18 h after the customer's last message"
 ```

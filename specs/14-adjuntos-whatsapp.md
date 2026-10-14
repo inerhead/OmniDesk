@@ -41,6 +41,11 @@ Tampoco hay forma de enviar archivos: `Message` solo tiene `text`, el composer s
 - **IA (n8n):** los mensajes con adjunto **no disparan la IA**: quedan para atención humana. Tampoco la disparan los no soportados.
 - **Vista previa** en la lista: "Foto", "Video", "Audio", "Nota de voz", "Sticker", "Documento: <nombre>", con el pie si lo hay.
 - **Infra y docs:** MinIO en `docker-compose.yml` y en `infra/deploy/docker-compose.prod.yml`, `client_max_body_size` en Nginx, backup diario del volumen de MinIO, variables nuevas y documentación.
+- **Ventana de respuesta de 18 h** (pedida por el usuario). Meta solo admite mensajes libres durante 24 h desde el último mensaje del cliente; OmniDesk se queda en **18 h** de margen y, pasado ese tiempo, **no envía nada**: ni texto ni adjuntos del agente, ni reintentos de mensajes fallidos, ni respuestas de la IA. La regla se aplica a todos los canales.
+  - `conversations.last_inbound_at` guarda la hora del último mensaje entrante (la migración la rellena con los mensajes existentes). Una conversación sin entrantes tiene la ventana cerrada.
+  - `isReplyWindowOpen(lastInboundAt, now)` y `REPLY_WINDOW_HOURS = 18` viven en `@omnidesk/contracts`: API y web usan la misma regla.
+  - El API responde `409 { reason: 'WINDOW_CLOSED' }` a enviar, enviar adjunto y reintentar; la IA recibe `409 { sendAllowed: false, reason: 'WINDOW_CLOSED' }`.
+  - La web cambia el composer por el aviso "Han pasado más de 18 h desde el último mensaje del cliente. Podrás responder cuando vuelva a escribir." y oculta "Reintentar". El aviso aparece solo, sin recargar, al cumplirse las 18 h.
 
 **Fuera:**
 
@@ -119,6 +124,7 @@ El detalle por tareas, con código y pruebas, está en `docs/superpowers/plans/2
 9. **Web:** render de adjuntos, visor, composer con clip, chip y validación, y envío multipart.
 10. **Infra y docs:** MinIO en producción, Nginx, backup del volumen y documentación.
 11. **Verificación:** lint, tipos, unitarias, e2e y prueba real con un número de WhatsApp.
+12. **Ventana de 18 h:** `last_inbound_at`, regla compartida, rechazo `WINDOW_CLOSED` en todos los envíos y aviso en la web. Se ejecuta después de la tarea 9 y antes de la 10.
 
 ## Criterios de aceptación
 
@@ -136,6 +142,8 @@ El detalle por tareas, con código y pruebas, está en `docs/superpowers/plans/2
 - [ ] Un envío con adjunto que falla puede reintentarse desde la web y vuelve a subir el archivo a Graph.
 - [ ] En producción el API no arranca sin `ATTACHMENT_STORAGE_DRIVER=s3` y las credenciales S3; MinIO no se expone fuera de `127.0.0.1`.
 - [ ] El backup diario incluye un `.tar.gz` del volumen de MinIO con la misma rotación de 7.
+- [ ] Pasadas 18 h desde el último mensaje del cliente, enviar texto, enviar adjunto y reintentar responden `409 WINDOW_CLOSED` sin crear mensajes ni eventos de Outbox; la IA recibe `409 WINDOW_CLOSED`. Un mensaje nuevo del cliente reabre la ventana.
+- [ ] La web muestra el aviso de ventana cerrada en lugar del composer, también si las 18 h se cumplen con el chat abierto.
 - [ ] Lint, typecheck, test, build y e2e pasan; la prueba real con WhatsApp (recibir y enviar los cuatro tipos) está documentada.
 
 ## Decisiones tomadas y descartadas
@@ -149,6 +157,7 @@ El detalle por tareas, con código y pruebas, está en `docs/superpowers/plans/2
 - **Subir a Graph por `/media`, no `link`:** MinIO no es público.
 - **Documento saliente limitado a 16 MB** (Meta admite 100 MB) para acotar memoria, el cuerpo de Nginx y el tiempo dentro de la transacción del Outbox.
 - **Driver `memory` por defecto fuera de producción:** las pruebas e2e y los entornos sin MinIO siguen funcionando sin infraestructura nueva.
+- **18 h en lugar de 24 h** (elegida por el usuario): margen ante relojes, colas y reintentos; nunca se llega a enviar algo que Meta vaya a rechazar por la ventana. Se guarda `last_inbound_at` en la conversación en vez de consultar el último entrante en cada envío: una columna leída con la fila ya bloqueada.
 - **Se descarta** guardar la `url` del webhook: igualmente exige Bearer y caduca a los 5 minutos.
 
 ## Riesgos identificados
@@ -157,5 +166,5 @@ El detalle por tareas, con código y pruebas, está en `docs/superpowers/plans/2
 - **Distribución de MinIO.** El proyecto dejó de publicar imágenes comunitarias actualizadas en 2025. Hay que fijar la etiqueta y confirmar en el VPS que se puede descargar (o cargarla con `docker save | docker load`). Garage o SeaweedFS son alternativas S3 sin cambiar código.
 - **Audio `ogg/opus` en Safari.** Las notas de voz de WhatsApp son `audio/ogg; codecs=opus`. Safari reciente las reproduce, pero las versiones antiguas no. Siempre se muestra el enlace de descarga.
 - **Retención (SPEC 12).** Al borrar mensajes, la fila del adjunto cae en cascada, pero el objeto en MinIO no. El job de SPEC 12 debe borrar `storageKey` antes de purgar. Hay que anotarlo en SPEC 12.
-- **Ventana de 24 h.** Fuera de la ventana de atención, Meta rechaza también los adjuntos. El mensaje queda `FAILED`, igual que el texto (SPEC 09).
+- **Ventana de atención.** OmniDesk deja de enviar a las 18 h (ver Alcance), antes del límite de 24 h de Meta. Un mensaje aceptado justo antes del corte se envía igual: el Outbox lo despacha en segundos, muy dentro del margen de 6 h. No se gestionan plantillas: pasadas las 18 h solo el cliente puede reabrir la ventana.
 - **Duplicado de envío.** Igual que en SPEC 09: si el proceso cae entre la aceptación de Meta y la persistencia local, un reintento puede duplicar el envío.

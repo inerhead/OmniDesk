@@ -130,19 +130,19 @@ El detalle por tareas, con código y pruebas, está en `docs/superpowers/plans/2
 
 - [ ] Una foto enviada desde WhatsApp aparece en la bandeja una sola vez y se ve en el chat en menos de 10 s en condiciones normales.
 - [ ] Documento, audio, nota de voz, video y sticker entrantes se registran con su tipo, nombre (documento) y pie.
-- [ ] Un tipo no soportado aparece como `[Mensaje de WhatsApp no soportado: <tipo>]`; una reacción no crea mensajes.
-- [ ] El webhook responde `200` sin esperar la descarga; un webhook repetido no duplica mensajes ni descargas.
+- [x] Un tipo no soportado aparece como `[Mensaje de WhatsApp no soportado: <tipo>]`; una reacción no crea mensajes.
+- [x] El webhook responde `200` sin esperar la descarga; un webhook repetido no duplica mensajes ni descargas.
 - [ ] Un sha256 que no coincide o un archivo mayor que `ATTACHMENT_INBOUND_MAX_BYTES` deja el adjunto `FAILED` y el chat muestra "No se pudo descargar".
 - [ ] Un fallo transitorio de Graph se reintenta hasta 5 veces; después el adjunto queda `FAILED`.
-- [ ] Un mensaje con adjunto no genera `ai.reply_requested`, aunque la IA esté activa.
-- [ ] `GET /attachments/:id/content` devuelve `404` a otro tenant, a quien no puede ver la conversación y si el adjunto no está `READY`. Con `Range` responde `206` con `Content-Range`.
-- [ ] Los documentos y los tipos no multimedia se sirven como `attachment`; todo lleva `nosniff` y `Content-Security-Policy: sandbox`.
+- [x] Un mensaje con adjunto no genera `ai.reply_requested`, aunque la IA esté activa.
+- [x] `GET /attachments/:id/content` devuelve `404` a otro tenant, a quien no puede ver la conversación y si el adjunto no está `READY`. Con `Range` responde `206` con `Content-Range`.
+- [x] Los documentos y los tipos no multimedia se sirven como `attachment`; todo lleva `nosniff` y `Content-Security-Policy: sandbox`.
 - [ ] El agente asignado envía imagen, documento, audio y video con pie opcional, y ve los ticks de entrega; repetir el `clientMessageId` no duplica.
-- [ ] `415` con un tipo no admitido, `413` si supera el límite del tipo, `400` si un audio lleva pie o falta el archivo, `403` si no es el agente asignado, `409` si está cerrada.
+- [x] `415` con un tipo no admitido, `413` si supera el límite del tipo, `400` si un audio lleva pie o falta el archivo, `403` si no es el agente asignado, `409` si está cerrada.
 - [ ] Un envío con adjunto que falla puede reintentarse desde la web y vuelve a subir el archivo a Graph.
-- [ ] En producción el API no arranca sin `ATTACHMENT_STORAGE_DRIVER=s3` y las credenciales S3; MinIO no se expone fuera de `127.0.0.1`.
+- [x] En producción el API no arranca sin `ATTACHMENT_STORAGE_DRIVER=s3` y las credenciales S3; MinIO no se expone fuera de `127.0.0.1`.
 - [ ] El backup diario incluye un `.tar.gz` del volumen de MinIO con la misma rotación de 7.
-- [ ] Pasadas 18 h desde el último mensaje del cliente, enviar texto, enviar adjunto y reintentar responden `409 WINDOW_CLOSED` sin crear mensajes ni eventos de Outbox; la IA recibe `409 WINDOW_CLOSED`. Un mensaje nuevo del cliente reabre la ventana.
+- [x] Pasadas 18 h desde el último mensaje del cliente, enviar texto, enviar adjunto y reintentar responden `409 WINDOW_CLOSED` sin crear mensajes ni eventos de Outbox; la IA recibe `409 WINDOW_CLOSED`. Un mensaje nuevo del cliente reabre la ventana.
 - [ ] La web muestra el aviso de ventana cerrada en lugar del composer, también si las 18 h se cumplen con el chat abierto.
 - [ ] Lint, typecheck, test, build y e2e pasan; la prueba real con WhatsApp (recibir y enviar los cuatro tipos) está documentada.
 
@@ -168,3 +168,18 @@ El detalle por tareas, con código y pruebas, está en `docs/superpowers/plans/2
 - **Retención (SPEC 12).** Al borrar mensajes, la fila del adjunto cae en cascada, pero el objeto en MinIO no. El job de SPEC 12 debe borrar `storageKey` antes de purgar. Hay que anotarlo en SPEC 12.
 - **Ventana de atención.** OmniDesk deja de enviar a las 18 h (ver Alcance), antes del límite de 24 h de Meta. Un mensaje aceptado justo antes del corte se envía igual: el Outbox lo despacha en segundos, muy dentro del margen de 6 h. No se gestionan plantillas: pasadas las 18 h solo el cliente puede reabrir la ventana.
 - **Duplicado de envío.** Igual que en SPEC 09: si el proceso cae entre la aceptación de Meta y la persistencia local, un reintento puede duplicar el envío.
+
+## Verificación de implementación
+
+2026-10-14, rama `feat/14-adjuntos-whatsapp`.
+
+Automatizado, en verde:
+
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`.
+- `pnpm --filter @omnidesk/api test:e2e`: 159 pruebas pasaron, 1 se saltó (el e2e de MinIO, que solo corre si `S3_E2E_ENDPOINT` está definido).
+- `S3_E2E_ENDPOINT=http://localhost:9050` contra el MinIO local (`omnidesk-minio`, healthy): guardar, leer por rango y borrar.
+- `sh -n infra/deploy/backup.sh` y `docker compose -f infra/deploy/docker-compose.prod.yml config` con variables de relleno.
+
+Los criterios marcados arriba los cubren esas pruebas (e2e de adjuntos, e2e de la ventana de 18 h, y el rechazo de producción sin `s3` en `env.spec.ts`). El compose de producción publica MinIO solo en `127.0.0.1`.
+
+Queda sin comprobar con un teléfono y un túnel: recibir foto, PDF, nota de voz, video, sticker, ubicación y reacción; enviar JPG, PDF, MP3 y MP4 y ver los ticks; y que una foto no deje `ai.reply_requested` en un canal real. El aviso de ventana cerrada está cubierto por la prueba de `composerMode`; no se abrió el chat en el navegador para verlo pasar de composer a aviso con el reloj en marcha. El `.tar.gz` del volumen está en `backup.sh` y no se ejecutó un backup ni una restauración en el VPS.

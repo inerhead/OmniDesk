@@ -58,6 +58,8 @@ services:
       - ./apps/api/prisma:/repo/apps/api/prisma
       - ./apps/api/test:/repo/apps/api/test
       - ./packages/contracts/src:/repo/packages/contracts/src
+      # turbo.json filtra el entorno en modo estricto; sin este montaje el contenedor usa la copia de la imagen.
+      - ./turbo.json:/repo/turbo.json
 
   web:
     container_name: omnidesk-web

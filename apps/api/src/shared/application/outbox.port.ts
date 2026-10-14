@@ -10,7 +10,8 @@ export interface OutboxPort {
       | 'conversation.changed'
       | 'message.send_requested'
       | 'ai.reply_requested'
-      | 'attachment.download_requested';
+      | 'attachment.download_requested'
+      | 'notification.requested';
     payload: object;
   }): Promise<void>;
 }

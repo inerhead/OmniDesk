@@ -4,5 +4,6 @@
     "paths": { "@/*": ["./src/*"] },
     "types": ["vite/client", "vite-plugin-pwa/react", "vite-plugin-pwa/info"]
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/sw.ts"]
 }

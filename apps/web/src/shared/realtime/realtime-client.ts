@@ -1,4 +1,4 @@
-import { RealtimeEventSchema, type RealtimeEvent } from '@omnidesk/contracts';
+import { RealtimeEventSchema, type PresenceEvent, type RealtimeEvent } from '@omnidesk/contracts';
 import { io } from 'socket.io-client';
 import { setConnectionStatus } from './connection-status';
 
@@ -16,6 +16,15 @@ export interface SocketLike {
 
 const RETRY_AFTER_SERVER_DISCONNECT_MS = 5_000;
 
+let activeSocket: { emit(event: string, payload: PresenceEvent): void } | null = null;
+let lastPresence: PresenceEvent = { conversationId: null, visible: true };
+
+/** Avisa qué conversación está abierta y si la pestaña se ve. El API suprime el aviso de mensaje. */
+export function emitPresence(event: PresenceEvent): void {
+  lastPresence = event;
+  activeSocket?.emit('presence', event);
+}
+
 /** Conecta los eventos del socket con el estado de conexión y los handlers. */
 export function bindSocket(socket: SocketLike, handlers: RealtimeHandlers): void {
   let hasConnected = false;
@@ -23,6 +32,7 @@ export function bindSocket(socket: SocketLike, handlers: RealtimeHandlers): void
   socket.on('connect', () => {
     hasConnected = true;
     setConnectionStatus('live');
+    activeSocket?.emit('presence', lastPresence);
     handlers.onResync();
   });
 
@@ -52,8 +62,10 @@ export function connectRealtime(
 ): () => void {
   setConnectionStatus('connecting');
   const socket = io(url, { path, withCredentials: true });
+  activeSocket = socket;
   bindSocket(socket, handlers);
   return () => {
+    if (activeSocket === socket) activeSocket = null;
     socket.close();
     setConnectionStatus('connecting');
   };

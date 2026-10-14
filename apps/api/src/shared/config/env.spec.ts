@@ -233,3 +233,17 @@ describe('parseEnv — adjuntos', () => {
     expect(() => parseEnv({ ...production, ...s3 })).not.toThrow();
   });
 });
+
+describe('parseEnv — Web Push', () => {
+  it('sin claves deja el módulo apagado y exige las tres juntas', () => {
+    expect(parseEnv(valid).VAPID_PUBLIC_KEY).toBeUndefined();
+    expect(() => parseEnv({ ...valid, VAPID_PUBLIC_KEY: 'public' })).toThrowError(/VAPID_PUBLIC_KEY/);
+    const env = parseEnv({
+      ...valid,
+      VAPID_PUBLIC_KEY: 'public',
+      VAPID_PRIVATE_KEY: 'private',
+      VAPID_SUBJECT: 'mailto:soporte@gastromesa.com',
+    });
+    expect(env.VAPID_SUBJECT).toBe('mailto:soporte@gastromesa.com');
+  });
+});

@@ -7,6 +7,9 @@
 
 :root {
   color-scheme: light;
+  /* El teclado lo pone a 0 `bindKeyboardInset`: si no, el indicador de inicio queda como hueco encima del teclado. */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --keyboard-lift: 0px;
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.21 0.02 270);
@@ -124,6 +127,11 @@
   --color-bubble-agent-foreground: var(--bubble-agent-foreground);
 }
 
+/* Fuera de @layer: si no, el valor de :root gana y el hueco del indicador sigue encima del teclado. */
+html[data-keyboard] {
+  --safe-bottom: 0px;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -131,10 +139,18 @@
   html,
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
   }
-  body {
-    /* Respeta el notch y la barra de inicio cuando la PWA corre en standalone. */
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
-      env(safe-area-inset-left);
+  #root {
+    /* Caja fija al alto de la pantalla: el padding de body se sumaba y la PWA hacía scroll.
+       El indicador de inicio no va aquí; si no, queda una franja vacía bajo la barra.
+       Lo absorben la barra y el compositor, que sí pintan hasta el borde. */
+    position: fixed;
+    inset: 0;
+    bottom: var(--keyboard-lift);
+    overflow: hidden;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
   }
 }

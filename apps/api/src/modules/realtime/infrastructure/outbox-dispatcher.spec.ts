@@ -6,7 +6,8 @@ import type { AttachmentDownloader } from '../application/ports/attachment-downl
 import type { OutboxEventStore, PendingOutboxEvent } from '../application/ports/outbox-event-store';
 import type { OutboundMessageSender } from '../application/ports/outbound-message-sender';
 import type { RealtimePublisher } from '../application/ports/realtime-publisher';
-import { BATCH_SIZE, OutboxDispatcher, SEND_MAX_RETRIES } from './outbox-dispatcher';
+import type { PushSender } from '../../notifications/application/deliver-push.use-case';
+import { BATCH_SIZE, OutboxDispatcher, PUSH_MAX_ATTEMPTS, SEND_MAX_RETRIES } from './outbox-dispatcher';
 
 const noTransaction: TransactionRunner = {
   run: (work) => work(),
@@ -105,6 +106,16 @@ class FakeSender implements OutboundMessageSender {
 
   async fail(_tenantId: string, payload: unknown, reason: string) {
     this.failed.push({ payload, reason });
+  }
+}
+
+class FakePush implements PushSender {
+  calls = 0;
+  error: Error | null = new Error('push caído');
+
+  async deliver() {
+    this.calls += 1;
+    if (this.error) throw this.error;
   }
 }
 
@@ -353,6 +364,49 @@ describe('OutboxDispatcher', () => {
       expect(downloader.calls).toBe(1);
       expect(downloader.failed).toHaveLength(1);
       expect(event.publishedAt).toEqual(T0);
+    });
+  });
+
+  describe('notification.requested', () => {
+    let push: FakePush;
+
+    beforeEach(() => {
+      push = new FakePush();
+      dispatcher = new OutboxDispatcher(
+        noTransaction,
+        store,
+        publisher,
+        sender,
+        undefined,
+        undefined,
+        push,
+      );
+    });
+
+    it('entrega y cierra el evento', async () => {
+      push.error = null;
+      const event = store.add({ type: 'notification.requested', payload: { kind: 'assigned' } });
+      expect(await dispatcher.tick(T0)).toBe(1);
+      expect(push.calls).toBe(1);
+      expect(event.publishedAt).toEqual(T0);
+    });
+
+    it('reintenta dos veces (1 s y 2 s) y luego descarta el aviso', async () => {
+      const event = store.add({ type: 'notification.requested', payload: { kind: 'assigned' } });
+      const waits: number[] = [];
+      let now = T0;
+
+      for (let attempt = 0; attempt < PUSH_MAX_ATTEMPTS; attempt += 1) {
+        await dispatcher.tick(now);
+        if (event.publishedAt) break;
+        waits.push((event.nextAttemptAt.getTime() - now.getTime()) / 1000);
+        now = event.nextAttemptAt;
+      }
+
+      expect(waits).toEqual([1, 2]);
+      expect(push.calls).toBe(3);
+      expect(event.publishedAt).toEqual(now);
+      expect(event.lastError).toBe('push caído');
     });
   });
 });

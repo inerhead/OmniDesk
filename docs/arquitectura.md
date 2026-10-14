@@ -318,6 +318,14 @@ flowchart LR
 
 `GET /api/v1/attachments/:id/content` entrega el archivo a quien puede ver la conversación. Acepta `Range` para audio y video. Un adjunto, o un tipo de WhatsApp no soportado, no se reenvía a n8n: queda para un agente. Pasadas 18 h desde el último mensaje del cliente, OmniDesk no envía texto, adjuntos ni reintentos, y la IA recibe `409 WINDOW_CLOSED`.
 
+## Web Push (SPEC 13)
+
+Las notificaciones son por dispositivo (`push_subscriptions` del usuario) y los interruptores son por miembro de cada empresa. Sin las tres claves `VAPID_*` el módulo no encola nada y `GET /push/config` responde 404.
+
+El cambio (asignación, mensaje del cliente, envío fallido o conversación nueva en IA) resuelve destinatarios en la misma transacción y encola `notification.requested`. El dispatcher lo entrega con `web-push` (TTL 1 h, topic = id de la conversación). Un `404` o `410` borra esa suscripción; otro error se reintenta hasta 3 veces.
+
+La web registra el permiso solo al pulsar «Activar notificaciones». En escritorio y en la PWA instalada (Android o iPhone en pantalla de inicio) el service worker muestra el aviso. En Safari de iPhone sin instalar, la pantalla pide añadir la app a inicio y no pide permiso. Si el miembro tiene el chat abierto y la pestaña visible, no se avisa de ese mensaje del cliente. Al tocar el aviso, si es de otra empresa, la web llama a `POST /me/active-tenant` y abre esa conversación.
+
 ## 10. Registro integral y experiencia web
 
 - Se registran todos los mensajes del cliente, las respuestas de la IA y los mensajes de los agentes.
@@ -408,7 +416,7 @@ Cada incremento se especifica en `specs/NN-*.md` justo antes de implementarlo. S
 | 5 | SPEC 08 | Despliegue | VPS propio con Docker Compose: dos entornos aislados (`dev`, `prod`) en la subruta `/omnidesk` de `dev.gastromesa.com` y `gastromesa.com`, tras el Nginx existente, con web y API en el mismo origen. Imágenes de producción (API no root con migraciones al arrancar; gateway Caddy con la PWA, caché y CSP), backup diario con 7 copias y despliegue manual con `deploy.sh`. La conexión con n8n y WhatsApp reales pasa a SPEC 09. |
 | 6 | SPEC 05 | Atención humana | **Completa el ciclo del MVP en local.** El agente asignado responde desde la PWA: el mensaje se registra `PENDING`, el dispatcher del Outbox lo envía por el puerto `MessagingProvider` (adaptador simulado) con reintentos de 1/2/4/8/16 s y los estados `SENT`/`DELIVERED`/`READ`/`FAILED` se ven en tiempo real, con reintento manual. `POST /integrations/messages/status` (deduplicado en `EventInbox`, transiciones monótonas) recibe los estados de las respuestas de IA. El adaptador n8n/WhatsApp real llega con la integración real, sin tocar el dominio. |
 | 6b | SPEC 09 | WhatsApp e IA opcional | Settings de canales, webhook nativo Meta, envío Graph directo, IA n8n opcional y HMAC. |
-| 7 | — | Robustez | E2E con Playwright (también en viewport móvil), rate limiting, evaluación de RLS, métricas, política de retención y notificaciones Web Push (requieren la PWA instalada en iOS) |
+| 7 | — | Robustez | E2E con Playwright (también en viewport móvil), rate limiting, evaluación de RLS, métricas y política de retención. Web Push quedó en SPEC 13. |
 
 ## 15. Escenario de aceptación de extremo a extremo
 

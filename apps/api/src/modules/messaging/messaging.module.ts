@@ -2,6 +2,7 @@ import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { Module } from '@nestjs/common';
 import { ChannelsModule } from '../channels/channels.module';
 import { ConversationsModule } from '../conversations/conversations.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { DispatchOutboundMessageUseCase } from './application/dispatch-outbound-message.use-case';
 import { MESSAGING_PROVIDER_REGISTRY } from './application/ports/messaging-provider.port';
 import { ChannelMessagingProviderRegistry } from './infrastructure/messaging-provider-registry';
@@ -10,7 +11,7 @@ import { SimulatedMessagingProvider } from './infrastructure/simulated-messaging
 
 /** Envío saliente: un adaptador por `Channel.provider` (arquitectura §13), elegido por el registro. */
 @Module({
-  imports: [ConversationsModule, ChannelsModule, WhatsAppModule],
+  imports: [ConversationsModule, ChannelsModule, WhatsAppModule, NotificationsModule],
   providers: [
     SimulatedMessagingProvider,
     N8nMessagingProvider,

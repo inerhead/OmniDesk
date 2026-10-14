@@ -1,4 +1,5 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { EnqueueNotificationUseCase } from '../../notifications/application/enqueue-notification.use-case';
 import { FindOutboundForSendUseCase } from '../../conversations/application/find-outbound-for-send.use-case';
 import { SendRequestedPayloadSchema } from '../../conversations/application/enqueue-send-requested';
 import { UpdateDeliveryStatusUseCase } from '../../conversations/application/update-delivery-status.use-case';
@@ -20,6 +21,7 @@ export class DispatchOutboundMessageUseCase {
     private readonly findOutbound: FindOutboundForSendUseCase,
     private readonly deliveryStatus: UpdateDeliveryStatusUseCase,
     @Inject(MESSAGING_PROVIDER_REGISTRY) private readonly providers: MessagingProviderRegistry,
+    @Optional() private readonly notifications?: EnqueueNotificationUseCase,
   ) {}
 
   /**
@@ -84,5 +86,14 @@ export class DispatchOutboundMessageUseCase {
         error: reason.slice(0, 500),
       },
     );
+    await this.notifications?.requested({
+      tenantId,
+      kind: 'send_failed',
+      conversationId: outbound.message.conversationId,
+      actorMemberId: null,
+      assignedAgentId: null,
+      senderMemberId: outbound.message.sender?.id ?? null,
+      messageId,
+    });
   }
 }

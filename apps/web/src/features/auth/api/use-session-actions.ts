@@ -1,6 +1,7 @@
 import type { MeResponse } from '@omnidesk/contracts';
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
+import { disablePushOnThisDevice } from '@/features/notifications/push-api';
 import { postActiveTenant, postLogout } from './auth-api';
 import { ME_QUERY_KEY } from './use-me';
 
@@ -34,7 +35,10 @@ export function useLogout() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   return useMutation({
-    mutationFn: postLogout,
+    mutationFn: async () => {
+      await disablePushOnThisDevice().catch(() => undefined);
+      await postLogout();
+    },
     onSettled: () => {
       resetSessionCache(queryClient);
       void navigate('/login', { replace: true });

@@ -1,4 +1,5 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import { EnqueueNotificationUseCase } from '../../notifications/application/enqueue-notification.use-case';
 import type { IntegrationContext } from '../../../shared/application/request-context';
 import { OUTBOX_PORT, type OutboxPort } from '../../../shared/application/outbox.port';
 import { retryOnConflict } from '../../../shared/application/retry-on-conflict';
@@ -55,6 +56,7 @@ export class RegisterInboundMessageUseCase {
     @Inject(CONVERSATION_REPOSITORY) private readonly conversations: ConversationRepository,
     @Inject(CONTACT_REPOSITORY) private readonly contacts: ContactRepository,
     @Inject(OUTBOX_PORT) private readonly outbox: OutboxPort,
+    @Optional() private readonly notifications?: EnqueueNotificationUseCase,
   ) {}
 
   execute(
@@ -100,7 +102,7 @@ export class RegisterInboundMessageUseCase {
       input.sentAt,
       input.attachment && { ...input.attachment, status: 'PENDING' },
     );
-    const conversation = await this.conversationFor(
+    const { conversation, created } = await this.conversationFor(
       integration,
       contact.id,
       previewSource(newMessage),
@@ -114,6 +116,27 @@ export class RegisterInboundMessageUseCase {
       'message',
       now,
     );
+    if (created) {
+      await this.notifications?.requested({
+        tenantId: integration.tenantId,
+        kind: 'new_ai_conversation',
+        conversationId: conversation.id,
+        actorMemberId: null,
+        assignedAgentId: null,
+        senderMemberId: null,
+        messageId: message.id,
+      });
+    } else if (conversation.assignedAgentId) {
+      await this.notifications?.requested({
+        tenantId: integration.tenantId,
+        kind: 'customer_message',
+        conversationId: conversation.id,
+        actorMemberId: null,
+        assignedAgentId: conversation.assignedAgentId,
+        senderMemberId: null,
+        messageId: message.id,
+      });
+    }
     return toResult(conversation, message.id, message.attachment?.id ?? null, false);
   }
 
@@ -123,20 +146,23 @@ export class RegisterInboundMessageUseCase {
     contactId: string,
     preview: string,
     now: Date,
-  ): Promise<Conversation> {
+  ): Promise<{ conversation: Conversation; created: boolean }> {
     const open = await this.conversations.findOpen(integration.channelId, contactId);
-    if (open) return open;
+    if (open) return { conversation: open, created: false };
 
     const closed = await this.conversations.findLatestClosed(integration.channelId, contactId);
-    if (closed) return this.reopen(closed, now);
+    if (closed) return { conversation: await this.reopen(closed, now), created: false };
 
-    return this.conversations.createOpen({
-      tenantId: integration.tenantId,
-      channelId: integration.channelId,
-      contactId,
-      at: now,
-      preview: toPreview(preview),
-    });
+    return {
+      created: true,
+      conversation: await this.conversations.createOpen({
+        tenantId: integration.tenantId,
+        channelId: integration.channelId,
+        contactId,
+        at: now,
+        preview: toPreview(preview),
+      }),
+    };
   }
 
   /** Reapertura automática por un mensaje del cliente: vuelve a la IA y registra `REOPENED` sin actor. */

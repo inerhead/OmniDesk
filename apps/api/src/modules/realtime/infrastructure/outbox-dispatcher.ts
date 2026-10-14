@@ -32,6 +32,10 @@ import {
   REALTIME_PUBLISHER,
   type RealtimePublisher,
 } from '../application/ports/realtime-publisher';
+import { PUSH_SENDER, type PushSender } from '../../notifications/application/deliver-push.use-case';
+
+/** Un aviso tardío no aporta: 3 intentos en total (el primero y dos reintentos). */
+export const PUSH_MAX_ATTEMPTS = 3;
 
 export const DISPATCH_INTERVAL_MS = 500;
 export const BATCH_SIZE = 100;
@@ -58,6 +62,7 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
     @Inject(OUTBOUND_MESSAGE_SENDER) private readonly sender: OutboundMessageSender,
     @Optional() private readonly ai?: AiReplyWorker,
     @Optional() @Inject(ATTACHMENT_DOWNLOADER) private readonly downloads?: AttachmentDownloader,
+    @Optional() @Inject(PUSH_SENDER) private readonly pushes?: PushSender,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -112,6 +117,7 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
         return this.failDownload(event, message, error instanceof PermanentDownloadError, now);
       if (event.type === MESSAGE_SEND_REQUESTED || event.type === 'ai.reply_requested')
         return this.failSend(event, message, now);
+      if (event.type === 'notification.requested') return this.failPush(event, message, now);
 
       const attempts = event.attempts + 1;
       const delaySeconds = Math.min(2 ** attempts, MAX_BACKOFF_SECONDS);
@@ -140,6 +146,10 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
       case ATTACHMENT_DOWNLOAD_REQUESTED:
         if (!this.downloads) throw new Error('Worker de adjuntos no disponible');
         await this.downloads.process(event.tenantId, event.payload);
+        return;
+      case 'notification.requested':
+        if (!this.pushes) throw new Error('Envío de notificaciones no disponible');
+        await this.pushes.deliver(event.payload);
         return;
       default:
         throw new Error(`Tipo de evento no soportado: ${event.type}`);
@@ -187,6 +197,23 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
     }
     this.logger.warn(`Outbox ${event.id}: descarga abandonada: ${reason}`);
     await this.downloads?.fail(event.tenantId, event.payload, reason);
+    await this.store.markPublished(event.id, now, reason);
+    return false;
+  }
+
+  /** 3 intentos: el primero y dos reintentos (1 s y 2 s). Después se descarta. */
+  private async failPush(event: PendingOutboxEvent, reason: string, now: Date): Promise<boolean> {
+    if (event.attempts + 1 < PUSH_MAX_ATTEMPTS) {
+      const attempts = event.attempts + 1;
+      this.logger.warn(`Outbox ${event.id}: push fallido (intento ${attempts}): ${reason}`);
+      await this.store.scheduleRetry(event.id, {
+        attempts,
+        error: reason,
+        at: new Date(now.getTime() + 2 ** (attempts - 1) * 1000),
+      });
+      return false;
+    }
+    this.logger.warn(`Outbox ${event.id}: push abandonado tras ${PUSH_MAX_ATTEMPTS} intentos`);
     await this.store.markPublished(event.id, now, reason);
     return false;
   }

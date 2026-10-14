@@ -8,7 +8,7 @@ import { useMe } from '../api/use-me';
 
 export function FullScreenLoader() {
   return (
-    <div className="flex h-dvh items-center justify-center" aria-busy="true">
+    <div className="flex h-full items-center justify-center" aria-busy="true">
       <Loader2 className="text-muted-foreground size-6 animate-spin" aria-label="Cargando" />
     </div>
   );
@@ -23,7 +23,7 @@ export function AuthGate() {
   if (me.isPending || isStatus(me.error, 401)) return <FullScreenLoader />;
   if (me.isError) {
     return (
-      <div className="flex h-dvh items-center justify-center">
+      <div className="flex h-full items-center justify-center">
         <EmptyState
           title="No se pudo conectar con el servidor"
           action={

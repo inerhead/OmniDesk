@@ -12,7 +12,6 @@ export default defineConfig(({ mode }) => {
   // Un VITE_API_URL o BASE_PATH inválido hace fallar `vite build` y `vite dev`.
   const { BASE_PATH } = parseWebEnv(loadEnv(mode, process.cwd(), ['VITE_', 'BASE_PATH']));
   const base = `${BASE_PATH}/`;
-  const escapedBase = BASE_PATH.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   return {
     // La app se sirve bajo la subruta (/omnidesk/) también en local.
@@ -21,6 +20,9 @@ export default defineConfig(({ mode }) => {
       react(),
       tailwindcss(),
       VitePWA({
+        strategies: 'injectManifest',
+        srcDir: 'src',
+        filename: 'sw.ts',
         registerType: 'prompt',
         // El registro lo hace `useRegisterSW` en UpdatePrompt.
         injectRegister: false,
@@ -47,16 +49,13 @@ export default defineConfig(({ mode }) => {
             },
           ],
         },
-        workbox: {
+        injectManifest: {
           // Solo el app shell (incluida la fuente Inter, para que funcione sin conexión).
-          // Las respuestas del API nunca se cachean (sin runtimeCaching).
+          // Las respuestas del API nunca se cachean.
           globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest,woff2}'],
-          navigateFallback: `${base}index.html`,
-          navigateFallbackDenylist: [new RegExp(`^${escapedBase}/api/`)],
-          cleanupOutdatedCaches: true,
         },
-        // Sin service worker en `vite dev`: la PWA se verifica con el build (web-preview).
-        devOptions: { enabled: false },
+        // En desarrollo también hay service worker: el escritorio en localhost puede suscribirse.
+        devOptions: { enabled: true, type: 'module' },
       }),
     ],
     resolve: {

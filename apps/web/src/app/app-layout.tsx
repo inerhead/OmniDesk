@@ -1,5 +1,6 @@
 import { Outlet, useMatch } from 'react-router';
 import { useMe } from '@/features/auth/api/use-me';
+import { PresenceReporter, PushOpenListener } from '@/features/notifications/push-runtime';
 import { OfflineBanner } from '@/shared/pwa/offline-banner';
 import { UpdatePrompt } from '@/shared/pwa/update-prompt';
 import { BottomNav } from './bottom-nav';
@@ -18,7 +19,7 @@ export function AppLayout() {
   return (
     // `key`: al cambiar de empresa activa, el socket se cierra y se abre con el room nuevo.
     <RealtimeProvider key={me?.activeTenantId ?? 'none'}>
-      <div className="flex h-dvh">
+      <div className="flex h-full min-h-0">
         <NavRail />
         <div className="flex min-w-0 flex-1 flex-col">
           <OfflineBanner />
@@ -29,6 +30,8 @@ export function AppLayout() {
           {!inChat && <BottomNav />}
         </div>
         <UpdatePrompt />
+        <PresenceReporter />
+        <PushOpenListener />
       </div>
     </RealtimeProvider>
   );

@@ -8,5 +8,6 @@ export * from './health';
 export * from './integrations';
 export * from './invitations';
 export * from './members';
+export * from './push';
 export * from './realtime';
 export * from './tenants';

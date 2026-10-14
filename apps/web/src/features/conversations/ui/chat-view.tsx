@@ -67,6 +67,7 @@ export function ChatView({ conversationId }: { conversationId: string }) {
   const togglePanel = () => (isXl ? setContactPanelOpen(!panelOpen) : setSheetOpen(!sheetOpen));
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   const [atBottom, setAtBottom] = useState(true);
   const [farFromBottom, setFarFromBottom] = useState(false);
@@ -83,16 +84,30 @@ export function ChatView({ conversationId }: { conversationId: string }) {
     (item) => item.kind === 'message' && item.sequence > seenSequence,
   ).length;
 
-  // Al abrir otra conversación, volver a anclar al final.
-  useEffect(() => {
+  // Al abrir el chat se muestra el último mensaje. Si el usuario subió a leer
+  // el historial, un mensaje nuevo no lo arrastra hacia abajo.
+  useLayoutEffect(() => {
     stickToBottom.current = true;
+    const element = scrollRef.current;
+    if (element) element.scrollTop = element.scrollHeight;
   }, [conversationId]);
 
-  // Elementos nuevos: bajar solo si el usuario ya estaba al final (no al cargar anteriores).
   useLayoutEffect(() => {
     const element = scrollRef.current;
     if (element && stickToBottom.current) element.scrollTop = element.scrollHeight;
   }, [newest?.id]);
+
+  // Una foto o un audio crecen después del primer pintado y dejarían el último mensaje cortado.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content) return;
+    const observer = new ResizeObserver(() => {
+      const element = scrollRef.current;
+      if (element && stickToBottom.current) element.scrollTop = element.scrollHeight;
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [conversationId]);
 
   const onScroll = () => {
     const element = scrollRef.current;
@@ -214,7 +229,7 @@ export function ChatView({ conversationId }: { conversationId: string }) {
             onScroll={onScroll}
             className="h-full overflow-y-auto px-3 pb-4 md:px-6"
           >
-            <div className="mx-auto w-full max-w-3xl">
+            <div ref={contentRef} className="mx-auto w-full max-w-3xl">
               {timeline.isPending && (
                 <p className="text-muted-foreground py-4 text-center text-sm">Cargando mensajes…</p>
               )}
@@ -294,7 +309,7 @@ export function ChatView({ conversationId }: { conversationId: string }) {
         )}
 
         {mode.kind === 'take' && summary && actor && (
-          <div className="bg-background shrink-0 border-t px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:px-6">
+          <div className="bg-background shrink-0 border-t px-3 pt-3 pb-[max(0.75rem,var(--safe-bottom))] md:px-6">
             <Button
               className="w-full"
               disabled={command.pending}
@@ -312,13 +327,13 @@ export function ChatView({ conversationId }: { conversationId: string }) {
         )}
 
         {mode.kind === 'assigned-other' && (
-          <p className="text-muted-foreground bg-background shrink-0 border-t px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-center text-sm md:px-6">
+          <p className="text-muted-foreground bg-background shrink-0 border-t px-3 pt-3 pb-[max(0.75rem,var(--safe-bottom))] text-center text-sm md:px-6">
             Asignada a {mode.name}
           </p>
         )}
 
         {mode.kind === 'window-closed' && (
-          <p className="text-muted-foreground bg-background shrink-0 border-t px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-center text-sm md:px-6">
+          <p className="text-muted-foreground bg-background shrink-0 border-t px-3 pt-3 pb-[max(0.75rem,var(--safe-bottom))] text-center text-sm md:px-6">
             {WINDOW_CLOSED_NOTICE}
           </p>
         )}

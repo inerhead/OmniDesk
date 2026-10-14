@@ -29,6 +29,8 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   /** Un `401` es una respuesta esperada (p. ej. `/me` en una pantalla pública): no cierra la sesión. */
   allowUnauthorized?: boolean;
+  /** Cuerpo de un DELETE (la suscripción push se borra por endpoint). */
+  body?: unknown;
 }
 
 let onUnauthorized: (() => void) | null = null;
@@ -104,7 +106,7 @@ export function patchJson(
 
 /** DELETE sin cuerpo. */
 export function deleteJson(path: string, options: RequestOptions = {}): Promise<ApiResponse> {
-  return requestJson('DELETE', path, undefined, options);
+  return requestJson('DELETE', path, options.body, options);
 }
 
 /** POST multipart (adjuntos). Timeout amplio: 16 MB con una conexión móvil lenta. */

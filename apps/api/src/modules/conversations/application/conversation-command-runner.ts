@@ -1,4 +1,5 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import { EnqueueNotificationUseCase } from '../../notifications/application/enqueue-notification.use-case';
 import { OUTBOX_PORT, type OutboxPort } from '../../../shared/application/outbox.port';
 import type { ActorContext } from '../../../shared/application/request-context';
 import {
@@ -43,6 +44,7 @@ export class ConversationCommandRunner {
     @Inject(CONVERSATION_REPOSITORY) private readonly conversations: ConversationRepository,
     @Inject(MEMBER_REPOSITORY) private readonly members: MemberRepository,
     @Inject(OUTBOX_PORT) private readonly outbox: OutboxPort,
+    @Optional() private readonly notifications?: EnqueueNotificationUseCase,
   ) {}
 
   run(actor: ActorContext, input: CommandInput): Promise<CommandResult> {
@@ -92,6 +94,16 @@ export class ConversationCommandRunner {
       'assignment',
       now,
     );
+    if (command.type === 'assign') {
+      await this.notifications?.requested({
+        tenantId: actor.tenantId,
+        kind: 'assigned',
+        conversationId: conversation.id,
+        actorMemberId: actor.memberId,
+        assignedAgentId: command.memberId,
+        senderMemberId: null,
+      });
+    }
     return { kind: 'ok' };
   }
 }

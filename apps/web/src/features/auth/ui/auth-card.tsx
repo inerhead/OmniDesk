@@ -13,7 +13,7 @@ export function AuthCard({
   children: ReactNode;
 }) {
   return (
-    <div className="bg-muted/40 relative flex min-h-dvh items-center justify-center px-4 py-10">
+    <div className="bg-muted/40 relative flex h-full min-h-0 items-center justify-center overflow-y-auto px-4 py-10">
       <div className="absolute top-3 right-3">
         <ThemeMenu side="bottom" />
       </div>

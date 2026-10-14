@@ -254,10 +254,28 @@ model User {
   avatarUrl   String?  @map("avatar_url")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  memberships TenantMember[]
-  sessions    Session[]
+  memberships       TenantMember[]
+  sessions          Session[]
+  pushSubscriptions PushSubscription[]
 
   @@map("users")
+}
+
+/// Suscripción Web Push de un dispositivo. Pertenece al usuario, no a una empresa.
+model PushSubscription {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  endpoint   String    @unique
+  p256dh     String
+  auth       String
+  userAgent  String?   @map("user_agent")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastUsedAt DateTime? @map("last_used_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }
 
 /// Sesión de la web. La cookie lleva el token; aquí solo se guarda su sha256.
@@ -313,6 +331,10 @@ model TenantMember {
   /// Baja lógica: el historial lo sigue referenciando.
   removedAt   DateTime?  @map("removed_at") @db.Timestamptz(3)
   createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  notifyAssigned          Boolean @default(true) @map("notify_assigned")
+  notifyCustomerMessage   Boolean @default(true) @map("notify_customer_message")
+  notifySendFailed        Boolean @default(true) @map("notify_send_failed")
+  notifyNewAiConversation Boolean @default(false) @map("notify_new_ai_conversation")
 
   tenant                Tenant              @relation(fields: [tenantId], references: [id])
   user                  User?               @relation(fields: [userId], references: [id])

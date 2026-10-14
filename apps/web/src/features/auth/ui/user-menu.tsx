@@ -1,5 +1,5 @@
-import { LogOut, Monitor, Moon, Sun } from 'lucide-react';
-import { useLocation } from 'react-router';
+import { Bell, LogOut, Monitor, Moon, Sun } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router';
 import { cn } from '@/shared/lib/utils';
 import { ConnectionDot } from '@/shared/realtime/connection-badge';
 import { CONNECTION_LABEL, useConnectionStatus } from '@/shared/realtime/connection-status';
@@ -22,10 +22,11 @@ import { SettingsMenuItems, TenantMenuItems } from './account-menu-items';
 
 /**
  * Perfil: avatar con el estado de conexión en la esquina (resaltado en `/settings/*`). Su menú reúne, en este orden, la cuenta, la
- * empresa (cambiar o crear), los ajustes de la empresa activa (Owner y Admin), el tema y cerrar sesión.
+ * empresa (cambiar o crear), los ajustes de la empresa activa (Owner y Admin), las notificaciones, el tema y cerrar sesión.
  */
 export function UserMenu({ variant }: { variant: 'rail' | 'bar' }) {
   const { data: me } = useMe();
+  const navigate = useNavigate();
   const logout = useLogout();
   const theme = useThemePref();
   const connection = CONNECTION_LABEL[useConnectionStatus()];
@@ -84,6 +85,12 @@ export function UserMenu({ variant }: { variant: 'rail' | 'bar' }) {
             <SettingsMenuItems tenantName={membership.tenantName} />
           </>
         )}
+        <DropdownMenuSeparator />
+
+        <DropdownMenuItem onSelect={() => void navigate('/settings/notifications')}>
+          <Bell aria-hidden />
+          Notificaciones
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
 
         <DropdownMenuLabel>Tema</DropdownMenuLabel>

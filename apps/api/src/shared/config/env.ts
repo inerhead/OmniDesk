@@ -89,6 +89,16 @@ export const EnvSchema = z
       .int()
       .positive()
       .default(25 * 1024 * 1024),
+    /** Claves Web Push. Las tres juntas habilitan el módulo; si faltan, no se encolan avisos. */
+    VAPID_PUBLIC_KEY: z.preprocess((value) => value || undefined, z.string().min(1).optional()),
+    VAPID_PRIVATE_KEY: z.preprocess((value) => value || undefined, z.string().min(1).optional()),
+    VAPID_SUBJECT: z.preprocess(
+      (value) => value || undefined,
+      z
+        .string()
+        .regex(/^mailto:[^@\s]+@[^@\s]+$/, 'Debe ser un mailto: (p. ej. mailto:soporte@gastromesa.com)')
+        .optional(),
+    ),
   })
   .superRefine((env, ctx) => {
     if (env.GOOGLE_CLIENT_ID && !env.GOOGLE_CLIENT_SECRET) {
@@ -138,6 +148,14 @@ export const EnvSchema = z
           });
         }
       }
+    }
+    const vapid = [env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY, env.VAPID_SUBJECT];
+    if (vapid.some(Boolean) && !vapid.every(Boolean)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['VAPID_PUBLIC_KEY'],
+        message: 'VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY y VAPID_SUBJECT van juntas',
+      });
     }
     if (env.NODE_ENV === 'production' && env.ATTACHMENT_STORAGE_DRIVER !== 's3') {
       ctx.addIssue({

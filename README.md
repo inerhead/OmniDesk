@@ -246,3 +246,15 @@ En el menú de usuario → **Canales**, un OWNER/ADMIN añade el número de What
 Para usar IA, configura el webhook de n8n, genera el secreto HMAC, prueba la conexión y activa el interruptor. n8n responde `{ "text": "respuesta completa" }`; OmniDesk registra y envía el mensaje a WhatsApp. Consulta [la guía de integración](docs/integracion-n8n.md) para la firma, los estados, el simulador y la compatibilidad con canales N8N legados.
 
 Aplica las migraciones del API antes de usar la pantalla. `WHATSAPP_GRAPH_VERSION` configura la versión de Graph; los secretos se cifran con `CHANNEL_SECRETS_KEY`.
+
+## Notificaciones (Web Push)
+
+En el menú de usuario → **Notificaciones** cada persona activa este dispositivo y elige qué avisos quiere de la empresa activa. Funciona en Chrome de escritorio (sin instalar) y en la app añadida a la pantalla de inicio del móvil. En iPhone, Safari solo permite avisos si la app está instalada (Compartir → Añadir a pantalla de inicio).
+
+Genera las claves una vez por entorno y guárdalas con el resto de secretos:
+
+```sh
+pnpm --filter @omnidesk/api vapid:generate
+```
+
+Copia `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT` al `.env`. Si faltan las tres, la pantalla dice que las notificaciones no están disponibles y no se envía nada. El aviso muestra el nombre del contacto y un extracto del mensaje: quien lo reciba ve ese texto en la pantalla de bloqueo.

@@ -9,6 +9,7 @@ import { IdentityModule } from './modules/identity/identity.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { MembersModule } from './modules/members/members.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { TeamModule } from './modules/team/team.module';
 import { TenancyModule } from './modules/tenancy/tenancy.module';
@@ -36,6 +37,7 @@ export class AppModule {
         AttachmentsModule,
         IntegrationsModule,
         MessagingModule,
+        NotificationsModule,
         RealtimeModule,
       ],
       // Valida con zod todo cuerpo y query tipados con DTOs de nestjs-zod (400 si no cumplen).

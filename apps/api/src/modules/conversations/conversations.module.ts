@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ContactsModule } from '../contacts/contacts.module';
 import { IdentityModule } from '../identity/identity.module';
 import { MembersModule } from '../members/members.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { AssignConversationUseCase } from './application/assign-conversation.use-case';
 import { CloseConversationUseCase } from './application/close-conversation.use-case';
 import { ConversationCommandRunner } from './application/conversation-command-runner';
@@ -27,7 +28,7 @@ import { PrismaConversationReadModel } from './infrastructure/prisma-conversatio
 import { PrismaConversationRepository } from './infrastructure/prisma-conversation.repository';
 
 @Module({
-  imports: [ContactsModule, IdentityModule, MembersModule],
+  imports: [ContactsModule, IdentityModule, MembersModule, NotificationsModule],
   controllers: [ConversationsController],
   providers: [
     { provide: CONVERSATION_REPOSITORY, useClass: PrismaConversationRepository },

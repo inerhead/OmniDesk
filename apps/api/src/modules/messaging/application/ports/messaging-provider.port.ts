@@ -1,4 +1,13 @@
+import type { AttachmentKind } from '@omnidesk/contracts';
 import type { ChannelForSend } from '../../../channels/application/ports/channel.repository';
+
+/** Archivo de un envío, ya guardado en el bucket. */
+export interface OutboundAttachment {
+  kind: AttachmentKind;
+  mimeType: string;
+  fileName: string | null;
+  storageKey: string;
+}
 
 export interface SendMessageRequest {
   tenantId: string;
@@ -10,6 +19,8 @@ export interface SendMessageRequest {
   /** Teléfono E.164 del destinatario. */
   to: string;
   text: string;
+  /** Con adjunto, `text` es su pie (puede ser vacío). */
+  attachment: OutboundAttachment | null;
 }
 
 /**

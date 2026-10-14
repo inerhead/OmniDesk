@@ -32,6 +32,7 @@ export class N8nMessagingProvider implements MessagingProvider {
   ) {}
 
   async send(request: SendMessageRequest): Promise<{ providerMessageId: string }> {
+    if (request.attachment) throw new ChannelNotConfiguredError('el canal n8n no admite adjuntos');
     const { channel } = request;
     if (!channel.hmacSecretEnc) {
       throw new ChannelNotConfiguredError(`el canal ${channel.id} no tiene secreto HMAC`);

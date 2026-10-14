@@ -92,6 +92,7 @@ describe('DispatchOutboundMessageUseCase', () => {
         messageId,
         to: '+573001110001',
         text: 'Hola',
+        attachment: null,
       },
     ]);
     expect(conversations.messages[0]).toMatchObject({

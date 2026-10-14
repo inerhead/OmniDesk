@@ -16,6 +16,7 @@ const request = {
   messageId: '0199c0de-0000-7000-8000-000000000001',
   to: '+573001110001',
   text: 'Hola',
+  attachment: null,
 };
 
 const build = (rate: string, random = 0.5) => {

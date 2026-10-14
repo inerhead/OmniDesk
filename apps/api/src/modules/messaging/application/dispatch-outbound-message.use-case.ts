@@ -49,6 +49,14 @@ export class DispatchOutboundMessageUseCase {
         messageId: message.id,
         to: outbound.to,
         text: message.text,
+        attachment: message.attachment?.storageKey
+          ? {
+              kind: message.attachment.kind,
+              mimeType: message.attachment.mimeType,
+              fileName: message.attachment.fileName,
+              storageKey: message.attachment.storageKey,
+            }
+          : null,
       }));
     } catch (error) {
       if (!(error instanceof ChannelNotConfiguredError)) throw error;

@@ -6,6 +6,7 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
+import { DispatchOutboundMessageUseCase } from '../src/modules/messaging/application/dispatch-outbound-message.use-case';
 import { AttachmentDownloadWorker } from '../src/modules/whatsapp/attachment-download-worker';
 import { OutboxDispatcher } from '../src/modules/realtime/infrastructure/outbox-dispatcher';
 import { PrismaService } from '../src/shared/infrastructure/prisma/prisma.service';
@@ -385,5 +386,24 @@ describe('Adjuntos de WhatsApp (e2e)', () => {
       .send({ controlVersion: current.controlVersion })
       .expect(200);
     await upload(conversationId, pdf).expect(409);
+  });
+
+  it('el dispatcher sube el PDF a Graph y lo envía con media id; queda SENT', async () => {
+    const conversationId = await openAssigned();
+    const sent = await upload(conversationId, pdf, { caption: 'Cotización' }).expect(201);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ id: 'media-up-1' }))
+      .mockResolvedValueOnce(Response.json({ messages: [{ id: 'wamid.OUT' }] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await app.get(DispatchOutboundMessageUseCase).send(tenantId, { messageId: sent.body.id });
+
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body)).toMatchObject({
+      type: 'document',
+      document: { id: 'media-up-1', caption: 'Cotización', filename: 'cotización.pdf' },
+    });
+    const message = await db.message.findUniqueOrThrow({ where: { id: sent.body.id } });
+    expect(message).toMatchObject({ status: 'SENT', externalId: 'wamid.OUT' });
   });
 });

@@ -44,6 +44,7 @@ describe('N8nMessagingProvider', () => {
     messageId: '0199c0de-0000-7000-8000-000000000001',
     to: '+573001110001',
     text: 'Hola desde OmniDesk',
+    attachment: null,
   });
 
   beforeAll(async () => {
@@ -135,5 +136,14 @@ describe('N8nMessagingProvider', () => {
       'CHANNEL_NOT_CONFIGURED',
     );
     expect(received).toHaveLength(0);
+  });
+
+  it('rechaza adjuntos como canal no configurado', async () => {
+    await expect(
+      provider.send({
+        ...request(),
+        attachment: { kind: 'IMAGE', mimeType: 'image/png', fileName: null, storageKey: 'k' },
+      }),
+    ).rejects.toBeInstanceOf(ChannelNotConfiguredError);
   });
 });

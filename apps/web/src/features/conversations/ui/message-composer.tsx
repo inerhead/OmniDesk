@@ -1,12 +1,59 @@
 import {
   MAX_ATTACHMENT_CAPTION_LENGTH,
-  OUTBOUND_ATTACHMENT_ACCEPT,
+  OUTBOUND_ATTACHMENT_TYPES,
+  type AttachmentKind,
 } from '@omnidesk/contracts';
-import { Paperclip, SendHorizontal, X } from 'lucide-react';
+import {
+  AudioLines,
+  Camera,
+  FileText,
+  Images,
+  Paperclip,
+  SendHorizontal,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Button } from '@/shared/ui/button';
 import { formatBytes } from '../model/attachment-view';
 import { outboundFileProblem, type Draft } from '../model/outbound-file';
+
+function acceptFor(kind: AttachmentKind): string {
+  const mimes = Object.entries(OUTBOUND_ATTACHMENT_TYPES)
+    .filter(([, rule]) => rule.kind === kind)
+    .map(([mime]) => mime);
+  if (kind === 'AUDIO') mimes.push('.m4a');
+  return mimes.join(',');
+}
+
+const ATTACHMENT_ACTIONS: {
+  label: string;
+  accept: string;
+  capture?: 'environment';
+  icon: LucideIcon;
+  circleClass: string;
+}[] = [
+  {
+    label: 'Fotos y videos',
+    accept: `${acceptFor('IMAGE')},${acceptFor('VIDEO')}`,
+    icon: Images,
+    circleClass: 'bg-sky-500',
+  },
+  {
+    label: 'Cámara',
+    accept: acceptFor('IMAGE'),
+    capture: 'environment',
+    icon: Camera,
+    circleClass: 'bg-slate-600',
+  },
+  {
+    label: 'Documento',
+    accept: acceptFor('DOCUMENT'),
+    icon: FileText,
+    circleClass: 'bg-blue-600',
+  },
+  { label: 'Audio', accept: acceptFor('AUDIO'), icon: AudioLines, circleClass: 'bg-orange-500' },
+];
 
 export const MAX_MESSAGE_LENGTH = 4096;
 /** El contador aparece al acercarse al límite. */
@@ -26,6 +73,7 @@ export function MessageComposer({
 }) {
   const [text, setText] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [trayOpen, setTrayOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const maxLength = file ? MAX_ATTACHMENT_CAPTION_LENGTH : MAX_MESSAGE_LENGTH;
@@ -51,6 +99,15 @@ export function MessageComposer({
         },
       },
     );
+  };
+
+  const pick = (accept: string, capture?: 'environment') => {
+    const input = fileInputRef.current;
+    if (!input || sending) return;
+    input.accept = accept;
+    if (capture) input.setAttribute('capture', capture);
+    else input.removeAttribute('capture');
+    input.click();
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -94,11 +151,11 @@ export function MessageComposer({
         <input
           ref={fileInputRef}
           type="file"
-          accept={OUTBOUND_ATTACHMENT_ACCEPT}
           className="hidden"
           onChange={(event) => {
             setFile(event.target.files?.[0] ?? null);
             event.target.value = '';
+            setTrayOpen(false);
           }}
         />
         <Button
@@ -107,8 +164,10 @@ export function MessageComposer({
           variant="ghost"
           className="rounded-full"
           aria-label="Adjuntar archivo"
+          aria-expanded={trayOpen}
+          aria-controls="attachment-tray"
           disabled={sending}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => setTrayOpen((open) => !open)}
         >
           <Paperclip aria-hidden />
         </Button>
@@ -137,6 +196,32 @@ export function MessageComposer({
         <p className="text-muted-foreground mt-1 text-right text-xs" aria-live="polite">
           {text.length}/{maxLength}
         </p>
+      )}
+      {trayOpen && (
+        <div
+          id="attachment-tray"
+          className="bg-muted animate-in fade-in-0 slide-in-from-bottom-2 mt-2 rounded-2xl px-2 py-1"
+        >
+          <ul>
+            {ATTACHMENT_ACTIONS.map((action) => (
+              <li key={action.label}>
+                <button
+                  type="button"
+                  className="hover:bg-background/70 flex w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left text-sm disabled:opacity-50"
+                  disabled={sending}
+                  onClick={() => pick(action.accept, action.capture)}
+                >
+                  <span
+                    className={`flex size-8 shrink-0 items-center justify-center rounded-full text-white ${action.circleClass}`}
+                  >
+                    <action.icon className="size-4" aria-hidden />
+                  </span>
+                  {action.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </form>
   );

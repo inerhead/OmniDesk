@@ -57,10 +57,21 @@ export const ConversationSummarySchema = z.object({
   controlVersion: z.int().min(0),
   lastMessageAt: z.iso.datetime(),
   lastMessagePreview: z.string(),
+  /** Último mensaje del cliente; `null` si no hay. Marca la ventana de respuesta. */
+  lastInboundAt: z.iso.datetime().nullable(),
   /** Inicio de la conversación. */
   createdAt: z.iso.datetime(),
 });
 export type ConversationSummary = z.infer<typeof ConversationSummarySchema>;
+
+/** OmniDesk deja de enviar a las 18 h del último mensaje del cliente; Meta corta a las 24 h. */
+export const REPLY_WINDOW_HOURS = 18;
+export const REPLY_WINDOW_MS = REPLY_WINDOW_HOURS * 60 * 60 * 1000;
+
+export function isReplyWindowOpen(lastInboundAt: Date | string | null, now: Date): boolean {
+  if (lastInboundAt === null) return false;
+  return now.getTime() - new Date(lastInboundAt).getTime() < REPLY_WINDOW_MS;
+}
 
 export const ListConversationsResponseSchema = z.object({
   items: z.array(ConversationSummarySchema),
@@ -170,7 +181,7 @@ export type ConversationCommandResponse = ConversationSummary;
 
 /** Cuerpo del `409`. */
 export const ConversationCommandRejectedSchema = z.object({
-  reason: z.enum(['CONTROL_CHANGED', 'INVALID_STATE']),
+  reason: z.enum(['CONTROL_CHANGED', 'INVALID_STATE', 'WINDOW_CLOSED']),
 });
 export type ConversationCommandRejected = z.infer<typeof ConversationCommandRejectedSchema>;
 

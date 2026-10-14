@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isReplyWindowOpen,
   AssignConversationRequestSchema,
   ConversationCommandRequestSchema,
   ConversationSummarySchema,
@@ -37,6 +38,21 @@ describe('ListConversationsQuerySchema q', () => {
   });
 });
 
+describe('isReplyWindowOpen', () => {
+  const now = new Date('2026-10-13T20:00:00.000Z');
+  const hoursAgo = (h: number) => new Date(now.getTime() - h * 3_600_000);
+
+  it('abierta antes de 18 h, cerrada desde las 18 h', () => {
+    expect(isReplyWindowOpen(hoursAgo(17.99), now)).toBe(true);
+    expect(isReplyWindowOpen(hoursAgo(18), now)).toBe(false);
+    expect(isReplyWindowOpen(hoursAgo(30).toISOString(), now)).toBe(false);
+  });
+
+  it('sin mensajes del cliente está cerrada', () => {
+    expect(isReplyWindowOpen(null, now)).toBe(false);
+  });
+});
+
 describe('ConversationSummarySchema', () => {
   const summary = {
     id: '0199c0de-0000-7000-8000-000000000001',
@@ -48,6 +64,7 @@ describe('ConversationSummarySchema', () => {
     controlVersion: 0,
     lastMessageAt: '2026-10-12T10:00:00.000Z',
     lastMessagePreview: 'Hola',
+    lastInboundAt: '2026-10-12T09:00:00.000Z',
     createdAt: '2026-10-12T09:00:00.000Z',
   };
 

@@ -21,7 +21,7 @@ import {
   type ArgumentsHost,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { ApiConflictResponse, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import {
   MAX_OUTBOUND_ATTACHMENT_BYTES,
   SendAgentAttachmentFieldsSchema,
@@ -71,6 +71,10 @@ export class ConversationAttachmentsController {
   constructor(private readonly sendAttachment: SendAgentAttachmentUseCase) {}
 
   /** Un archivo por mensaje; `caption` es su texto. Multer responde 413 si supera 16 MB. */
+  @ApiConflictResponse({
+    description:
+      'La conversación está cerrada (`INVALID_STATE`) o la ventana de 18 h venció (`WINDOW_CLOSED`).',
+  })
   @Post(':id/messages/attachments')
   @UseFilters(AttachmentUploadExceptionFilter)
   @UseInterceptors(

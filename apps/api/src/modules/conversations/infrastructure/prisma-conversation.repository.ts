@@ -23,6 +23,7 @@ const conversationSelect = {
   lastSequence: true,
   lastMessageAt: true,
   lastMessagePreview: true,
+  lastInboundAt: true,
 } as const;
 
 export const messageSelect = {
@@ -110,6 +111,7 @@ export class PrismaConversationRepository implements ConversationRepository {
         lastSequence: { increment: 1 },
         lastMessageAt: summary.lastMessageAt,
         lastMessagePreview: summary.lastMessagePreview,
+        ...(message.direction === 'INBOUND' && { lastInboundAt: at }),
       },
       select: { lastSequence: true },
     });

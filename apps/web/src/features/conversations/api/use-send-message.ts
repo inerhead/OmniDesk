@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { ApiUnavailableError } from '@/shared/api/http-client';
 import { newRequestId } from '@/shared/api/request-id';
+import { WINDOW_CLOSED_NOTICE } from '../model/composer-mode';
 import { draftKey, type Draft } from '../model/outbound-file';
 import {
   postAgentAttachment,
@@ -14,6 +15,7 @@ export function sendNoticeFor(error: unknown): string {
   if (error instanceof SendMessageError) {
     if (error.status === 403) return 'Solo el agente asignado puede responder';
     if (error.status === 404) return 'La conversación ya no está disponible para ti';
+    if (error.status === 409 && error.reason === 'WINDOW_CLOSED') return WINDOW_CLOSED_NOTICE;
     if (error.status === 409) return 'La conversación está cerrada o cambió';
     if (error.status === 413)
       return 'El archivo es demasiado grande: imágenes hasta 5 MB, el resto hasta 16 MB';

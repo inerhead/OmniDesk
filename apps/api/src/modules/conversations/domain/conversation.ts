@@ -1,5 +1,8 @@
 export type ConversationStatus = 'OPEN' | 'CLOSED';
 
+/** Igual que `REPLY_WINDOW_MS` de `@omnidesk/contracts`. El dominio no importa ese paquete. */
+const REPLY_WINDOW_MS = 18 * 60 * 60 * 1000;
+
 export interface Conversation {
   id: string;
   tenantId: string;
@@ -11,6 +14,8 @@ export interface Conversation {
   lastSequence: number;
   lastMessageAt: Date;
   lastMessagePreview: string;
+  /** Último mensaje del cliente. `null` si todavía no escribió: la ventana está cerrada. */
+  lastInboundAt: Date | null;
 }
 
 export const PREVIEW_LENGTH = 120;
@@ -31,20 +36,29 @@ export function isAiActive(
 }
 
 export type AiReplyDecision =
-  { allowed: true } | { allowed: false; reason: 'CONTROL_CHANGED' | 'CONVERSATION_CLOSED' };
+  | { allowed: true }
+  | { allowed: false; reason: 'CONTROL_CHANGED' | 'CONVERSATION_CLOSED' | 'WINDOW_CLOSED' };
+
+/** Fuera de la ventana de 18 h, OmniDesk no envía nada a la conversación. */
+export function canSendNow(conversation: Pick<Conversation, 'lastInboundAt'>, now: Date): boolean {
+  if (conversation.lastInboundAt === null) return false;
+  return now.getTime() - conversation.lastInboundAt.getTime() < REPLY_WINDOW_MS;
+}
 
 /**
  * Protocolo de control de IA (docs/arquitectura.md §9): la respuesta solo se registra si la
  * conversación sigue abierta, sin agente y con el mismo `controlVersion` que recibió la IA.
  */
 export function decideAiReply(
-  conversation: Pick<Conversation, 'status' | 'assignedAgentId' | 'controlVersion'>,
+  conversation: Pick<Conversation, 'status' | 'assignedAgentId' | 'controlVersion' | 'lastInboundAt'>,
   controlVersion: number,
+  now: Date,
 ): AiReplyDecision {
   if (conversation.status !== 'OPEN') return { allowed: false, reason: 'CONVERSATION_CLOSED' };
   if (conversation.assignedAgentId !== null || conversation.controlVersion !== controlVersion) {
     return { allowed: false, reason: 'CONTROL_CHANGED' };
   }
+  if (!canSendNow(conversation, now)) return { allowed: false, reason: 'WINDOW_CLOSED' };
   return { allowed: true };
 }
 

@@ -23,7 +23,7 @@ export interface AiReplyInput {
 
 export type AiReplyResult =
   | { kind: 'accepted'; messageId: string }
-  | { kind: 'rejected'; reason: 'CONTROL_CHANGED' | 'CONVERSATION_CLOSED' }
+  | { kind: 'rejected'; reason: 'CONTROL_CHANGED' | 'CONVERSATION_CLOSED' | 'WINDOW_CLOSED' }
   | { kind: 'not-found' };
 
 /** Registra la respuesta de IA como PENDING antes de que la integración la envíe (arquitectura §9). */
@@ -57,10 +57,10 @@ export class RegisterAiReplyUseCase {
     );
     if (existing) return { kind: 'accepted', messageId: existing.id };
 
-    const decision = decideAiReply(conversation, input.controlVersion);
+    const now = new Date();
+    const decision = decideAiReply(conversation, input.controlVersion, now);
     if (!decision.allowed) return { kind: 'rejected', reason: decision.reason };
 
-    const now = new Date();
     const message = await this.conversations.appendMessage(
       conversation,
       aiReply(input.text, input.idempotencyKey),

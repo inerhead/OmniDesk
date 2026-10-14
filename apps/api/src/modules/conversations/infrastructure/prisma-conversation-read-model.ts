@@ -20,6 +20,7 @@ const summarySelect = {
   channelId: true,
   lastMessageAt: true,
   lastMessagePreview: true,
+  lastInboundAt: true,
   createdAt: true,
   assignedAgent: { select: { id: true, displayName: true } },
   channel: { select: { id: true, name: true, type: true, provider: true, aiEnabled: true } },

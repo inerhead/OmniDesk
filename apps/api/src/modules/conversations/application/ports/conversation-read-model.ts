@@ -16,6 +16,7 @@ export interface ConversationSummaryView {
   channel: { id: string; name: string; type: 'WHATSAPP'; aiEnabled?: boolean };
   lastMessageAt: Date;
   lastMessagePreview: string;
+  lastInboundAt: Date | null;
   createdAt: Date;
 }
 

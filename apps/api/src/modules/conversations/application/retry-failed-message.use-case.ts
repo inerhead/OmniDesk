@@ -5,6 +5,7 @@ import {
   TRANSACTION_RUNNER,
   type TransactionRunner,
 } from '../../../shared/application/transaction-runner.port';
+import { canSendNow } from '../domain/conversation';
 import { can } from '../domain/conversation-policy';
 import type { Message } from '../domain/message';
 import { enqueueConversationChanged } from './enqueue-conversation-changed';
@@ -23,7 +24,7 @@ export type RetryFailedMessageResult =
   | { kind: 'ok'; message: Message }
   | { kind: 'not-found' }
   | { kind: 'forbidden' }
-  | { kind: 'rejected'; reason: 'INVALID_STATE' };
+  | { kind: 'rejected'; reason: 'INVALID_STATE' | 'WINDOW_CLOSED' };
 
 /** Reintento manual: devuelve un mensaje `FAILED` a `PENDING` y encola un nuevo envío. */
 @Injectable()
@@ -54,6 +55,7 @@ export class RetryFailedMessageUseCase {
     if (message.status !== 'FAILED') return { kind: 'rejected', reason: 'INVALID_STATE' };
 
     const now = new Date();
+    if (!canSendNow(conversation, now)) return { kind: 'rejected', reason: 'WINDOW_CLOSED' };
     const pending = await this.conversations.updateMessageDelivery(message.id, {
       status: 'PENDING',
       failureReason: null,

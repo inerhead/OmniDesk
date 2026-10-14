@@ -101,6 +101,7 @@ export class InMemoryConversations implements ConversationRepository {
       lastSequence: 0,
       lastMessageAt: data.at,
       lastMessagePreview: data.preview,
+      lastInboundAt: null,
     };
     this.conversations.push(conversation);
     if (this.raceOnNextCreate) {
@@ -112,6 +113,7 @@ export class InMemoryConversations implements ConversationRepository {
 
   async appendMessage(conversation: Conversation, message: NewMessage, at: Date) {
     Object.assign(conversation, appendMessage(conversation, previewSource(message), at));
+    if (message.direction === 'INBOUND') conversation.lastInboundAt = at;
     const { attachment, ...fields } = message;
     const stored = {
       ...fields,

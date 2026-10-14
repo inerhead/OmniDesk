@@ -77,7 +77,7 @@ export type ConversationCommandName = 'assign' | 'release' | 'close' | 'reopen';
 export class ConversationCommandError extends ApiHttpError {
   constructor(
     status: number,
-    readonly reason?: 'CONTROL_CHANGED' | 'INVALID_STATE',
+    readonly reason?: 'CONTROL_CHANGED' | 'INVALID_STATE' | 'WINDOW_CLOSED',
   ) {
     super(status);
     this.name = 'ConversationCommandError';
@@ -100,10 +100,18 @@ export async function postConversationCommand(
 
 /** El envío o el reintento no se aplicó. */
 export class SendMessageError extends ApiHttpError {
-  constructor(status: number) {
+  constructor(
+    status: number,
+    readonly reason?: string,
+  ) {
     super(status);
     this.name = 'SendMessageError';
   }
+}
+
+function sendError(status: number, body: unknown): SendMessageError {
+  const rejected = ConversationCommandRejectedSchema.safeParse(body);
+  return new SendMessageError(status, rejected.success ? rejected.data.reason : undefined);
 }
 
 /**
@@ -119,7 +127,7 @@ export async function postAgentMessage(
     payload,
   );
   if (status === 200 || status === 201) return SendAgentMessageResponseSchema.parse(body);
-  throw new SendMessageError(status);
+  throw sendError(status, body);
 }
 
 /** Sube un archivo con su pie; idempotente por `clientMessageId`, como `postAgentMessage`. */
@@ -136,7 +144,7 @@ export async function postAgentAttachment(
     form,
   );
   if (status === 200 || status === 201) return SendAgentMessageResponseSchema.parse(body);
-  throw new SendMessageError(status);
+  throw sendError(status, body);
 }
 
 /** Devuelve un mensaje `FAILED` a `PENDING` para que el API lo envíe de nuevo. */
@@ -149,5 +157,5 @@ export async function postRetryMessage(
     undefined,
   );
   if (status === 200) return SendAgentMessageResponseSchema.parse(body);
-  throw new SendMessageError(status);
+  throw sendError(status, body);
 }

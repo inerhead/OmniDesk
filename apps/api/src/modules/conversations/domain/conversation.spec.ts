@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { appendMessage, decideAiReply, isAiActive, toPreview } from './conversation';
 
-const open = { status: 'OPEN' as const, assignedAgentId: null, controlVersion: 0 };
+const now = new Date('2026-10-13T20:00:00.000Z');
+const open = {
+  status: 'OPEN' as const,
+  assignedAgentId: null,
+  controlVersion: 0,
+  lastInboundAt: new Date('2026-10-13T10:00:00.000Z'),
+};
 
 describe('toPreview', () => {
   it('colapsa saltos de línea y espacios', () => {
@@ -33,24 +39,34 @@ describe('isAiActive', () => {
 
 describe('decideAiReply', () => {
   it('permite la respuesta con el mismo controlVersion', () => {
-    expect(decideAiReply(open, 0)).toEqual({ allowed: true });
+    expect(decideAiReply(open, 0, now)).toEqual({ allowed: true });
   });
 
   it('rechaza con CONTROL_CHANGED si el controlVersion cambió', () => {
-    expect(decideAiReply(open, 99)).toEqual({ allowed: false, reason: 'CONTROL_CHANGED' });
+    expect(decideAiReply(open, 99, now)).toEqual({ allowed: false, reason: 'CONTROL_CHANGED' });
   });
 
   it('rechaza con CONTROL_CHANGED si hay agente asignado', () => {
-    expect(decideAiReply({ ...open, assignedAgentId: 'agente' }, 0)).toEqual({
+    expect(decideAiReply({ ...open, assignedAgentId: 'agente' }, 0, now)).toEqual({
       allowed: false,
       reason: 'CONTROL_CHANGED',
     });
   });
 
   it('rechaza con CONVERSATION_CLOSED si la conversación está cerrada', () => {
-    expect(decideAiReply({ ...open, status: 'CLOSED' }, 0)).toEqual({
+    expect(decideAiReply({ ...open, status: 'CLOSED', lastInboundAt: null }, 0, now)).toEqual({
       allowed: false,
       reason: 'CONVERSATION_CLOSED',
+    });
+  });
+
+  it('rechaza con WINDOW_CLOSED pasadas 18 h, después del control', () => {
+    expect(
+      decideAiReply({ ...open, lastInboundAt: new Date('2026-10-13T01:00:00.000Z') }, 0, now),
+    ).toEqual({ allowed: false, reason: 'WINDOW_CLOSED' });
+    expect(decideAiReply({ ...open, lastInboundAt: null }, 0, now)).toEqual({
+      allowed: false,
+      reason: 'WINDOW_CLOSED',
     });
   });
 });

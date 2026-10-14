@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useNow } from '@/shared/lib/use-now';
 import { useOnlineStatus } from '@/shared/pwa/use-online-status';
 import { useConnectionStatus } from '@/shared/realtime/connection-status';
 import { appendCheck, type CheckRecord } from '../model/check-history';
@@ -7,16 +8,6 @@ import { SLOW_LATENCY_MS, toSystemStatus } from '../model/system-status';
 import { fetchHealth } from './fetch-health';
 
 export const HEALTH_REFRESH_MS = 10_000;
-
-/** Reloj de pantalla: re-renderiza cada segundo para "hace N s". */
-function useNow(intervalMs = 1_000): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(timer);
-  }, [intervalMs]);
-  return now;
-}
 
 /** Comprueba el API cada 10 s y guarda en memoria las últimas comprobaciones. */
 export function useHealthMonitor() {

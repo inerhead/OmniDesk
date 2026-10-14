@@ -2,6 +2,7 @@ import { ArrowDown, ArrowLeft, MessageSquareOff, PanelRight, X } from 'lucide-re
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { useCurrentActor } from '@/features/auth/api/use-current-actor';
+import { useNow } from '@/shared/lib/use-now';
 import { cn } from '@/shared/lib/utils';
 import { useMediaQuery, XL_QUERY } from '@/shared/lib/use-media-query';
 import { Avatar } from '@/shared/ui/avatar';
@@ -13,7 +14,7 @@ import { Tooltip } from '@/shared/ui/tooltip';
 import { useConversationCommand } from '../api/use-conversation-command';
 import { useSendMessage } from '../api/use-send-message';
 import { isNotFound, useConversation, useTimeline } from '../api/use-conversations';
-import { composerMode } from '../model/composer-mode';
+import { WINDOW_CLOSED_NOTICE, composerMode } from '../model/composer-mode';
 import { setContactPanelOpen, useContactPanelOpen } from '../model/contact-panel-store';
 import { groupConsecutiveBubbles, groupTimelineByDay } from '../model/group-timeline';
 import { contactLabel } from '../model/to-bubble-view';
@@ -53,8 +54,10 @@ export function ChatView({ conversationId }: { conversationId: string }) {
   const messaging = useSendMessage(conversationId);
   const notice = command.notice ?? messaging.notice;
   const dismissNotice = command.notice ? command.dismissNotice : messaging.dismissNotice;
+  const now = useNow(60_000);
   const summary = conversation.data;
-  const mode = summary && actor ? composerMode(summary, actor) : { kind: 'none' as const };
+  const mode =
+    summary && actor ? composerMode(summary, actor, new Date(now)) : { kind: 'none' as const };
 
   // Panel de contacto: columna persistida en ≥ xl; hoja lateral por debajo.
   const isXl = useMediaQuery(XL_QUERY);
@@ -311,6 +314,12 @@ export function ChatView({ conversationId }: { conversationId: string }) {
         {mode.kind === 'assigned-other' && (
           <p className="text-muted-foreground bg-background shrink-0 border-t px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-center text-sm md:px-6">
             Asignada a {mode.name}
+          </p>
+        )}
+
+        {mode.kind === 'window-closed' && (
+          <p className="text-muted-foreground bg-background shrink-0 border-t px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] text-center text-sm md:px-6">
+            {WINDOW_CLOSED_NOTICE}
           </p>
         )}
       </div>

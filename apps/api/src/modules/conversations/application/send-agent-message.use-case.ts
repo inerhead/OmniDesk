@@ -6,6 +6,7 @@ import {
   TRANSACTION_RUNNER,
   type TransactionRunner,
 } from '../../../shared/application/transaction-runner.port';
+import { canSendNow } from '../domain/conversation';
 import { can } from '../domain/conversation-policy';
 import { agentMessage, type Message, type NewAttachment } from '../domain/message';
 import { enqueueConversationChanged } from './enqueue-conversation-changed';
@@ -30,7 +31,7 @@ export type SendAgentMessageResult =
   | { kind: 'not-found' }
   /** La ve, pero no es el agente asignado. */
   | { kind: 'forbidden' }
-  | { kind: 'rejected'; reason: 'INVALID_STATE' };
+  | { kind: 'rejected'; reason: 'INVALID_STATE' | 'WINDOW_CLOSED' };
 
 /**
  * Registra el mensaje del agente como `PENDING` y encola su envío (arquitectura §12). El envío
@@ -70,6 +71,7 @@ export class SendAgentMessageUseCase {
     if (conversation.status !== 'OPEN') return { kind: 'rejected', reason: 'INVALID_STATE' };
 
     const now = new Date();
+    if (!canSendNow(conversation, now)) return { kind: 'rejected', reason: 'WINDOW_CLOSED' };
     const message = await this.conversations.appendMessage(
       conversation,
       agentMessage(input.text, actor.memberId, input.clientMessageId, input.attachment),

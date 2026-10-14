@@ -76,6 +76,7 @@ function toSummaryDto(summary: ConversationSummary): ConversationSummaryResponse
   return {
     ...summary,
     lastMessageAt: summary.lastMessageAt.toISOString(),
+    lastInboundAt: summary.lastInboundAt?.toISOString() ?? null,
     createdAt: summary.createdAt.toISOString(),
   };
 }
@@ -203,7 +204,9 @@ export class ConversationsController {
     type: SendAgentMessageResponseDto.Output,
     description: 'Idempotente: el `clientMessageId` ya estaba registrado.',
   })
-  @ApiConflictResponse({ description: 'La conversación está cerrada (`INVALID_STATE`).' })
+  @ApiConflictResponse({
+    description: 'La conversación está cerrada (`INVALID_STATE`) o la ventana de 18 h venció (`WINDOW_CLOSED`).',
+  })
   @ApiForbiddenResponse({ description: 'Solo escribe el agente asignado.' })
   @ApiNotFoundResponse({ description: 'La conversación no existe o no puedes verla.' })
   async send(
@@ -233,7 +236,10 @@ export class ConversationsController {
   @Post(':id/messages/:messageId/retry')
   @HttpCode(200)
   @ApiOkResponse({ type: SendAgentMessageResponseDto.Output })
-  @ApiConflictResponse({ description: 'El mensaje no está en FAILED (`INVALID_STATE`).' })
+  @ApiConflictResponse({
+    description:
+      'El mensaje no está en FAILED (`INVALID_STATE`) o la ventana de 18 h venció (`WINDOW_CLOSED`).',
+  })
   @ApiForbiddenResponse({ description: 'Solo reintenta el agente asignado.' })
   @ApiNotFoundResponse({
     description: 'La conversación o el mensaje no existen, o no puedes verla.',

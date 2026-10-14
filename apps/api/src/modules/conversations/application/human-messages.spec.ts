@@ -7,6 +7,7 @@ import {
   noTransaction,
 } from '../testing/in-memory';
 import type { Conversation } from '../domain/conversation';
+import { customerMessage } from '../domain/message';
 import { RetryFailedMessageUseCase } from './retry-failed-message.use-case';
 import { SendAgentMessageUseCase } from './send-agent-message.use-case';
 import { UpdateDeliveryStatusUseCase } from './update-delivery-status.use-case';
@@ -33,6 +34,7 @@ beforeEach(async () => {
     preview: 'Hola',
   });
   conversation.assignedAgentId = 'laura';
+  conversation.lastInboundAt = new Date();
 });
 
 describe('SendAgentMessageUseCase', () => {
@@ -109,6 +111,27 @@ describe('SendAgentMessageUseCase', () => {
     });
     expect(outbox.events).toHaveLength(0);
   });
+
+  it('pasadas 18 h del último mensaje del cliente rechaza con WINDOW_CLOSED', async () => {
+    conversation.lastInboundAt = new Date(Date.now() - 19 * 3_600_000);
+
+    expect(await build().execute(laura, input())).toEqual({
+      kind: 'rejected',
+      reason: 'WINDOW_CLOSED',
+    });
+    expect(outbox.events).toHaveLength(0);
+  });
+
+  it('un mensaje entrante reabre la ventana', async () => {
+    conversation.lastInboundAt = new Date(Date.now() - 19 * 3_600_000);
+    await conversations.appendMessage(
+      conversation,
+      customerMessage('Sigo aquí', 'wamid-reopen', new Date()),
+      new Date(),
+    );
+
+    expect((await build().execute(laura, input())).kind).toBe('ok');
+  });
 });
 
 describe('RetryFailedMessageUseCase', () => {
@@ -158,6 +181,17 @@ describe('RetryFailedMessageUseCase', () => {
       expect(outbox.events).toHaveLength(0);
     },
   );
+
+  it('pasadas 18 h no reintenta', async () => {
+    fail();
+    conversation.lastInboundAt = new Date(Date.now() - 19 * 3_600_000);
+
+    expect(await build().execute(laura, { conversationId: conversation.id, messageId })).toEqual({
+      kind: 'rejected',
+      reason: 'WINDOW_CLOSED',
+    });
+    expect(outbox.events).toHaveLength(0);
+  });
 
   it('solo reintenta el agente asignado', async () => {
     fail();

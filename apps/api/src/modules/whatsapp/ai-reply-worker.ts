@@ -46,7 +46,7 @@ export class AiReplyWorker {
     if (
       !conversation ||
       conversation.channelId !== channel.id ||
-      !decideAiReply(conversation, payload.controlVersion).allowed
+      !decideAiReply(conversation, payload.controlVersion, new Date()).allowed
     )
       return;
     const idempotencyKey = `ai:${payload.messageId}`;

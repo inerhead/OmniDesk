@@ -30,6 +30,7 @@ Dos pendientes de la arquitectura (§12, §17) se cierran aquí:
 - **Job de retención diario** a las 03:30, hora del servidor (después del backup de las 03:00 de SPEC 08):
   - Se ejecuta con `pg_try_advisory_lock`, una sola vez aunque haya reinicios.
   - Para cada empresa con `retentionDays`:
+    - Antes de borrar mensajes, borra del bucket los `message_attachments.storage_key` no nulos (SPEC 14). La fila cae en cascada; el objeto no.
     - Borra las conversaciones `CLOSED` con `lastMessageAt < now − retentionDays`, junto con sus mensajes y eventos.
     - Después borra los contactos sin conversaciones, con sus identidades.
   - Trabaja en lotes de 500 conversaciones por transacción.
@@ -56,6 +57,7 @@ Dos pendientes de la arquitectura (§12, §17) se cierran aquí:
   - `contact_identities`
   - `conversations`
   - `messages`
+  - `message_attachments`
   - `tenant_members`
   - `conversation_events`
   - `outbox_events`
@@ -195,9 +197,9 @@ technicalPurgeCutoff(now: Date): Date            // now − 30 días
 
 **RLS**
 
-- [ ] `SELECT relrowsecurity, relforcerowsecurity FROM pg_class` devuelve `true, true` para las 11 tablas de la lista.
+- [ ] `SELECT relrowsecurity, relforcerowsecurity FROM pg_class` devuelve `true, true` para las 12 tablas de la lista.
 - [ ] Conectado como `omnidesk_app_login` sin `app.tenant_id`, `SELECT count(*) FROM conversations` devuelve 0.
-- [ ] Con `app.tenant_id` del tenant A, no se ve ninguna fila del tenant B en ninguna de las 11 tablas.
+- [ ] Con `app.tenant_id` del tenant A, no se ve ninguna fila del tenant B en ninguna de las 12 tablas.
 - [ ] Un caso de uso modificado a propósito para no filtrar por `tenantId` (prueba de integración) sigue sin devolver filas de otro tenant.
 - [ ] Todo el flujo de la app (login, bandejas, asignar, enviar, ticks, integraciones, simulador) funciona igual con RLS activo: e2e del API y `pnpm e2e` pasan.
 - [ ] `omnidesk_app` no tiene `BYPASSRLS` ni es dueño de ninguna tabla (`\du` y `\dt+`).

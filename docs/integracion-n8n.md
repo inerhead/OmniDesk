@@ -99,7 +99,7 @@ El adaptador N8N anterior se conserva para los canales existentes. Su webhook re
 Esos canales y el simulador utilizan los endpoints con `Authorization: Bearer <apiKey>` y firma HMAC cuando el canal tiene secreto:
 
 - `POST /api/v1/integrations/messages/inbound`: `{ externalMessageId, from: { externalId, displayName? }, text, sentAt }`; devuelve `conversationId`, `messageId`, `aiAllowed`, `controlVersion` y `duplicate`.
-- `POST /api/v1/integrations/messages/outbound`: `{ conversationId, controlVersion, idempotencyKey, text }`; devuelve `messageId` y `sendAllowed`. Si el control cambió, no se envía.
+- `POST /api/v1/integrations/messages/outbound`: `{ conversationId, controlVersion, idempotencyKey, text }`; devuelve `messageId` y `sendAllowed`. Si el control cambió, la conversación está cerrada o pasaron 18 h desde el último mensaje del cliente, responde `409` con `{ sendAllowed: false, reason }` (`CONTROL_CHANGED`, `CONVERSATION_CLOSED` o `WINDOW_CLOSED`) y no se envía.
 - `POST /api/v1/integrations/messages/status`: `{ messageId, providerMessageId, status, occurredAt, error? }`; estados `SENT`, `DELIVERED`, `READ`, `FAILED`.
 
 Los canales `WHATSAPP_CLOUD` usan exclusivamente el webhook nativo de Meta, no estos endpoints legados. Para un canal de prueba N8N, créalo con `POST /api/v1/channels` (sesión OWNER/ADMIN, Origin permitido) y genera credenciales desde Settings. Ejecuta:
@@ -118,6 +118,6 @@ El nombre histórico `DEMO_CHANNEL_API_KEY` es también la variable que lee el s
 - `CHANNEL_SECRETS_KEY`: 32 bytes en base64, distinta por entorno. Respalda esta clave junto con el plan de recuperación; perderla impide descifrar los tokens y secretos guardados.
 - `WHATSAPP_GRAPH_VERSION`: versión Graph del servidor, por defecto `v25.0`; ajústala a una versión soportada por tu aplicación Meta.
 - `N8N_WEBHOOK_ALLOWED_HOSTS`: permite hosts internos de confianza, por ejemplo `n8n`, para HTTP. Fuera de la lista no se permiten IP literales privadas; en producción se exige HTTPS.
-- Solo texto libre. No se gestionan plantillas, multimedia ni la ventana de atención de Meta. Un envío rechazado queda FAILED.
+- Solo texto libre hacia la IA: los mensajes con adjunto (SPEC 14) o de tipos no soportados no se envían a n8n y quedan para atención humana. No se gestionan plantillas. Pasadas 18 h desde el último mensaje del cliente, `POST /integrations/messages/outbound` responde `409 { sendAllowed: false, reason: 'WINDOW_CLOSED' }` y la IA no debe enviar (SPEC 14). Un envío rechazado por el proveedor queda FAILED.
 - Meta puede aceptar un envío y cortarse la conexión antes de que OmniDesk persista su id. Su API no ofrece aquí una garantía de envío exactamente una vez: un reintento puede duplicarlo. `biz_opaque_callback_data` correlaciona los estados con el id local, pero no es una clave de idempotencia.
 - La prueba real requiere un número habilitado y credenciales válidas de Meta/n8n; las pruebas automatizadas usan Graph/n8n simulados y PostgreSQL aislado.

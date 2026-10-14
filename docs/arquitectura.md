@@ -290,6 +290,34 @@ Objetivo: que una respuesta de la IA nunca salga después de que un humano tomó
 
 Humanos e IA comparten así el mismo ciclo: **registrar intención (`PENDING`) → enviar → actualizar estado**. Nunca se confunde texto generado con envío exitoso.
 
+## Adjuntos (SPEC 14)
+
+Los archivos de WhatsApp no viajan en el webhook: Meta entrega un id de medio. OmniDesk baja los bytes, los guarda en MinIO y los sirve el propio API con la cookie de sesión (mismo origen). Las URLs firmadas de MinIO no se exponen al navegador.
+
+Entrante:
+
+```mermaid
+flowchart LR
+  webhook[Webhook] --> pending["MessageAttachment PENDING"]
+  pending --> outbox[attachment.download_requested]
+  outbox --> graph[Graph]
+  graph --> minio[MinIO]
+  minio --> ready[READY]
+  ready --> changed[conversation.changed]
+```
+
+Saliente (un archivo por mensaje, con pie opcional; el audio va sin pie):
+
+```mermaid
+flowchart LR
+  multipart[Multipart de la web] --> minio[MinIO]
+  minio --> send[message.send_requested]
+  send --> media["Graph /media"]
+  media --> messages["Graph /messages"]
+```
+
+`GET /api/v1/attachments/:id/content` entrega el archivo a quien puede ver la conversación. Acepta `Range` para audio y video. Un adjunto, o un tipo de WhatsApp no soportado, no se reenvía a n8n: queda para un agente. Pasadas 18 h desde el último mensaje del cliente, OmniDesk no envía texto, adjuntos ni reintentos, y la IA recibe `409 WINDOW_CLOSED`.
+
 ## 10. Registro integral y experiencia web
 
 - Se registran todos los mensajes del cliente, las respuestas de la IA y los mensajes de los agentes.

@@ -37,6 +37,20 @@ Abre <http://localhost:8080/omnidesk> (el gateway; usa siempre esta URL). La app
 | `postgres`    | `localhost:5532`                      | PostgreSQL 18                                                                          |
 | `web-preview` | <http://localhost:4173/omnidesk/>     | Build de producción de la web (profile `pwa`)                                          |
 | `cloudflared` | `https://<tu-dominio>/omnidesk`       | Túnel Cloudflare con dominio fijo hacia `caddy` (`CLOUDFLARE_TUNNEL_TOKEN`)            |
+| `minio`       | `localhost:9050` (consola en <http://localhost:9051>) | Adjuntos (SPEC 14). El API los sirve; el navegador no habla con MinIO. |
+
+Variables de adjuntos (`.env.example`; en el VPS van en `infra/deploy/.env.*.example`):
+
+| Variable | Valor local |
+| --- | --- |
+| `ATTACHMENT_STORAGE_DRIVER` | `s3` (si no se define, el API usa `memory` y pierde los archivos al reiniciar; en producción `s3` es obligatorio) |
+| `S3_ENDPOINT` | `http://minio:9000` |
+| `S3_REGION` | `us-east-1` |
+| `S3_BUCKET` | `omnidesk-attachments` |
+| `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | Las mismas que `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` |
+| `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `omnidesk` / `omnidesk-dev-secret` |
+| `MINIO_HOST_PORT` / `MINIO_CONSOLE_HOST_PORT` | `9050` / `9051` |
+| `ATTACHMENT_INBOUND_MAX_BYTES` | `26214400` (25 MB) |
 
 ¿Algún puerto ya está ocupado en tu máquina? Cámbialo en `.env`: `GATEWAY_HOST_PORT`, `API_HOST_PORT` o `POSTGRES_HOST_PORT`. Si cambias el del gateway, añade su origen a `CORS_ORIGINS`.
 

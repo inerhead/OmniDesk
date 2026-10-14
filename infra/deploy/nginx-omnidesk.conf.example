@@ -31,4 +31,7 @@ location /omnidesk/ {
 
     # Mayor que el ping de Socket.IO (25 s + 20 s de timeout).
     proxy_read_timeout 75s;
+
+    # Adjuntos (SPEC 14): el API admite 16 MB por archivo; margen para el multipart.
+    client_max_body_size 20m;
 }

@@ -157,7 +157,7 @@ Las migraciones solo avanzan. Si la versión nueva aplicó una migración que la
 
 ## 5. Backups
 
-El servicio `backup` ejecuta `pg_dump -Fc` cada día a las 03:00, hora del servidor (monta `/etc/localtime`). Guarda en `BACKUP_DIR` y conserva los 7 más recientes por entorno:
+El servicio `backup` ejecuta `pg_dump -Fc` cada día a las 03:00, hora del servidor (monta `/etc/localtime`). Guarda en `BACKUP_DIR` y conserva los 7 más recientes por entorno. El mismo paso archiva el volumen de MinIO (`omnidesk-<env>-media-YYYYMMDD.tar.gz`); la restauración de esos archivos está en [Adjuntos y MinIO](#adjuntos-y-minio-spec-14).
 
 ```text
 /srv/omnidesk/backups/dev/omnidesk-dev-20261012.dump
@@ -228,6 +228,7 @@ Todos los servicios tienen `restart: unless-stopped`: vuelven solos tras reinici
 | Google responde `redirect_uri_mismatch` | Falta la URI de §1.2 en la credencial, o `GOOGLE_CALLBACK_URL` no coincide con ella. |
 | `403 Origen no permitido` al enviar | `CORS_ORIGINS` no es exactamente `https://<dominio>` (sin `/omnidesk` ni barra final). |
 | El API no arranca tras un despliegue | Una migración falló: `$C logs api`. Corrige en el repo y vuelve a desplegar, o haz rollback (§4). |
+| `413` al adjuntar | Falta `client_max_body_size 20m` en el `location /omnidesk/` de Nginx. Sin esa línea, Nginx corta a partir de 1 MB. |
 
 ## 8. Evolución (fuera de SPEC 08)
 
@@ -245,3 +246,42 @@ Todos los servicios tienen `restart: unless-stopped`: vuelven solos tras reinici
 Las imágenes del API aplican las migraciones al arrancar. La migración de WhatsApp añade `WHATSAPP_CLOUD` y sus campos de configuración sin modificar los canales N8N existentes. `WHATSAPP_GRAPH_VERSION` se pasa al API desde Compose de producción; por defecto usa `v25.0`. `APP_URL` debe coincidir con el dominio y subruta públicos: de él sale el callback que se muestra en Settings.
 
 Mantén el reloj del servidor sincronizado (NTP) para la tolerancia HMAC de ±300 segundos. La conexión de WhatsApp y n8n se configura por empresa siguiendo [la guía de integración](integracion-n8n.md).
+
+## Adjuntos y MinIO (SPEC 14)
+
+El API de producción exige `ATTACHMENT_STORAGE_DRIVER=s3`. Compose lo fija y apunta a MinIO del mismo proyecto (`http://minio:9000`, bucket `omnidesk-attachments`). En el `.env` del entorno hay que rellenar:
+
+| Variable | Uso |
+| --- | --- |
+| `MINIO_ROOT_USER` | Usuario raíz de MinIO y `S3_ACCESS_KEY_ID` del API. |
+| `MINIO_ROOT_PASSWORD` | Contraseña (`openssl rand -hex 24`, solo letras y números) y `S3_SECRET_ACCESS_KEY`. |
+| `MINIO_HOST_PORT` | Puerto S3 publicado solo en `127.0.0.1`. Dev `9050`, prod `9060`. No pueden coincidir en el mismo VPS. |
+| `S3_BUCKET` | Opcional. Por defecto `omnidesk-attachments`. |
+| `ATTACHMENT_INBOUND_MAX_BYTES` | Opcional. Tope de un adjunto entrante; por defecto 25 MB (`26214400`). |
+
+Fuera de producción, si no se define el driver, el API usa `memory` (los archivos se pierden al reiniciar). `.env.example` de desarrollo local pone `s3` para usar el MinIO de `docker-compose.yml`. La consola de ese MinIO local está en <http://localhost:9051>.
+
+`client_max_body_size 20m` en el `location /omnidesk/` de Nginx es obligatorio. El API admite 16 MB por archivo saliente; sin esa directiva Nginx responde `413` a partir de 1 MB.
+
+MinIO no publica consola en el VPS. Para administrarlo, abre un túnel SSH al puerto `MINIO_HOST_PORT`.
+
+Si `docker pull minio/minio:RELEASE.2025-09-07T16-13-09Z` falla (el tag no siempre está en Docker Hub), carga la imagen desde una máquina que ya la tenga:
+
+```bash
+docker save minio/minio:RELEASE.2025-09-07T16-13-09Z | ssh vps docker load
+```
+
+El volumen se llama `<proyecto>_miniodata` (`omnidesk-dev_miniodata` o `omnidesk-prod_miniodata`). El `backup now` escribe `omnidesk-<env>-media-YYYYMMDD.tar.gz` junto al dump de Postgres y conserva los 7 más recientes. Un `tar` en caliente puede no incluir un objeto que se está escribiendo en ese momento.
+
+Restaurar los adjuntos de dev (en prod, cambia el proyecto, el `.env` y el nombre del archivo):
+
+```bash
+cd /srv/omnidesk/repo
+C="docker compose -p omnidesk-dev --env-file /srv/omnidesk/.env.dev -f infra/deploy/docker-compose.prod.yml"
+$C stop api minio
+docker run --rm -v omnidesk-dev_miniodata:/data -v /srv/omnidesk/backups/dev:/b alpine \
+  sh -c 'rm -rf /data/* && tar -xzf /b/omnidesk-dev-media-YYYYMMDD.tar.gz -C /data'
+$C up -d
+```
+
+El envío de adjuntos no tiene rate limit: SPEC 10 no está en el repositorio. Cuando exista, debe cubrir `POST /api/v1/conversations/:id/messages/attachments`.

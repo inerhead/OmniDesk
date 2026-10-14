@@ -1,5 +1,5 @@
 #!/bin/sh
-# Backup de Postgres del servicio `backup` (docker-compose.prod.yml).
+# Backup de Postgres y del volumen de MinIO del servicio `backup` (docker-compose.prod.yml).
 #   omnidesk-backup.sh       → bucle: un pg_dump -Fc cada día a las 03:00 (hora del servidor)
 #   omnidesk-backup.sh now   → un backup inmediato y termina
 # Archivo: /backups/omnidesk-<env>-YYYYMMDD.dump (BACKUP_DIR en el host). Conserva los BACKUP_KEEP más recientes.
@@ -31,6 +31,20 @@ backup_once() {
     done
 }
 
+# Adjuntos (SPEC 14): tar.gz del volumen de MinIO montado en /media. Sin montaje, no hace nada.
+media_once() {
+  [ -d /media ] || return 0
+  file="${DIR}/${PREFIX}media-$(date +%Y%m%d).tar.gz"
+  tar -czf "${file}.partial" -C /media .
+  mv "${file}.partial" "$file"
+  log "OK $(basename "$file") ($(du -h "$file" | cut -f1))"
+  ls -1 "$DIR" | grep -E "^${PREFIX}media-[0-9]{8}\.tar\.gz$" | sort -r | tail -n +"$((KEEP + 1))" |
+    while read -r old; do
+      rm -f "${DIR}/${old}"
+      log "Rotado ${old}"
+    done
+}
+
 seconds_until_next_run() {
   now=$(date +%s)
   next=$(date -d 'today 03:00' +%s)
@@ -39,7 +53,7 @@ seconds_until_next_run() {
 }
 
 if [ "${1:-}" = "now" ]; then
-  backup_once
+  backup_once && media_once
   exit 0
 fi
 
@@ -51,5 +65,5 @@ while true; do
   sleep "$wait_s" &
   wait $!
   # Un fallo (p. ej. Postgres reiniciando) no detiene el servicio: se reintenta al día siguiente.
-  backup_once || log "ERROR: el backup falló"
+  { backup_once && media_once; } || log "ERROR: el backup falló"
 done

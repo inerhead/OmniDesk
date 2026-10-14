@@ -73,7 +73,7 @@ Se añade `WHATSAPP_CLOUD` a `ChannelProvider`, y al canal `aiEnabled` (false po
 
 ## Fuera de alcance
 
-Plantillas y gestión de ventana de 24 h, multimedia, otros canales, borrado, workflows n8n exportados, rate limiting (SPEC 10). Solo texto libre dentro de las condiciones permitidas por Meta; los errores del proveedor se muestran como fallo de envío.
+Plantillas y gestión de ventana de 24 h, multimedia (cubierto por SPEC 14), otros canales, borrado, workflows n8n exportados, rate limiting (SPEC 10). Solo texto libre dentro de las condiciones permitidas por Meta; los errores del proveedor se muestran como fallo de envío.
 
 
 ## Verificación de implementación

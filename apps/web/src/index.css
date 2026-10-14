@@ -161,3 +161,55 @@ html[data-keyboard] {
     padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
   }
 }
+
+/* Pulso del icono Estado. El trazo (18 de 100) pasa el pico hacia el 36 % del ciclo. */
+.ecg-sweep {
+  stroke-dasharray: 18 82;
+  animation: ecg-sweep 1.5s linear infinite;
+}
+
+.ecg-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ecg-dot 1.5s linear infinite;
+}
+
+@keyframes ecg-sweep {
+  from {
+    stroke-dashoffset: 18;
+  }
+  to {
+    stroke-dashoffset: -82;
+  }
+}
+
+@keyframes ecg-dot {
+  0%,
+  24% {
+    opacity: 0.3;
+    transform: scale(0.65);
+  }
+  36% {
+    opacity: 1;
+    transform: scale(1.45);
+  }
+  50%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.65);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ecg-sweep,
+  .ecg-dot {
+    animation: none;
+  }
+  .ecg-sweep {
+    stroke-dasharray: none;
+  }
+  .ecg-dot {
+    opacity: 1;
+    transform: none;
+  }
+}

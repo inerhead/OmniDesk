@@ -58,6 +58,7 @@ import { PrismaConversationRepository } from './infrastructure/prisma-conversati
     RegisterAiReplyUseCase,
     UpdateDeliveryStatusUseCase,
     FindOutboundForSendUseCase,
+    SendAgentMessageUseCase,
   ],
 })
 export class ConversationsModule {}

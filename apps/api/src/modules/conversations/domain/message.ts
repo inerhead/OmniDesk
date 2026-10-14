@@ -1,3 +1,33 @@
+export type AttachmentKind = 'IMAGE' | 'DOCUMENT' | 'AUDIO' | 'VIDEO' | 'STICKER';
+/** `PENDING`: entrante aún sin descargar de WhatsApp. */
+export type AttachmentStatus = 'PENDING' | 'READY' | 'FAILED';
+
+/** Archivo del mensaje, tal como se lee. */
+export interface MessageAttachment {
+  id: string;
+  kind: AttachmentKind;
+  mimeType: string;
+  fileName: string | null;
+  sizeBytes: number | null;
+  voice: boolean;
+  status: AttachmentStatus;
+  /** Clave del objeto en el bucket; null mientras está PENDING. */
+  storageKey: string | null;
+}
+
+/** Archivo de un mensaje nuevo. */
+export interface NewAttachment {
+  kind: AttachmentKind;
+  mimeType: string;
+  status: AttachmentStatus;
+  fileName?: string;
+  sizeBytes?: number;
+  voice?: boolean;
+  sha256?: string;
+  providerMediaId?: string;
+  storageKey?: string;
+}
+
 export type SenderType = 'CUSTOMER' | 'AI' | 'AGENT';
 export type MessageDirection = 'INBOUND' | 'OUTBOUND';
 export type MessageStatus = 'RECEIVED' | 'PENDING' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED';
@@ -16,6 +46,7 @@ export interface Message {
   /** Agente que lo escribió (solo `AGENT`). */
   sender: { id: string; displayName: string } | null;
   failureReason: string | null;
+  attachment: MessageAttachment | null;
   createdAt: Date;
 }
 
@@ -32,13 +63,15 @@ export interface NewMessage {
   senderMemberId?: string;
   /** Idempotencia del composer de la web. */
   clientMessageId?: string;
+  attachment?: NewAttachment;
 }
 
-/** Mensaje del cliente: entrante y ya recibido. */
+/** Mensaje del cliente: entrante y ya recibido. Con adjunto, `text` es el pie (puede ser vacío). */
 export function customerMessage(
   text: string,
   externalId: string,
   providerTimestamp: Date,
+  attachment?: NewAttachment,
 ): NewMessage {
   return {
     direction: 'INBOUND',
@@ -47,6 +80,7 @@ export function customerMessage(
     text,
     externalId,
     providerTimestamp,
+    ...(attachment && { attachment }),
   };
 }
 
@@ -60,6 +94,7 @@ export function agentMessage(
   text: string,
   senderMemberId: string,
   clientMessageId: string,
+  attachment?: NewAttachment,
 ): NewMessage {
   return {
     direction: 'OUTBOUND',
@@ -68,5 +103,26 @@ export function agentMessage(
     text,
     senderMemberId,
     clientMessageId,
+    ...(attachment && { attachment }),
   };
+}
+
+const KIND_LABELS: Record<AttachmentKind, string> = {
+  IMAGE: 'Foto',
+  VIDEO: 'Video',
+  AUDIO: 'Audio',
+  STICKER: 'Sticker',
+  DOCUMENT: 'Documento',
+};
+
+/** Texto del que sale la vista previa de la lista: el texto o, con adjunto, su tipo y el pie. */
+export function previewSource(message: Pick<NewMessage, 'text' | 'attachment'>): string {
+  const { attachment, text } = message;
+  if (!attachment) return text;
+  const label = attachment.voice
+    ? 'Nota de voz'
+    : attachment.kind === 'DOCUMENT' && attachment.fileName
+      ? `Documento: ${attachment.fileName}`
+      : KIND_LABELS[attachment.kind];
+  return text.trim() ? `${label} · ${text}` : label;
 }

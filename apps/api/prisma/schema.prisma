@@ -64,6 +64,21 @@ enum MessageStatus {
   FAILED
 }
 
+enum AttachmentKind {
+  IMAGE
+  DOCUMENT
+  AUDIO
+  VIDEO
+  STICKER
+}
+
+enum AttachmentStatus {
+  /// Entrante aún sin descargar de WhatsApp.
+  PENDING
+  READY
+  FAILED
+}
+
 model Tenant {
   id        String   @id @default(uuid(7)) @db.Uuid
   slug      String   @unique
@@ -76,6 +91,7 @@ model Tenant {
   identities    ContactIdentity[]
   conversations Conversation[]
   messages      Message[]
+  attachments   MessageAttachment[]
   members       TenantMember[]
   events        ConversationEvent[]
   invitations   Invitation[]
@@ -212,10 +228,11 @@ model Message {
   statusUpdatedAt   DateTime?        @map("status_updated_at") @db.Timestamptz(3)
   createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id])
-  channel      Channel       @relation(fields: [channelId], references: [id])
-  conversation Conversation  @relation(fields: [conversationId], references: [id])
-  sender       TenantMember? @relation(fields: [senderMemberId], references: [id], onDelete: Restrict)
+  tenant       Tenant             @relation(fields: [tenantId], references: [id])
+  channel      Channel            @relation(fields: [channelId], references: [id])
+  conversation Conversation       @relation(fields: [conversationId], references: [id])
+  sender       TenantMember?      @relation(fields: [senderMemberId], references: [id], onDelete: Restrict)
+  attachment   MessageAttachment?
 
   @@unique([conversationId, sequence])
   @@unique([conversationId, clientMessageId])
@@ -357,4 +374,32 @@ model EventInbox {
 
   @@unique([channelId, externalId])
   @@map("event_inbox")
+}
+
+/// Archivo de un mensaje (SPEC 14). Los bytes viven en el bucket (`storageKey`), nunca en Postgres.
+model MessageAttachment {
+  id              String           @id @default(uuid(7)) @db.Uuid
+  tenantId        String           @map("tenant_id") @db.Uuid
+  messageId       String           @unique @map("message_id") @db.Uuid
+  kind            AttachmentKind
+  mimeType        String           @map("mime_type")
+  fileName        String?          @map("file_name")
+  sizeBytes       Int?             @map("size_bytes")
+  /// Nota de voz grabada en WhatsApp.
+  voice           Boolean          @default(false)
+  /// sha256 que reporta Meta (base64 en el webhook): se verifica al descargar.
+  sha256          String?
+  /// Media id de Meta (entrantes): con él se descarga.
+  providerMediaId String?          @map("provider_media_id")
+  /// Clave del objeto en el bucket; null mientras está PENDING.
+  storageKey      String?          @map("storage_key")
+  status          AttachmentStatus
+  failureReason   String?          @map("failure_reason")
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("message_attachments")
 }

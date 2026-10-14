@@ -7,7 +7,7 @@ import {
   type TransactionRunner,
 } from '../../../shared/application/transaction-runner.port';
 import { can } from '../domain/conversation-policy';
-import { agentMessage, type Message } from '../domain/message';
+import { agentMessage, type Message, type NewAttachment } from '../domain/message';
 import { enqueueConversationChanged } from './enqueue-conversation-changed';
 import { enqueueSendRequested } from './enqueue-send-requested';
 import {
@@ -17,8 +17,11 @@ import {
 
 export interface SendAgentMessageInput {
   conversationId: string;
+  /** Con adjunto, su pie (puede ser vacío). */
   text: string;
   clientMessageId: string;
+  /** Ya guardado en el bucket (`storageKey`) y en `READY`. */
+  attachment?: NewAttachment;
 }
 
 export type SendAgentMessageResult =
@@ -69,7 +72,7 @@ export class SendAgentMessageUseCase {
     const now = new Date();
     const message = await this.conversations.appendMessage(
       conversation,
-      agentMessage(input.text, actor.memberId, input.clientMessageId),
+      agentMessage(input.text, actor.memberId, input.clientMessageId, input.attachment),
       now,
     );
     await enqueueSendRequested(this.outbox, actor.tenantId, message.id);

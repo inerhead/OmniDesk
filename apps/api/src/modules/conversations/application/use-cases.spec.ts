@@ -124,6 +124,28 @@ describe('RegisterInboundMessageUseCase', () => {
     expect(result.duplicate).toBe(false);
     expect(conversations.conversations).toHaveLength(1);
   });
+
+  it('registra un adjunto PENDING, devuelve attachmentId y la vista previa nombra el tipo', async () => {
+    const result = await useCase.execute(integration, {
+      ...inbound('m-img'),
+      text: '',
+      attachment: {
+        kind: 'IMAGE',
+        mimeType: 'image/jpeg',
+        providerMediaId: 'media-1',
+        sha256: 'abc=',
+      },
+    });
+
+    const stored = conversations.messages[0]!;
+    expect(stored.attachment).toMatchObject({ kind: 'IMAGE', status: 'PENDING' });
+    expect(result.attachmentId).toBe(stored.attachment!.id);
+    expect(conversations.conversations[0]!.lastMessagePreview).toBe('Foto');
+  });
+
+  it('un mensaje de texto devuelve attachmentId null', async () => {
+    expect((await useCase.execute(integration, inbound('m-txt'))).attachmentId).toBeNull();
+  });
 });
 
 describe('RegisterAiReplyUseCase', () => {

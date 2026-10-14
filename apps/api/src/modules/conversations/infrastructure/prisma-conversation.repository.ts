@@ -10,7 +10,7 @@ import type {
 import { appendMessage, type Conversation } from '../domain/conversation';
 import type { ConversationEvent, NewConversationEvent } from '../domain/conversation-event';
 import type { ConversationState } from '../domain/conversation-transitions';
-import type { Message, NewMessage } from '../domain/message';
+import { previewSource, type Message, type NewMessage } from '../domain/message';
 
 const conversationSelect = {
   id: true,
@@ -38,6 +38,18 @@ export const messageSelect = {
   failureReason: true,
   createdAt: true,
   sender: { select: { id: true, displayName: true } },
+  attachment: {
+    select: {
+      id: true,
+      kind: true,
+      mimeType: true,
+      fileName: true,
+      sizeBytes: true,
+      voice: true,
+      status: true,
+      storageKey: true,
+    },
+  },
 } as const;
 
 @Injectable()
@@ -90,7 +102,7 @@ export class PrismaConversationRepository implements ConversationRepository {
   }
 
   async appendMessage(conversation: Conversation, message: NewMessage, at: Date): Promise<Message> {
-    const summary = appendMessage(conversation, message.text, at);
+    const summary = appendMessage(conversation, previewSource(message), at);
     // El incremento lo hace la base (UPDATE … RETURNING): dos mensajes simultáneos nunca comparten sequence.
     const { lastSequence } = await this.db.client.conversation.update({
       where: { id: conversation.id },
@@ -102,6 +114,7 @@ export class PrismaConversationRepository implements ConversationRepository {
       select: { lastSequence: true },
     });
 
+    const { attachment, ...fields } = message;
     try {
       return await this.db.client.message.create({
         data: {
@@ -110,7 +123,10 @@ export class PrismaConversationRepository implements ConversationRepository {
           conversationId: conversation.id,
           sequence: lastSequence,
           createdAt: at,
-          ...message,
+          ...fields,
+          ...(attachment && {
+            attachment: { create: { tenantId: conversation.tenantId, ...attachment } },
+          }),
         },
         select: messageSelect,
       });

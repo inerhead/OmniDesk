@@ -19,6 +19,7 @@ const message = (sequence: number): Message => ({
   externalId: null,
   sender: null,
   failureReason: null,
+  attachment: null,
   createdAt: new Date(2026, 9, 12, 10, sequence),
 });
 

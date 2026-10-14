@@ -12,23 +12,37 @@ import {
 } from '../../contacts/application/ports/contact.repository';
 import { isAiActive, toPreview, type Conversation } from '../domain/conversation';
 import { decideTransition } from '../domain/conversation-transitions';
-import { customerMessage } from '../domain/message';
+import { customerMessage, previewSource, type AttachmentKind } from '../domain/message';
 import { enqueueConversationChanged } from './enqueue-conversation-changed';
 import {
   CONVERSATION_REPOSITORY,
   type ConversationRepository,
 } from './ports/conversation.repository';
 
+/** Media de WhatsApp aún sin descargar. */
+export interface InboundAttachment {
+  kind: AttachmentKind;
+  mimeType: string;
+  providerMediaId: string;
+  sha256?: string;
+  fileName?: string;
+  voice?: boolean;
+}
+
 export interface InboundMessageInput {
   externalMessageId: string;
   from: { externalId: string; displayName?: string };
+  /** Con adjunto, su pie (puede ser vacío). */
   text: string;
   sentAt: Date;
+  attachment?: InboundAttachment;
 }
 
 export interface InboundMessageResult {
   conversationId: string;
   messageId: string;
+  /** Adjunto que hay que descargar; null sin adjunto. */
+  attachmentId: string | null;
   aiAllowed: boolean;
   controlVersion: number;
   duplicate: boolean;
@@ -71,7 +85,7 @@ export class RegisterInboundMessageUseCase {
         existing.conversationId,
       );
       if (!conversation) throw new Error(`Conversación ${existing.conversationId} no encontrada`);
-      return toResult(conversation, existing.id, true);
+      return toResult(conversation, existing.id, existing.attachment?.id ?? null, true);
     }
 
     const contact = await this.contacts.findOrCreateByIdentity(
@@ -80,13 +94,19 @@ export class RegisterInboundMessageUseCase {
     );
 
     const now = new Date();
-    const conversation = await this.conversationFor(integration, contact.id, input.text, now);
-
-    const message = await this.conversations.appendMessage(
-      conversation,
-      customerMessage(input.text, input.externalMessageId, input.sentAt),
+    const newMessage = customerMessage(
+      input.text,
+      input.externalMessageId,
+      input.sentAt,
+      input.attachment && { ...input.attachment, status: 'PENDING' },
+    );
+    const conversation = await this.conversationFor(
+      integration,
+      contact.id,
+      previewSource(newMessage),
       now,
     );
+    const message = await this.conversations.appendMessage(conversation, newMessage, now);
     await enqueueConversationChanged(
       this.outbox,
       integration.tenantId,
@@ -94,14 +114,14 @@ export class RegisterInboundMessageUseCase {
       'message',
       now,
     );
-    return toResult(conversation, message.id, false);
+    return toResult(conversation, message.id, message.attachment?.id ?? null, false);
   }
 
   /** La conversación abierta del contacto; si estaba cerrada la reabre, y si no existe crea una. */
   private async conversationFor(
     integration: IntegrationContext,
     contactId: string,
-    text: string,
+    preview: string,
     now: Date,
   ): Promise<Conversation> {
     const open = await this.conversations.findOpen(integration.channelId, contactId);
@@ -115,7 +135,7 @@ export class RegisterInboundMessageUseCase {
       channelId: integration.channelId,
       contactId,
       at: now,
-      preview: toPreview(text),
+      preview: toPreview(preview),
     });
   }
 
@@ -141,11 +161,13 @@ export class RegisterInboundMessageUseCase {
 function toResult(
   conversation: Conversation,
   messageId: string,
+  attachmentId: string | null,
   duplicate: boolean,
 ): InboundMessageResult {
   return {
     conversationId: conversation.id,
     messageId,
+    attachmentId,
     aiAllowed: isAiActive(conversation),
     controlVersion: conversation.controlVersion,
     duplicate,

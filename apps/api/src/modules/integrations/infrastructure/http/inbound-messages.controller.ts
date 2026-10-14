@@ -41,6 +41,12 @@ export class InboundMessagesController {
       sentAt: new Date(body.sentAt),
     });
     res.status(result.duplicate ? HttpStatus.OK : HttpStatus.CREATED);
-    return result;
+    return {
+      conversationId: result.conversationId,
+      messageId: result.messageId,
+      aiAllowed: result.aiAllowed,
+      controlVersion: result.controlVersion,
+      duplicate: result.duplicate,
+    };
   }
 }

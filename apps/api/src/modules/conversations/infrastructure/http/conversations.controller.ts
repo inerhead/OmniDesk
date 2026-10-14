@@ -31,7 +31,6 @@ import type {
   ListConversationsResponse,
   ListMessagesResponse,
   ListTimelineResponse,
-  Message as MessageResponse,
   SendAgentMessageResponse,
 } from '@omnidesk/contracts';
 import type { Response } from 'express';
@@ -54,7 +53,6 @@ import { ReleaseConversationUseCase } from '../../application/release-conversati
 import { ReopenConversationUseCase } from '../../application/reopen-conversation.use-case';
 import { RetryFailedMessageUseCase } from '../../application/retry-failed-message.use-case';
 import { SendAgentMessageUseCase } from '../../application/send-agent-message.use-case';
-import type { Message } from '../../domain/message';
 import {
   AssignConversationRequestDto,
   ConversationCommandRejectedDto,
@@ -72,26 +70,13 @@ import {
   SendAgentMessageRequestDto,
   SendAgentMessageResponseDto,
 } from './conversations.dto';
+import { toMessageDto } from './message.mapper';
 
 function toSummaryDto(summary: ConversationSummary): ConversationSummaryResponse {
   return {
     ...summary,
     lastMessageAt: summary.lastMessageAt.toISOString(),
     createdAt: summary.createdAt.toISOString(),
-  };
-}
-
-function toMessageDto(message: Message): MessageResponse {
-  return {
-    id: message.id,
-    sequence: message.sequence,
-    direction: message.direction,
-    senderType: message.senderType,
-    text: message.text,
-    status: message.status,
-    sender: message.sender,
-    failureReason: message.failureReason,
-    createdAt: message.createdAt.toISOString(),
   };
 }
 

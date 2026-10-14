@@ -16,7 +16,7 @@ import type {
 import { appendMessage, type Conversation } from '../domain/conversation';
 import type { ConversationEvent, NewConversationEvent } from '../domain/conversation-event';
 import type { ConversationState } from '../domain/conversation-transitions';
-import type { Message, NewMessage } from '../domain/message';
+import { previewSource, type Message, type NewMessage } from '../domain/message';
 
 /** Dobles en memoria para las pruebas unitarias de los casos de uso. */
 
@@ -54,7 +54,7 @@ export class InMemoryContacts implements ContactRepository {
 
 export class InMemoryConversations implements ConversationRepository {
   readonly conversations: Conversation[] = [];
-  readonly messages: (Message & Omit<NewMessage, 'externalId'>)[] = [];
+  readonly messages: (Message & Omit<NewMessage, 'externalId' | 'attachment'>)[] = [];
   /** Nombres de los agentes remitentes, por id de miembro. */
   readonly memberNames = new Map<string, string>();
   /** Teléfono del destinatario de cada conversación (para `findOutboundForSend`). */
@@ -111,9 +111,10 @@ export class InMemoryConversations implements ConversationRepository {
   }
 
   async appendMessage(conversation: Conversation, message: NewMessage, at: Date) {
-    Object.assign(conversation, appendMessage(conversation, message.text, at));
+    Object.assign(conversation, appendMessage(conversation, previewSource(message), at));
+    const { attachment, ...fields } = message;
     const stored = {
-      ...message,
+      ...fields,
       id: randomUUID(),
       channelId: conversation.channelId,
       conversationId: conversation.id,
@@ -126,6 +127,18 @@ export class InMemoryConversations implements ConversationRepository {
           }
         : null,
       failureReason: null,
+      attachment: attachment
+        ? {
+            id: randomUUID(),
+            kind: attachment.kind,
+            mimeType: attachment.mimeType,
+            fileName: attachment.fileName ?? null,
+            sizeBytes: attachment.sizeBytes ?? null,
+            voice: attachment.voice ?? false,
+            status: attachment.status,
+            storageKey: attachment.storageKey ?? null,
+          }
+        : null,
       createdAt: at,
     };
     this.messages.push(stored);

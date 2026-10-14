@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaDb } from '../../../shared/infrastructure/prisma/prisma-transaction-runner';
 import type { MembershipRepository } from '../application/ports/membership.repository';
 import type { Membership } from '../domain/user';
+import { avatarSourceSelect, memberAvatarUrl } from './member-ref';
 
 const select = {
   id: true,
@@ -56,14 +57,17 @@ export class PrismaMembershipRepository implements MembershipRepository {
     return row ? { ...toMembership(row), userId: row.userId } : null;
   }
 
-  async listLoginMembersOfTenant(
-    tenantSlug: string,
-  ): Promise<Array<{ memberId: string; displayName: string; role: Membership['role'] }>> {
+  async listLoginMembersOfTenant(tenantSlug: string) {
     const rows = await this.db.client.tenantMember.findMany({
       where: { tenant: { slug: tenantSlug }, removedAt: null, userId: { not: null } },
       orderBy: [{ role: 'asc' }, { displayName: 'asc' }],
-      select: { id: true, displayName: true, role: true },
+      select: { id: true, displayName: true, role: true, user: { select: avatarSourceSelect } },
     });
-    return rows.map(({ id, displayName, role }) => ({ memberId: id, displayName, role }));
+    return rows.map(({ id, displayName, role, user }) => ({
+      memberId: id,
+      displayName,
+      role,
+      avatarUrl: memberAvatarUrl({ user }),
+    }));
   }
 }

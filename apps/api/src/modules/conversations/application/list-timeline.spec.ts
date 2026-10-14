@@ -27,8 +27,8 @@ const event = (sequence: number): ConversationEventView => ({
   id: `e${sequence}`,
   sequence,
   type: 'ASSIGNED',
-  actor: { id: 'owner', displayName: 'Sup. Demo' },
-  target: { id: 'laura', displayName: 'Laura' },
+  actor: { id: 'owner', displayName: 'Sup. Demo', avatarUrl: null },
+  target: { id: 'laura', displayName: 'Laura', avatarUrl: null },
   createdAt: new Date(2026, 9, 12, 10, sequence),
 });
 

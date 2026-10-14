@@ -34,3 +34,12 @@ export function avatarColor(id: string): AvatarColor {
   }
   return AVATAR_COLORS[(hash >>> 0) % AVATAR_COLORS.length]!;
 }
+
+/**
+ * `src` de una foto: la subida llega relativa al API (`/api/v1/users/…`) y se le antepone `base`
+ * (`apiBase`); la de Google ya es absoluta.
+ */
+export function avatarSrc(url: string | null | undefined, base: string): string | null {
+  if (!url) return null;
+  return url.startsWith('/') ? `${base}${url}` : url;
+}

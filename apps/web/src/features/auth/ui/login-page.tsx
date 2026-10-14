@@ -68,7 +68,13 @@ export function LoginPage() {
               disabled={devLogin.isPending}
               onClick={() => devLogin.mutate(member.memberId)}
             >
-              <Avatar id={member.memberId} name={member.displayName} fallback="?" size="sm" />
+              <Avatar
+                id={member.memberId}
+                name={member.displayName}
+                fallback="?"
+                imageUrl={member.avatarUrl}
+                size="sm"
+              />
               <span className="flex flex-col items-start">
                 <span>Entrar como {member.displayName}</span>
                 <span className="text-muted-foreground text-xs font-normal">

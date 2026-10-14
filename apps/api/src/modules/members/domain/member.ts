@@ -6,6 +6,8 @@ export interface Member {
   displayName: string;
   email: string;
   role: MemberRole;
+  /** Foto resuelta de su usuario (SPEC 15); `null` sin foto o sin usuario enlazado. */
+  avatarUrl: string | null;
 }
 
 export type NewMember = Pick<Member, 'displayName' | 'email' | 'role'> & {

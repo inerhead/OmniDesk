@@ -26,7 +26,7 @@ describe('toBubbleView', () => {
   });
 
   it('muestra el nombre del agente en lugar de "Agente"', () => {
-    const sender = { id: 'laura', displayName: 'Laura' };
+    const sender = { id: 'laura', displayName: 'Laura', avatarUrl: null };
 
     expect(toBubbleView({ senderType: 'AGENT', status: 'SENT', sender })).toMatchObject({
       align: 'end',

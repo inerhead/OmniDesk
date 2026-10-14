@@ -4,9 +4,9 @@ import { describeEvent, statusLabel } from './describe-event';
 
 type TimelineEvent = Extract<TimelineItem, { kind: 'event' }>;
 
-const sup = { id: 'sup', displayName: 'Sup. Demo' };
-const laura = { id: 'laura', displayName: 'Laura' };
-const mateo = { id: 'mateo', displayName: 'Mateo' };
+const sup = { id: 'sup', displayName: 'Sup. Demo', avatarUrl: null };
+const laura = { id: 'laura', displayName: 'Laura', avatarUrl: null };
+const mateo = { id: 'mateo', displayName: 'Mateo', avatarUrl: null };
 
 const event = (overrides: Partial<TimelineEvent>): TimelineEvent => ({
   kind: 'event',

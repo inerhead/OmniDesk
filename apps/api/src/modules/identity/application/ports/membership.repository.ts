@@ -8,9 +8,14 @@ export interface MembershipRepository {
   /** Membresía activa por id de miembro, con su usuario (para el login de desarrollo). */
   findByMemberId(memberId: string): Promise<(Membership & { userId: string | null }) | null>;
   /** Miembros activos con usuario de una empresa, por slug (los botones del login de desarrollo). */
-  listLoginMembersOfTenant(
-    tenantSlug: string,
-  ): Promise<Array<{ memberId: string; displayName: string; role: Membership['role'] }>>;
+  listLoginMembersOfTenant(tenantSlug: string): Promise<
+    Array<{
+      memberId: string;
+      displayName: string;
+      role: Membership['role'];
+      avatarUrl: string | null;
+    }>
+  >;
 }
 
 export const MEMBERSHIP_REPOSITORY = Symbol('MEMBERSHIP_REPOSITORY');

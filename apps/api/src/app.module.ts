@@ -10,6 +10,7 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { MembersModule } from './modules/members/members.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { ProfileModule } from './modules/profile/profile.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { TeamModule } from './modules/team/team.module';
 import { TenancyModule } from './modules/tenancy/tenancy.module';
@@ -35,6 +36,7 @@ export class AppModule {
         TeamModule,
         ConversationsModule,
         AttachmentsModule,
+        ProfileModule,
         IntegrationsModule,
         MessagingModule,
         NotificationsModule,

@@ -47,7 +47,7 @@ export function setUnauthorizedHandler(handler: () => void): () => void {
 }
 
 async function requestJson(
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   path: string,
   body: unknown,
   { timeoutMs = DEFAULT_TIMEOUT_MS, headers = {}, allowUnauthorized = false }: RequestOptions,
@@ -116,4 +116,13 @@ export function postForm(
   options: RequestOptions = {},
 ): Promise<ApiResponse> {
   return requestJson('POST', path, form, { timeoutMs: 60_000, ...options });
+}
+
+/** PUT multipart (foto de perfil). */
+export function putForm(
+  path: string,
+  form: FormData,
+  options: RequestOptions = {},
+): Promise<ApiResponse> {
+  return requestJson('PUT', path, form, { timeoutMs: 30_000, ...options });
 }

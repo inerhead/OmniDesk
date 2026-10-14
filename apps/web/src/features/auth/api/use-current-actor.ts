@@ -33,6 +33,7 @@ export function useCurrentActor(): CurrentActor {
         id: membership.memberId,
         displayName: me.data!.user.displayName,
         role: membership.role,
+        avatarUrl: me.data!.user.avatarUrl,
       })
     : null;
 

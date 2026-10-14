@@ -13,7 +13,7 @@ describe('composerMode', () => {
       composerMode(
         {
           status: 'OPEN',
-          assignedAgent: { id: 'laura', displayName: 'Laura' },
+          assignedAgent: { id: 'laura', displayName: 'Laura', avatarUrl: null },
           lastInboundAt: recent,
         },
         laura,
@@ -32,7 +32,7 @@ describe('composerMode', () => {
   });
 
   it('asignada a otro: muestra su nombre, también a un supervisor', () => {
-    const mateo = { id: 'mateo', displayName: 'Mateo' };
+    const mateo = { id: 'mateo', displayName: 'Mateo', avatarUrl: null };
 
     expect(
       composerMode({ status: 'OPEN', assignedAgent: mateo, lastInboundAt: recent }, owner, now),
@@ -53,7 +53,7 @@ describe('composerMode', () => {
       composerMode(
         {
           status: 'CLOSED',
-          assignedAgent: { id: 'laura', displayName: 'Laura' },
+          assignedAgent: { id: 'laura', displayName: 'Laura', avatarUrl: null },
           lastInboundAt: recent,
         },
         laura,
@@ -72,7 +72,7 @@ describe('composerMode', () => {
       composerMode(
         {
           status: 'OPEN',
-          assignedAgent: { id: 'laura', displayName: 'Laura' },
+          assignedAgent: { id: 'laura', displayName: 'Laura', avatarUrl: null },
           lastInboundAt: expired,
         },
         laura,

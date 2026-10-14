@@ -44,7 +44,7 @@ export interface Message {
   /** Entrantes: id del mensaje en el proveedor. Salientes: el `providerMessageId` del envío. */
   externalId: string | null;
   /** Agente que lo escribió (solo `AGENT`). */
-  sender: { id: string; displayName: string } | null;
+  sender: { id: string; displayName: string; avatarUrl: string | null } | null;
   failureReason: string | null;
   attachment: MessageAttachment | null;
   createdAt: Date;

@@ -123,7 +123,12 @@ export function MembersPage() {
               const isSelf = member.id === actor.id;
               return (
                 <li key={member.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                  <Avatar id={member.id} name={member.displayName} fallback="?" />
+                  <Avatar
+                    id={member.id}
+                    name={member.displayName}
+                    fallback="?"
+                    imageUrl={member.avatarUrl}
+                  />
                   <div className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate text-sm font-medium">
                       {member.displayName}

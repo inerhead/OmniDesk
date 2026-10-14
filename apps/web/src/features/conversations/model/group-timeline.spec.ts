@@ -5,13 +5,13 @@ import { dayLabel, groupConsecutiveBubbles, groupTimelineByDay } from './group-t
 const now = new Date(2026, 9, 12, 18, 30); // lunes 12/10/2026
 
 let sequence = 0;
-const laura = { id: '0199c0de-0000-7000-8000-00000000000a', displayName: 'Laura' };
-const mateo = { id: '0199c0de-0000-7000-8000-00000000000b', displayName: 'Mateo' };
+const laura = { id: '0199c0de-0000-7000-8000-00000000000a', displayName: 'Laura', avatarUrl: null };
+const mateo = { id: '0199c0de-0000-7000-8000-00000000000b', displayName: 'Mateo', avatarUrl: null };
 
 function message(
   at: Date,
   senderType: 'CUSTOMER' | 'AI' | 'AGENT' = 'CUSTOMER',
-  sender: { id: string; displayName: string } | null = null,
+  sender: { id: string; displayName: string; avatarUrl: string | null } | null = null,
 ): TimelineItem {
   sequence += 1;
   return {

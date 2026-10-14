@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import type { Prisma } from '../../../generated/prisma/client';
+import { memberRefSelect, toMemberRefOrNull } from '../../identity/infrastructure/member-ref';
 import { rethrowUniqueConflict } from '../../../shared/infrastructure/prisma/prisma-errors';
 import { PrismaDb } from '../../../shared/infrastructure/prisma/prisma-transaction-runner';
 import type {
@@ -38,7 +40,7 @@ export const messageSelect = {
   externalId: true,
   failureReason: true,
   createdAt: true,
-  sender: { select: { id: true, displayName: true } },
+  sender: { select: memberRefSelect },
   attachment: {
     select: {
       id: true,
@@ -51,7 +53,18 @@ export const messageSelect = {
       storageKey: true,
     },
   },
-} as const;
+} satisfies Prisma.MessageSelect;
+
+type MessageRow = Prisma.MessageGetPayload<{ select: typeof messageSelect }>;
+
+/** La foto del remitente se resuelve aquí: el dominio no conoce las columnas de `users`. */
+export function toMessage({ sender, ...row }: MessageRow): Message {
+  return { ...row, sender: toMemberRefOrNull(sender) };
+}
+
+function toMessageOrNull(row: MessageRow | null): Message | null {
+  return row && toMessage(row);
+}
 
 @Injectable()
 export class PrismaConversationRepository implements ConversationRepository {
@@ -118,7 +131,7 @@ export class PrismaConversationRepository implements ConversationRepository {
 
     const { attachment, ...fields } = message;
     try {
-      return await this.db.client.message.create({
+      const row = await this.db.client.message.create({
         data: {
           tenantId: conversation.tenantId,
           channelId: conversation.channelId,
@@ -132,6 +145,7 @@ export class PrismaConversationRepository implements ConversationRepository {
         },
         select: messageSelect,
       });
+      return toMessage(row);
     } catch (error) {
       rethrowUniqueConflict(error);
     }
@@ -180,18 +194,25 @@ export class PrismaConversationRepository implements ConversationRepository {
     });
   }
 
-  findMessageById(tenantId: string, messageId: string): Promise<Message | null> {
-    return this.db.client.message.findFirst({
-      where: { id: messageId, tenantId },
-      select: messageSelect,
-    });
+  async findMessageById(tenantId: string, messageId: string): Promise<Message | null> {
+    return toMessageOrNull(
+      await this.db.client.message.findFirst({
+        where: { id: messageId, tenantId },
+        select: messageSelect,
+      }),
+    );
   }
 
-  findMessageByClientId(conversationId: string, clientMessageId: string): Promise<Message | null> {
-    return this.db.client.message.findUnique({
-      where: { conversationId_clientMessageId: { conversationId, clientMessageId } },
-      select: messageSelect,
-    });
+  async findMessageByClientId(
+    conversationId: string,
+    clientMessageId: string,
+  ): Promise<Message | null> {
+    return toMessageOrNull(
+      await this.db.client.message.findUnique({
+        where: { conversationId_clientMessageId: { conversationId, clientMessageId } },
+        select: messageSelect,
+      }),
+    );
   }
 
   async findOutboundForSend(tenantId: string, messageId: string): Promise<OutboundForSend | null> {
@@ -209,40 +230,47 @@ export class PrismaConversationRepository implements ConversationRepository {
       },
     });
     if (!row) return null;
-    const { conversation, ...message } = row;
+    const { conversation, ...messageRow } = row;
+    const message = toMessage(messageRow);
     const to = conversation.contact.identities.find(
       (identity) => identity.channelId === message.channelId,
     )?.externalId;
     return to ? { message, tenantId, to } : null;
   }
 
-  updateMessageDelivery(messageId: string, update: MessageDeliveryUpdate): Promise<Message> {
-    return this.db.client.message.update({
-      where: { id: messageId },
-      data: {
-        status: update.status,
-        failureReason: update.failureReason,
-        statusUpdatedAt: update.at,
-        ...(update.externalId !== undefined && { externalId: update.externalId }),
-      },
-      select: messageSelect,
-    });
+  async updateMessageDelivery(messageId: string, update: MessageDeliveryUpdate): Promise<Message> {
+    return toMessage(
+      await this.db.client.message.update({
+        where: { id: messageId },
+        data: {
+          status: update.status,
+          failureReason: update.failureReason,
+          statusUpdatedAt: update.at,
+          ...(update.externalId !== undefined && { externalId: update.externalId }),
+        },
+        select: messageSelect,
+      }),
+    );
   }
 
-  findMessageByExternalId(channelId: string, externalId: string): Promise<Message | null> {
-    return this.db.client.message.findUnique({
-      where: { channelId_externalId: { channelId, externalId } },
-      select: messageSelect,
-    });
+  async findMessageByExternalId(channelId: string, externalId: string): Promise<Message | null> {
+    return toMessageOrNull(
+      await this.db.client.message.findUnique({
+        where: { channelId_externalId: { channelId, externalId } },
+        select: messageSelect,
+      }),
+    );
   }
 
-  findMessageByIdempotencyKey(
+  async findMessageByIdempotencyKey(
     conversationId: string,
     idempotencyKey: string,
   ): Promise<Message | null> {
-    return this.db.client.message.findUnique({
-      where: { conversationId_idempotencyKey: { conversationId, idempotencyKey } },
-      select: messageSelect,
-    });
+    return toMessageOrNull(
+      await this.db.client.message.findUnique({
+        where: { conversationId_idempotencyKey: { conversationId, idempotencyKey } },
+        select: messageSelect,
+      }),
+    );
   }
 }

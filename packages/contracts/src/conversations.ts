@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { AttachmentSchema } from './attachments';
 import { MessageTextSchema } from './integrations';
+import { AvatarUrlSchema } from './profile';
 
 export const ConversationStatusSchema = z.enum(['OPEN', 'CLOSED']);
 export const ChannelTypeSchema = z.enum(['WHATSAPP']);
@@ -52,7 +53,9 @@ export const ConversationSummarySchema = z.object({
     type: ChannelTypeSchema,
   }),
   /** Agente asignado; se conserva en una conversación cerrada. */
-  assignedAgent: z.object({ id: z.uuid(), displayName: z.string() }).nullable(),
+  assignedAgent: z
+    .object({ id: z.uuid(), displayName: z.string(), avatarUrl: AvatarUrlSchema })
+    .nullable(),
   /** Versión de control vigente; todo comando debe presentarla. */
   controlVersion: z.int().min(0),
   lastMessageAt: z.iso.datetime(),
@@ -105,7 +108,11 @@ export const ListMessagesQuerySchema = z.object({
 });
 export type ListMessagesQuery = z.infer<typeof ListMessagesQuerySchema>;
 
-export const MemberRefSchema = z.object({ id: z.uuid(), displayName: z.string() });
+export const MemberRefSchema = z.object({
+  id: z.uuid(),
+  displayName: z.string(),
+  avatarUrl: AvatarUrlSchema,
+});
 
 export const MessageSchema = z.object({
   id: z.uuid(),

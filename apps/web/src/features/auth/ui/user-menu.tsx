@@ -1,4 +1,4 @@
-import { Bell, LogOut, Monitor, Moon, Sun } from 'lucide-react';
+import { Bell, LogOut, Monitor, Moon, Sun, UserRound } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router';
 import { cn } from '@/shared/lib/utils';
 import { ConnectionDot } from '@/shared/realtime/connection-badge';
@@ -22,7 +22,8 @@ import { SettingsMenuItems, TenantMenuItems } from './account-menu-items';
 
 /**
  * Perfil: avatar con el estado de conexión en la esquina (resaltado en `/settings/*`). Su menú reúne, en este orden, la cuenta, la
- * empresa (cambiar o crear), los ajustes de la empresa activa (Owner y Admin), las notificaciones, el tema y cerrar sesión.
+ * empresa (cambiar o crear), los ajustes de la empresa activa (Owner y Admin), mi perfil, las notificaciones, el tema y cerrar
+ * sesión.
  */
 export function UserMenu({ variant }: { variant: 'rail' | 'bar' }) {
   const { data: me } = useMe();
@@ -95,6 +96,10 @@ export function UserMenu({ variant }: { variant: 'rail' | 'bar' }) {
         )}
         <DropdownMenuSeparator />
 
+        <DropdownMenuItem onSelect={() => void navigate('/settings/profile')}>
+          <UserRound aria-hidden />
+          Mi perfil
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => void navigate('/settings/notifications')}>
           <Bell aria-hidden />
           Notificaciones

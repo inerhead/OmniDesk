@@ -1,6 +1,7 @@
 import type { ConversationSummary } from '@omnidesk/contracts';
-import { Bot, UserRound } from 'lucide-react';
+import { Bot } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
+import { Avatar } from '@/shared/ui/avatar';
 import { Badge } from '@/shared/ui/badge';
 import { WhatsAppMark } from './whatsapp-mark';
 
@@ -40,8 +41,15 @@ export function StatusChip({
     <span className={cn('inline-flex items-center gap-1', className)}>
       {fromWhatsApp && <WhatsAppChip />}
       {conversation.assignedAgent && (
-        <Badge variant="warning" className="max-w-32">
-          <UserRound aria-hidden />
+        <Badge variant="warning" className="max-w-32 pl-0.5">
+          <Avatar
+            id={conversation.assignedAgent.id}
+            name={conversation.assignedAgent.displayName}
+            fallback="?"
+            imageUrl={conversation.assignedAgent.avatarUrl}
+            size="xs"
+            className="size-4 text-[8px]"
+          />
           <span className="truncate">{conversation.assignedAgent.displayName}</span>
         </Badge>
       )}

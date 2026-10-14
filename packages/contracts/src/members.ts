@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AvatarUrlSchema } from './profile';
 
 export const MemberRoleSchema = z.enum(['OWNER', 'ADMIN', 'AGENT']);
 export type MemberRole = z.infer<typeof MemberRoleSchema>;
@@ -7,6 +8,7 @@ export const MemberSchema = z.object({
   id: z.uuid(),
   displayName: z.string(),
   role: MemberRoleSchema,
+  avatarUrl: AvatarUrlSchema,
 });
 export type Member = z.infer<typeof MemberSchema>;
 

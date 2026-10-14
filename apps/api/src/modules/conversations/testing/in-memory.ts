@@ -126,6 +126,7 @@ export class InMemoryConversations implements ConversationRepository {
         ? {
             id: message.senderMemberId,
             displayName: this.memberNames.get(message.senderMemberId) ?? message.senderMemberId,
+            avatarUrl: null,
           }
         : null,
       failureReason: null,
@@ -221,6 +222,7 @@ export class InMemoryMembers implements MemberRepository {
       tenantId: 't1',
       displayName: member.id,
       email: `${member.id}@demo.omnidesk.local`,
+      avatarUrl: null,
       ...rest,
     };
     this.members.push(stored);

@@ -9,7 +9,15 @@ describe('MemberSchema', () => {
   };
 
   it('acepta un miembro válido y no expone el email', () => {
-    expect(MemberSchema.parse({ ...member, email: 'laura@demo.omnidesk.local' })).toEqual(member);
+    expect(MemberSchema.parse({ ...member, email: 'laura@demo.omnidesk.local' })).toEqual({
+      ...member,
+      avatarUrl: null,
+    });
+  });
+
+  it('conserva la foto si viene', () => {
+    const avatarUrl = '/api/v1/users/u1/avatar?v=1';
+    expect(MemberSchema.parse({ ...member, avatarUrl }).avatarUrl).toBe(avatarUrl);
   });
 
   it('rechaza un rol desconocido y un id que no es uuid', () => {

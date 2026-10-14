@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AVATAR_COLORS, avatarColor, initials } from './avatar';
+import { AVATAR_COLORS, avatarColor, avatarSrc, initials } from './avatar';
 
 describe('initials', () => {
   it('toma la primera letra de las dos primeras palabras', () => {
@@ -34,5 +34,21 @@ describe('avatarColor', () => {
     );
     for (const color of colors) expect(AVATAR_COLORS).toContain(color);
     expect(colors.size).toBe(8);
+  });
+});
+
+describe('avatarSrc', () => {
+  it('antepone la base a la foto subida', () => {
+    expect(avatarSrc('/api/v1/users/u1/avatar?v=1', '/omnidesk')).toBe(
+      '/omnidesk/api/v1/users/u1/avatar?v=1',
+    );
+  });
+
+  it('deja la de Google tal cual y sin foto devuelve null', () => {
+    expect(avatarSrc('https://lh3.googleusercontent.com/a/x', '/omnidesk')).toBe(
+      'https://lh3.googleusercontent.com/a/x',
+    );
+    expect(avatarSrc(null, '/omnidesk')).toBeNull();
+    expect(avatarSrc(undefined, '')).toBeNull();
   });
 });

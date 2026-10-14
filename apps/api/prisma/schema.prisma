@@ -245,14 +245,19 @@ model Message {
 
 /// Persona con cuenta (Google o demo). Sus membresías dicen a qué empresas pertenece.
 model User {
-  id          String   @id @default(uuid(7)) @db.Uuid
+  id              String    @id @default(uuid(7)) @db.Uuid
   /// `sub` de Google; null para los usuarios demo.
-  googleSub   String?  @unique @map("google_sub")
+  googleSub       String?   @unique @map("google_sub")
   /// Siempre en minúsculas.
-  email       String   @unique
-  displayName String   @map("display_name")
-  avatarUrl   String?  @map("avatar_url")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  email           String    @unique
+  displayName     String    @map("display_name")
+  /// Foto de Google; se actualiza en cada login con Google.
+  googleAvatarUrl String?   @map("avatar_url")
+  /// Clave en el bucket de la foto subida (SPEC 15); null si no hay.
+  avatarKey       String?   @map("avatar_key")
+  /// Cuándo se subió la foto actual; versiona la URL para la caché.
+  avatarUpdatedAt DateTime? @map("avatar_updated_at") @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
   memberships       TenantMember[]
   sessions          Session[]

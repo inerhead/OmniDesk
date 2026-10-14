@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import type { Prisma } from '../../../generated/prisma/client';
 import { PrismaDb } from '../../../shared/infrastructure/prisma/prisma-transaction-runner';
+import { avatarSourceSelect, memberAvatarUrl } from '../../identity/infrastructure/member-ref';
 import type { MemberRepository } from '../application/ports/member.repository';
 import type { Member, MemberRole, NewMember } from '../domain/member';
 
@@ -9,14 +11,25 @@ const select = {
   displayName: true,
   email: true,
   role: true,
-} as const;
+  user: { select: avatarSourceSelect },
+} satisfies Prisma.TenantMemberSelect;
+
+type MemberRow = Prisma.TenantMemberGetPayload<{ select: typeof select }>;
+
+function toMember({ user, ...row }: MemberRow): Member {
+  return { ...row, avatarUrl: memberAvatarUrl({ user }) };
+}
+
+function toMemberOrNull(row: MemberRow | null): Member | null {
+  return row && toMember(row);
+}
 
 @Injectable()
 export class PrismaMemberRepository implements MemberRepository {
   constructor(private readonly db: PrismaDb) {}
 
-  upsertByEmail(tenantId: string, data: NewMember): Promise<Member> {
-    return this.db.client.tenantMember.upsert({
+  async upsertByEmail(tenantId: string, data: NewMember): Promise<Member> {
+    const row = await this.db.client.tenantMember.upsert({
       where: { tenantId_email: { tenantId, email: data.email } },
       create: { tenantId, ...data },
       update: {
@@ -26,33 +39,39 @@ export class PrismaMemberRepository implements MemberRepository {
       },
       select,
     });
+    return toMember(row);
   }
 
-  findById(tenantId: string, id: string): Promise<Member | null> {
-    return this.db.client.tenantMember.findFirst({
-      where: { id, tenantId, removedAt: null },
-      select,
-    });
+  async findById(tenantId: string, id: string): Promise<Member | null> {
+    return toMemberOrNull(
+      await this.db.client.tenantMember.findFirst({
+        where: { id, tenantId, removedAt: null },
+        select,
+      }),
+    );
   }
 
-  list(tenantId: string): Promise<Member[]> {
-    return this.db.client.tenantMember.findMany({
+  async list(tenantId: string): Promise<Member[]> {
+    const rows = await this.db.client.tenantMember.findMany({
       where: { tenantId, removedAt: null },
       orderBy: [{ role: 'asc' }, { displayName: 'asc' }],
       select,
     });
+    return rows.map(toMember);
   }
 
-  findActiveByEmail(tenantId: string, email: string): Promise<Member | null> {
-    return this.db.client.tenantMember.findFirst({
-      where: { tenantId, email: email.toLowerCase(), removedAt: null },
-      select,
-    });
+  async findActiveByEmail(tenantId: string, email: string): Promise<Member | null> {
+    return toMemberOrNull(
+      await this.db.client.tenantMember.findFirst({
+        where: { tenantId, email: email.toLowerCase(), removedAt: null },
+        select,
+      }),
+    );
   }
 
-  admit(tenantId: string, data: Required<NewMember>): Promise<Member> {
+  async admit(tenantId: string, data: Required<NewMember>): Promise<Member> {
     const email = data.email.toLowerCase();
-    return this.db.client.tenantMember.upsert({
+    const row = await this.db.client.tenantMember.upsert({
       where: { tenantId_email: { tenantId, email } },
       create: { tenantId, ...data, email },
       update: {
@@ -63,6 +82,7 @@ export class PrismaMemberRepository implements MemberRepository {
       },
       select,
     });
+    return toMember(row);
   }
 
   async lockOwners(tenantId: string): Promise<string[]> {
@@ -73,12 +93,14 @@ export class PrismaMemberRepository implements MemberRepository {
     return rows.map((row) => row.id);
   }
 
-  updateRole(tenantId: string, id: string, role: MemberRole): Promise<Member> {
-    return this.db.client.tenantMember.update({
-      where: { id, tenantId, removedAt: null },
-      data: { role },
-      select,
-    });
+  async updateRole(tenantId: string, id: string, role: MemberRole): Promise<Member> {
+    return toMember(
+      await this.db.client.tenantMember.update({
+        where: { id, tenantId, removedAt: null },
+        data: { role },
+        select,
+      }),
+    );
   }
 
   markRemoved(tenantId: string, id: string, at: Date): Promise<{ userId: string | null }> {

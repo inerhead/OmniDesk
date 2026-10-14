@@ -5,6 +5,8 @@ import type { Message } from '../../domain/message';
 export interface MemberRef {
   id: string;
   displayName: string;
+  /** Foto resuelta del usuario del miembro (SPEC 15). */
+  avatarUrl: string | null;
 }
 
 export interface ConversationSummaryView {

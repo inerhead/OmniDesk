@@ -1,6 +1,7 @@
 import type { Message } from '@omnidesk/contracts';
 import { AlertCircle, Bot, Check, CheckCheck, Clock } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
+import { Avatar } from '@/shared/ui/avatar';
 import { formatMessageTime } from '../model/format-time';
 import { toBubbleView, type BubbleView, type DeliveryIcon } from '../model/to-bubble-view';
 import { MessageAttachment } from './message-attachment';
@@ -69,6 +70,15 @@ export function MessageBubble({
       {showAuthor && author && (
         <span className="text-muted-foreground mb-1 flex items-center gap-1 px-1 text-xs font-medium">
           {view.tone === 'ai' && <Bot className="size-3.5" aria-hidden />}
+          {view.tone === 'agent' && message.sender && (
+            <Avatar
+              id={message.sender.id}
+              name={message.sender.displayName}
+              fallback="?"
+              imageUrl={message.sender.avatarUrl}
+              size="xs"
+            />
+          )}
           {author}
         </span>
       )}

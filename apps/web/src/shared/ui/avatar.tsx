@@ -1,10 +1,12 @@
 import * as AvatarPrimitive from '@radix-ui/react-avatar';
 import type { ComponentProps } from 'react';
-import { avatarColor, initials } from '@/shared/lib/avatar';
+import { apiBase } from '@/shared/config/env';
+import { avatarColor, avatarSrc, initials } from '@/shared/lib/avatar';
 import { cn } from '@/shared/lib/utils';
 import { AVATAR_COLOR_CLASS } from './avatar-colors';
 
 const SIZE_CLASS = {
+  xs: 'size-5 text-[10px]',
   sm: 'size-8 text-xs',
   md: 'size-10 text-sm',
   lg: 'size-16 text-xl',
@@ -22,12 +24,13 @@ function Avatar({
 }: Omit<ComponentProps<typeof AvatarPrimitive.Root>, 'id'> & {
   id: string;
   name: string | null;
-  /** Foto (p. ej. la de Google); mientras carga o si falla, las iniciales. */
+  /** Foto subida (relativa al API) o de Google; mientras carga o si falla, las iniciales. */
   imageUrl?: string | null;
   /** Texto si no hay nombre (p. ej. el teléfono). */
   fallback: string;
   size?: keyof typeof SIZE_CLASS;
 }) {
+  const src = avatarSrc(imageUrl, apiBase);
   return (
     <AvatarPrimitive.Root
       data-slot="avatar"
@@ -38,9 +41,9 @@ function Avatar({
       )}
       {...props}
     >
-      {imageUrl && (
+      {src && (
         <AvatarPrimitive.Image
-          src={imageUrl}
+          src={src}
           alt=""
           referrerPolicy="no-referrer"
           className="aspect-square size-full object-cover"

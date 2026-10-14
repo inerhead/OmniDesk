@@ -11,7 +11,8 @@ import type {
 } from '../application/ports/conversation-read-model';
 import type { Conversation } from '../domain/conversation';
 import type { Message } from '../domain/message';
-import { messageSelect } from './prisma-conversation.repository';
+import { memberRefSelect, toMemberRefOrNull } from '../../identity/infrastructure/member-ref';
+import { messageSelect, toMessage } from './prisma-conversation.repository';
 
 const summarySelect = {
   id: true,
@@ -22,7 +23,7 @@ const summarySelect = {
   lastMessagePreview: true,
   lastInboundAt: true,
   createdAt: true,
-  assignedAgent: { select: { id: true, displayName: true } },
+  assignedAgent: { select: memberRefSelect },
   channel: { select: { id: true, name: true, type: true, provider: true, aiEnabled: true } },
   contact: {
     select: {
@@ -35,9 +36,15 @@ const summarySelect = {
 
 type SummaryRow = Prisma.ConversationGetPayload<{ select: typeof summarySelect }>;
 
-function toSummaryView({ channelId, contact, ...row }: SummaryRow): ConversationSummaryView {
+function toSummaryView({
+  channelId,
+  contact,
+  assignedAgent,
+  ...row
+}: SummaryRow): ConversationSummaryView {
   return {
     ...row,
+    assignedAgent: toMemberRefOrNull(assignedAgent),
     channel: {
       id: row.channel.id,
       name: row.channel.name,
@@ -136,25 +143,26 @@ export class PrismaConversationReadModel implements ConversationReadModel {
     });
   }
 
-  listMessagesDescending(
+  async listMessagesDescending(
     conversationId: string,
     before: number | null,
     take: number,
   ): Promise<Message[]> {
-    return this.db.client.message.findMany({
+    const rows = await this.db.client.message.findMany({
       where: { conversationId, ...(before !== null && { sequence: { lt: before } }) },
       orderBy: { sequence: 'desc' },
       take,
       select: messageSelect,
     });
+    return rows.map(toMessage);
   }
 
-  listEventsDescending(
+  async listEventsDescending(
     conversationId: string,
     before: number | null,
     take: number,
   ): Promise<ConversationEventView[]> {
-    return this.db.client.conversationEvent.findMany({
+    const rows = await this.db.client.conversationEvent.findMany({
       where: { conversationId, ...(before !== null && { sequence: { lt: before } }) },
       orderBy: { sequence: 'desc' },
       take,
@@ -163,9 +171,14 @@ export class PrismaConversationReadModel implements ConversationReadModel {
         sequence: true,
         type: true,
         createdAt: true,
-        actor: { select: { id: true, displayName: true } },
-        target: { select: { id: true, displayName: true } },
+        actor: { select: memberRefSelect },
+        target: { select: memberRefSelect },
       },
     });
+    return rows.map(({ actor, target, ...row }) => ({
+      ...row,
+      actor: toMemberRefOrNull(actor),
+      target: toMemberRefOrNull(target),
+    }));
   }
 }

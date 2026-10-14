@@ -9,6 +9,7 @@ import {
   slideSession,
   type Session,
 } from './session';
+import { resolveAvatarUrl } from './user';
 
 const t0 = new Date('2026-10-12T10:00:00.000Z');
 const at = (ms: number) => new Date(t0.getTime() + ms);
@@ -113,5 +114,29 @@ describe('postLoginPath', () => {
   it('con membresías respeta next o va a /conversations', () => {
     expect(postLoginPath('/status', true)).toBe('/status');
     expect(postLoginPath(null, true)).toBe('/conversations');
+  });
+});
+
+describe('resolveAvatarUrl', () => {
+  const user = {
+    id: '0199c0de-0000-7000-8000-000000000002',
+    googleAvatarUrl: 'https://lh3.googleusercontent.com/a/x',
+    avatarKey: null,
+    avatarUpdatedAt: null,
+  };
+
+  it('la foto subida gana a la de Google', () => {
+    const updatedAt = new Date('2026-10-14T10:00:00.000Z');
+    expect(
+      resolveAvatarUrl({ ...user, avatarKey: 'users/x/avatar-1', avatarUpdatedAt: updatedAt }),
+    ).toBe(`/api/v1/users/${user.id}/avatar?v=${updatedAt.getTime()}`);
+  });
+
+  it('sin foto subida usa la de Google', () => {
+    expect(resolveAvatarUrl(user)).toBe('https://lh3.googleusercontent.com/a/x');
+  });
+
+  it('sin ninguna devuelve null', () => {
+    expect(resolveAvatarUrl({ ...user, googleAvatarUrl: null })).toBeNull();
   });
 });

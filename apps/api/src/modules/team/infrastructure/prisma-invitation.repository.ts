@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaDb } from '../../../shared/infrastructure/prisma/prisma-transaction-runner';
+import {
+  memberRefSelect,
+  toMemberRef,
+  type MemberRefRow,
+} from '../../identity/infrastructure/member-ref';
 import type {
   Invitation,
   InvitationRepository,
@@ -16,12 +21,15 @@ const select = {
   expiresAt: true,
   acceptedAt: true,
   revokedAt: true,
-  invitedBy: { select: { id: true, displayName: true } },
+  invitedBy: { select: memberRefSelect },
 } as const;
 
 // El esquema admite cualquier MemberRole; la aplicación solo crea ADMIN o AGENT.
-const toInvitation = <T extends { role: string }>(row: T) =>
-  ({ ...row, role: row.role as InvitableRole }) as T & { role: InvitableRole };
+const toInvitation = <T extends { role: string; invitedBy: MemberRefRow }>(row: T) =>
+  ({ ...row, role: row.role as InvitableRole, invitedBy: toMemberRef(row.invitedBy) }) as Omit<
+    T,
+    'role' | 'invitedBy'
+  > & { role: InvitableRole; invitedBy: ReturnType<typeof toMemberRef> };
 
 @Injectable()
 export class PrismaInvitationRepository implements InvitationRepository {

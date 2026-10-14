@@ -6,7 +6,7 @@ export interface Invitation extends InvitationLifecycle {
   email: string;
   role: InvitableRole;
   createdAt: Date;
-  invitedBy: { id: string; displayName: string };
+  invitedBy: { id: string; displayName: string; avatarUrl: string | null };
 }
 
 export interface InvitationWithTenant extends Invitation {

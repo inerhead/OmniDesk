@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MemberRoleSchema } from './members';
+import { AvatarUrlSchema } from './profile';
 
 /** Cookie `httpOnly` con el token opaco de la sesión. */
 export const SESSION_COOKIE = 'omnidesk_session';
@@ -40,7 +41,12 @@ export const AuthProvidersResponseSchema = z.object({
   google: z.boolean(),
   /** Miembros demo para "Entrar como…"; vacío sin `DEMO_MODE`. */
   demoMembers: z.array(
-    z.object({ memberId: z.uuid(), displayName: z.string(), role: MemberRoleSchema }),
+    z.object({
+      memberId: z.uuid(),
+      displayName: z.string(),
+      role: MemberRoleSchema,
+      avatarUrl: AvatarUrlSchema,
+    }),
   ),
 });
 export type AuthProvidersResponse = z.infer<typeof AuthProvidersResponseSchema>;

@@ -1,15 +1,26 @@
 import { Readable } from 'node:stream';
 import {
+  BucketAlreadyOwnedByYou,
   CreateBucketCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
+  NotFound,
   PutObjectCommand,
   S3Client,
+  S3ServiceException,
 } from '@aws-sdk/client-s3';
 import type { Env } from '../../../shared/config/env';
 import type { AttachmentStorage, StoredObject } from '../application/ports/attachment-storage';
 import type { ByteRange } from '../domain/byte-range';
+
+/** HeadBucket no trae cuerpo: el 404 puede llegar sin la clase `NotFound`. */
+function isNotFound(error: unknown): boolean {
+  return (
+    error instanceof NotFound ||
+    (error instanceof S3ServiceException && error.$metadata.httpStatusCode === 404)
+  );
+}
 
 /** MinIO (o cualquier S3). `forcePathStyle`: MinIO no resuelve buckets como subdominio. */
 export class S3AttachmentStorage implements AttachmentStorage {
@@ -35,8 +46,14 @@ export class S3AttachmentStorage implements AttachmentStorage {
   async ensureBucket(): Promise<void> {
     try {
       await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
-    } catch {
+      return;
+    } catch (error) {
+      if (!isNotFound(error)) throw error;
+    }
+    try {
       await this.client.send(new CreateBucketCommand({ Bucket: this.bucket }));
+    } catch (error) {
+      if (!(error instanceof BucketAlreadyOwnedByYou)) throw error;
     }
   }
 

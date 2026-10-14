@@ -52,6 +52,7 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+        required: false
     volumes:
       - ./apps/api/src:/repo/apps/api/src
       - ./apps/api/prisma:/repo/apps/api/prisma

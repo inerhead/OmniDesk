@@ -1,3 +1,4 @@
+export * from './attachments';
 export * from './auth';
 export * from './channels';
 export * from './conversation-policy';

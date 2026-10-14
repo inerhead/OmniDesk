@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AttachmentSchema } from './attachments';
 import { MessageTextSchema } from './integrations';
 
 export const ConversationStatusSchema = z.enum(['OPEN', 'CLOSED']);
@@ -106,6 +107,8 @@ export const MessageSchema = z.object({
   sender: MemberRefSchema.nullable(),
   /** Motivo del último fallo de envío; `null` si no falló. */
   failureReason: z.string().nullable(),
+  /** Archivo del mensaje; el texto es su pie (puede ser vacío). */
+  attachment: AttachmentSchema.nullable().default(null),
   createdAt: z.iso.datetime(),
 });
 export type Message = z.infer<typeof MessageSchema>;

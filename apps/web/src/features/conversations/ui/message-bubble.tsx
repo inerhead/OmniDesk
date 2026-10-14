@@ -3,6 +3,7 @@ import { AlertCircle, Bot, Check, CheckCheck, Clock } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { formatMessageTime } from '../model/format-time';
 import { toBubbleView, type BubbleView, type DeliveryIcon } from '../model/to-bubble-view';
+import { MessageAttachment } from './message-attachment';
 
 const toneClass = {
   customer: 'bg-bubble-customer text-bubble-customer-foreground',
@@ -78,7 +79,8 @@ export function MessageBubble({
           isLastOfGroup && tailClass[view.align],
         )}
       >
-        <p className="text-sm break-words whitespace-pre-wrap">{message.text}</p>
+        {message.attachment && <MessageAttachment attachment={message.attachment} />}
+        {message.text && <p className="text-sm break-words whitespace-pre-wrap">{message.text}</p>}
         <span className="flex items-center justify-end gap-1 text-[11px] opacity-75">
           <time dateTime={message.createdAt}>{formatMessageTime(message.createdAt)}</time>
           {view.deliveryIcon && !failed && (

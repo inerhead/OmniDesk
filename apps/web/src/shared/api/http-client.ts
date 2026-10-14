@@ -50,6 +50,7 @@ async function requestJson(
   body: unknown,
   { timeoutMs = DEFAULT_TIMEOUT_MS, headers = {}, allowUnauthorized = false }: RequestOptions,
 ): Promise<ApiResponse> {
+  const isForm = body instanceof FormData;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let response: ApiResponse;
@@ -60,10 +61,10 @@ async function requestJson(
       headers: {
         accept: 'application/json',
         'x-request-id': newRequestId(),
-        ...(body !== undefined && { 'content-type': 'application/json' }),
+        ...(body !== undefined && !isForm && { 'content-type': 'application/json' }),
         ...headers,
       },
-      ...(body !== undefined && { body: JSON.stringify(body) }),
+      ...(body !== undefined && { body: isForm ? body : JSON.stringify(body) }),
       credentials: 'include',
       signal: controller.signal,
     });
@@ -104,4 +105,13 @@ export function patchJson(
 /** DELETE sin cuerpo. */
 export function deleteJson(path: string, options: RequestOptions = {}): Promise<ApiResponse> {
   return requestJson('DELETE', path, undefined, options);
+}
+
+/** POST multipart (adjuntos). Timeout amplio: 16 MB con una conexión móvil lenta. */
+export function postForm(
+  path: string,
+  form: FormData,
+  options: RequestOptions = {},
+): Promise<ApiResponse> {
+  return requestJson('POST', path, form, { timeoutMs: 60_000, ...options });
 }

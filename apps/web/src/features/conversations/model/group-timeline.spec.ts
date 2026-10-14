@@ -24,6 +24,7 @@ function message(
     status: senderType === 'CUSTOMER' ? 'RECEIVED' : 'SENT',
     sender,
     failureReason: null,
+    attachment: null,
     createdAt: at.toISOString(),
   };
 }

@@ -2,13 +2,22 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { ApiUnavailableError } from '@/shared/api/http-client';
 import { newRequestId } from '@/shared/api/request-id';
-import { postAgentMessage, postRetryMessage, SendMessageError } from './conversations-api';
+import { draftKey, type Draft } from '../model/outbound-file';
+import {
+  postAgentAttachment,
+  postAgentMessage,
+  postRetryMessage,
+  SendMessageError,
+} from './conversations-api';
 
 export function sendNoticeFor(error: unknown): string {
   if (error instanceof SendMessageError) {
     if (error.status === 403) return 'Solo el agente asignado puede responder';
     if (error.status === 404) return 'La conversación ya no está disponible para ti';
     if (error.status === 409) return 'La conversación está cerrada o cambió';
+    if (error.status === 413)
+      return 'El archivo es demasiado grande: imágenes hasta 5 MB, el resto hasta 16 MB';
+    if (error.status === 415) return 'Tipo de archivo no admitido';
   }
   if (error instanceof ApiUnavailableError)
     return 'Sin conexión con el servidor. Inténtalo de nuevo';
@@ -21,6 +30,8 @@ export function useSendMessage(conversationId: string) {
   const [notice, setNotice] = useState<string | null>(null);
   // Un mismo mensaje conserva su clientMessageId hasta enviarse: reintentar ante un error de red no lo duplica.
   const clientMessageId = useRef(newRequestId());
+  // Un borrador distinto (otro texto u otro archivo) no puede reutilizar el id de un intento fallido.
+  const lastDraft = useRef<string | null>(null);
 
   const refresh = () =>
     Promise.all([
@@ -29,13 +40,25 @@ export function useSendMessage(conversationId: string) {
     ]);
 
   const send = useMutation({
-    mutationFn: (text: string) =>
-      postAgentMessage(conversationId, {
-        text,
-        clientMessageId: clientMessageId.current,
-      }),
+    mutationFn: (draft: Draft) => {
+      const key = draftKey(draft);
+      if (lastDraft.current !== null && lastDraft.current !== key)
+        clientMessageId.current = newRequestId();
+      lastDraft.current = key;
+      return draft.file
+        ? postAgentAttachment(conversationId, {
+            file: draft.file,
+            caption: draft.text,
+            clientMessageId: clientMessageId.current,
+          })
+        : postAgentMessage(conversationId, {
+            text: draft.text,
+            clientMessageId: clientMessageId.current,
+          });
+    },
     onSuccess: () => {
       clientMessageId.current = newRequestId();
+      lastDraft.current = null;
       setNotice(null);
       return refresh();
     },
@@ -59,8 +82,8 @@ export function useSendMessage(conversationId: string) {
   });
 
   return {
-    send: (text: string, options?: { onSent: () => void }) =>
-      send.mutate(text, { onSuccess: options?.onSent }),
+    send: (draft: Draft, options?: { onSent: () => void }) =>
+      send.mutate(draft, { onSuccess: options?.onSent }),
     sending: send.isPending,
     retry: (messageId: string) => retry.mutate(messageId),
     retryingId: retry.isPending ? retry.variables : null,

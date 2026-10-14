@@ -14,7 +14,7 @@ import {
   type ListTimelineResponse,
   type Message,
 } from '@omnidesk/contracts';
-import { ApiHttpError, getJson, postJson } from '@/shared/api/http-client';
+import { ApiHttpError, getJson, postForm, postJson } from '@/shared/api/http-client';
 
 export async function fetchInboxChannels(): Promise<ListInboxChannelsResponse> {
   const { status, body } = await getJson('/api/v1/channels/inbox');
@@ -117,6 +117,23 @@ export async function postAgentMessage(
   const { status, body } = await postJson(
     `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages`,
     payload,
+  );
+  if (status === 200 || status === 201) return SendAgentMessageResponseSchema.parse(body);
+  throw new SendMessageError(status);
+}
+
+/** Sube un archivo con su pie; idempotente por `clientMessageId`, como `postAgentMessage`. */
+export async function postAgentAttachment(
+  conversationId: string,
+  payload: { file: File; caption: string; clientMessageId: string },
+): Promise<Message> {
+  const form = new FormData();
+  form.set('clientMessageId', payload.clientMessageId);
+  form.set('caption', payload.caption);
+  form.set('file', payload.file, payload.file.name);
+  const { status, body } = await postForm(
+    `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages/attachments`,
+    form,
   );
   if (status === 200 || status === 201) return SendAgentMessageResponseSchema.parse(body);
   throw new SendMessageError(status);

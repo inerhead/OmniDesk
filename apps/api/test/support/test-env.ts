@@ -23,6 +23,7 @@ export function testEnv(overrides: Record<string, string> = {}): Env {
     PUBLIC_BASE_PATH: '/omnidesk',
     CHANNEL_SECRETS_KEY: E2E_CHANNEL_SECRETS_KEY,
     APP_URL: 'http://localhost:8080/omnidesk',
+    ATTACHMENT_STORAGE_DRIVER: 'memory',
     ...overrides,
   });
 }

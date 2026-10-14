@@ -122,6 +122,10 @@ describe('Producción (NODE_ENV=production)', () => {
         GOOGLE_CLIENT_SECRET: 'e2e-client-secret',
         SESSION_COOKIE_SECURE: 'true',
         APP_VERSION: 'v0.1.0',
+        ATTACHMENT_STORAGE_DRIVER: 's3',
+        S3_ENDPOINT: 'http://localhost:9050',
+        S3_ACCESS_KEY_ID: 'omnidesk',
+        S3_SECRET_ACCESS_KEY: 'omnidesk-dev-secret',
       }),
     );
   });

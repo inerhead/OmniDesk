@@ -150,6 +150,10 @@ describe('parseEnv — identidad', () => {
         GOOGLE_CLIENT_SECRET: 'secret',
         SESSION_COOKIE_SECURE: 'true',
         CHANNEL_SECRETS_KEY: Buffer.alloc(32).toString('base64'),
+        ATTACHMENT_STORAGE_DRIVER: 's3',
+        S3_ENDPOINT: 'http://minio:9000',
+        S3_ACCESS_KEY_ID: 'omnidesk',
+        S3_SECRET_ACCESS_KEY: 'omnidesk-dev-secret',
       }).SESSION_COOKIE_SECURE,
     ).toBe(true);
   });
@@ -191,5 +195,41 @@ describe('parseEnv — subruta y proxy', () => {
 
   it('rechaza un TRUST_PROXY negativo', () => {
     expect(() => parseEnv({ ...valid, TRUST_PROXY: '-1' })).toThrowError(/TRUST_PROXY/);
+  });
+});
+
+describe('parseEnv — adjuntos', () => {
+  const s3 = {
+    ATTACHMENT_STORAGE_DRIVER: 's3',
+    S3_ENDPOINT: 'http://minio:9000',
+    S3_ACCESS_KEY_ID: 'omnidesk',
+    S3_SECRET_ACCESS_KEY: 'omnidesk-dev-secret',
+  };
+
+  it('usa memoria y 25 MB por defecto', () => {
+    const env = parseEnv(valid);
+    expect(env.ATTACHMENT_STORAGE_DRIVER).toBe('memory');
+    expect(env.ATTACHMENT_INBOUND_MAX_BYTES).toBe(25 * 1024 * 1024);
+    expect(env.S3_BUCKET).toBe('omnidesk-attachments');
+  });
+
+  it('con s3 exige endpoint y credenciales', () => {
+    expect(() => parseEnv({ ...valid, ATTACHMENT_STORAGE_DRIVER: 's3' })).toThrowError(
+      /S3_ENDPOINT/,
+    );
+    expect(parseEnv({ ...valid, ...s3 }).S3_ENDPOINT).toBe('http://minio:9000');
+  });
+
+  it('en producción exige s3', () => {
+    const production = {
+      ...valid,
+      NODE_ENV: 'production',
+      GOOGLE_CLIENT_ID: 'id',
+      GOOGLE_CLIENT_SECRET: 'secret',
+      CHANNEL_SECRETS_KEY: Buffer.alloc(32, 1).toString('base64'),
+      SESSION_COOKIE_SECURE: 'true',
+    };
+    expect(() => parseEnv(production)).toThrowError(/ATTACHMENT_STORAGE_DRIVER/);
+    expect(() => parseEnv({ ...production, ...s3 })).not.toThrow();
   });
 });

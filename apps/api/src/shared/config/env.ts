@@ -73,6 +73,22 @@ export const EnvSchema = z
     N8N_WEBHOOK_ALLOWED_HOSTS: csvOfHosts,
     /** Cookie de sesión solo por HTTPS. Obligatorio en producción. */
     SESSION_COOKIE_SECURE: booleanString,
+    /** Dónde se guardan los adjuntos: `s3` (MinIO u otro S3) o `memory` (pruebas; se pierden al reiniciar). */
+    ATTACHMENT_STORAGE_DRIVER: z.enum(['memory', 's3']).default('memory'),
+    S3_ENDPOINT: z.preprocess((value) => value || undefined, z.url().optional()),
+    S3_REGION: z.string().min(1).default('us-east-1'),
+    S3_BUCKET: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/)
+      .default('omnidesk-attachments'),
+    S3_ACCESS_KEY_ID: z.preprocess((value) => value || undefined, z.string().min(3).optional()),
+    S3_SECRET_ACCESS_KEY: z.preprocess((value) => value || undefined, z.string().min(8).optional()),
+    /** Tope de un adjunto entrante: los mayores quedan FAILED sin descargarse. */
+    ATTACHMENT_INBOUND_MAX_BYTES: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(25 * 1024 * 1024),
   })
   .superRefine((env, ctx) => {
     if (env.GOOGLE_CLIENT_ID && !env.GOOGLE_CLIENT_SECRET) {
@@ -111,6 +127,24 @@ export const EnvSchema = z
           message: 'Debe ser true con NODE_ENV=production',
         });
       }
+    }
+    if (env.ATTACHMENT_STORAGE_DRIVER === 's3') {
+      for (const key of ['S3_ENDPOINT', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'] as const) {
+        if (!env[key]) {
+          ctx.addIssue({
+            code: 'custom',
+            path: [key],
+            message: 'Es obligatoria con ATTACHMENT_STORAGE_DRIVER=s3',
+          });
+        }
+      }
+    }
+    if (env.NODE_ENV === 'production' && env.ATTACHMENT_STORAGE_DRIVER !== 's3') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['ATTACHMENT_STORAGE_DRIVER'],
+        message: 'Debe ser s3 con NODE_ENV=production',
+      });
     }
     if (!env.DEMO_MODE) return;
     if (env.NODE_ENV === 'production') {

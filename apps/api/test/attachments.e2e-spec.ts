@@ -221,4 +221,68 @@ describe('Adjuntos de WhatsApp (e2e)', () => {
     });
     expect(JSON.stringify(timeline.body)).not.toContain('storageKey');
   });
+
+  const readyImage = async () => {
+    await post(envelope(imageMessage())).expect(200);
+    stubGraphDownload(jpeg);
+    await downloadPending();
+    vi.unstubAllGlobals();
+    return db.messageAttachment.findFirstOrThrow({ where: { tenantId } });
+  };
+  const binary = (req: request.Test) =>
+    req.buffer(true).parse((res, done) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (c: Buffer) => chunks.push(c));
+      res.on('end', () => done(null, Buffer.concat(chunks)));
+    });
+
+  it('sirve el contenido con cabeceras seguras', async () => {
+    const attachment = await readyImage();
+    const res = await binary(
+      http().get(`/api/v1/attachments/${attachment.id}/content`).set('Cookie', cookie),
+    ).expect(200);
+
+    expect(res.body).toEqual(jpeg);
+    expect(res.headers).toMatchObject({
+      'content-type': 'image/jpeg',
+      'content-disposition': 'inline',
+      'x-content-type-options': 'nosniff',
+      'accept-ranges': 'bytes',
+    });
+  });
+
+  it('responde 206 con Content-Range (Safari) y 416 fuera de rango', async () => {
+    const attachment = await readyImage();
+    const url = `/api/v1/attachments/${attachment.id}/content`;
+    const partial = await binary(http().get(url).set('Cookie', cookie).set('Range', 'bytes=0-1')).expect(
+      206,
+    );
+    expect(partial.headers['content-range']).toBe(`bytes 0-1/${jpeg.length}`);
+    expect(partial.headers['content-length']).toBe('2');
+    expect(partial.body).toEqual(jpeg.subarray(0, 2));
+    await http().get(url).set('Cookie', cookie).set('Range', `bytes=${jpeg.length}-`).expect(416);
+  });
+
+  it('404 a otra empresa, sin sesión 401 y 404 mientras está PENDING', async () => {
+    const attachment = await readyImage();
+    const other = await db.tenant.create({ data: { name: 'Otra', slug: `other-${randomUUID()}` } });
+    const user = await db.user.create({
+      data: { email: `${randomUUID()}@test.local`, displayName: 'X' },
+    });
+    await db.tenantMember.create({
+      data: { tenantId: other.id, userId: user.id, email: user.email, displayName: 'X', role: 'OWNER' },
+    });
+    const otherCookie = await sessionFor(app, user.id, other.id);
+
+    await http()
+      .get(`/api/v1/attachments/${attachment.id}/content`)
+      .set('Cookie', otherCookie)
+      .expect(404);
+    await http().get(`/api/v1/attachments/${attachment.id}/content`).expect(401);
+    await post(envelope(imageMessage())).expect(200);
+    const pending = await db.messageAttachment.findFirstOrThrow({
+      where: { tenantId, status: 'PENDING' },
+    });
+    await http().get(`/api/v1/attachments/${pending.id}/content`).set('Cookie', cookie).expect(404);
+  });
 });

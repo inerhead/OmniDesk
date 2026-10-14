@@ -22,6 +22,7 @@ describe('Adjuntos de WhatsApp (e2e)', () => {
   let db: PrismaService;
   let cookie: string;
   let tenantId: string;
+  let ownerMemberId: string;
   let channelId: string;
   let externalId: string;
   const http = () => request(app.getHttpServer());
@@ -103,9 +104,11 @@ describe('Adjuntos de WhatsApp (e2e)', () => {
     const user = await db.user.create({
       data: { email: `${randomUUID()}@test.local`, displayName: 'Owner' },
     });
-    await db.tenantMember.create({
-      data: { tenantId, userId: user.id, email: user.email, displayName: 'Owner', role: 'OWNER' },
-    });
+    ownerMemberId = (
+      await db.tenantMember.create({
+        data: { tenantId, userId: user.id, email: user.email, displayName: 'Owner', role: 'OWNER' },
+      })
+    ).id;
     cookie = await sessionFor(app, user.id, tenantId);
     externalId = `${Date.now()}${Math.floor(Math.random() * 100000)}`;
     channelId = (
@@ -284,5 +287,103 @@ describe('Adjuntos de WhatsApp (e2e)', () => {
       where: { tenantId, status: 'PENDING' },
     });
     await http().get(`/api/v1/attachments/${pending.id}/content`).set('Cookie', cookie).expect(404);
+  });
+
+  const openAssigned = async () => {
+    await post(envelope({ type: 'text', text: { body: 'Hola' } })).expect(200);
+    const conversation = await db.conversation.findFirstOrThrow({ where: { tenantId } });
+    await http()
+      .post(`/api/v1/conversations/${conversation.id}/assign`)
+      .set('Cookie', cookie)
+      .set('Origin', WEB_ORIGIN)
+      .send({ memberId: ownerMemberId, controlVersion: conversation.controlVersion })
+      .expect(200);
+    return conversation.id;
+  };
+  const upload = (
+    conversationId: string,
+    file: { bytes: Buffer; name: string; type: string },
+    fields: Record<string, string> = {},
+  ) => {
+    let req = http()
+      .post(`/api/v1/conversations/${conversationId}/messages/attachments`)
+      .set('Cookie', cookie)
+      .set('Origin', WEB_ORIGIN)
+      .field('clientMessageId', fields.clientMessageId ?? randomUUID());
+    if (fields.caption !== undefined) req = req.field('caption', fields.caption);
+    return req.attach('file', file.bytes, { filename: file.name, contentType: file.type });
+  };
+  const pdf = {
+    bytes: Buffer.from('%PDF-1.4 prueba'),
+    name: 'cotización.pdf',
+    type: 'application/pdf',
+  };
+
+  it('el agente asignado envía un PDF con pie; conserva el nombre UTF-8; es idempotente', async () => {
+    const conversationId = await openAssigned();
+    const clientMessageId = randomUUID();
+    const first = await upload(conversationId, pdf, {
+      clientMessageId,
+      caption: 'Te paso la cotización',
+    }).expect(201);
+
+    expect(first.body).toMatchObject({
+      status: 'PENDING',
+      text: 'Te paso la cotización',
+      attachment: {
+        kind: 'DOCUMENT',
+        fileName: 'cotización.pdf',
+        status: 'READY',
+        sizeBytes: pdf.bytes.length,
+      },
+    });
+    const again = await upload(conversationId, pdf, { clientMessageId }).expect(200);
+    expect(again.body.id).toBe(first.body.id);
+    expect(
+      await db.messageAttachment.count({ where: { tenantId, message: { direction: 'OUTBOUND' } } }),
+    ).toBe(1);
+  });
+
+  it('valida tipo, tamaño, pie de audio y archivo ausente', async () => {
+    const conversationId = await openAssigned();
+    await upload(conversationId, { bytes: Buffer.from('PK'), name: 'a.zip', type: 'application/zip' }).expect(
+      415,
+    );
+    await upload(conversationId, {
+      bytes: Buffer.alloc(5 * 1024 * 1024 + 1),
+      name: 'g.png',
+      type: 'image/png',
+    }).expect(413);
+    await upload(conversationId, {
+      bytes: Buffer.alloc(17 * 1024 * 1024),
+      name: 'v.mp4',
+      type: 'video/mp4',
+    }).expect(413);
+    await upload(
+      conversationId,
+      { bytes: Buffer.from('ID3'), name: 'a.mp3', type: 'audio/mpeg' },
+      { caption: 'hola' },
+    ).expect(400);
+    await http()
+      .post(`/api/v1/conversations/${conversationId}/messages/attachments`)
+      .set('Cookie', cookie)
+      .set('Origin', WEB_ORIGIN)
+      .field('clientMessageId', randomUUID())
+      .expect(400);
+  });
+
+  it('403 si no es el agente asignado y 409 si la conversación está cerrada', async () => {
+    await post(envelope({ type: 'text', text: { body: 'Hola' } })).expect(200);
+    const conversation = await db.conversation.findFirstOrThrow({ where: { tenantId } });
+    await upload(conversation.id, pdf).expect(403);
+    const conversationId = await openAssigned();
+    const current = await db.conversation.findUniqueOrThrow({ where: { id: conversationId } });
+    await http()
+      .post(`/api/v1/conversations/${conversationId}/close`)
+      .set('Cookie', cookie)
+      .set('Origin', WEB_ORIGIN)
+      .send({ controlVersion: current.controlVersion })
+      .expect(200);
+    await upload(conversationId, pdf).expect(409);
   });
 });

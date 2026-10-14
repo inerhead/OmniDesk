@@ -2,6 +2,7 @@ name: omnidesk
 
 services:
   postgres:
+    container_name: omnidesk-postgres
     image: postgres:18
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-omnidesk}
@@ -19,6 +20,7 @@ services:
       retries: 10
 
   api:
+    container_name: omnidesk-api
     build:
       context: .
       dockerfile: apps/api/Dockerfile
@@ -36,6 +38,7 @@ services:
       - ./packages/contracts/src:/repo/packages/contracts/src
 
   web:
+    container_name: omnidesk-web
     build:
       context: .
       dockerfile: apps/web/Dockerfile
@@ -54,6 +57,7 @@ services:
       - ./packages/contracts/src:/repo/packages/contracts/src
 
   caddy:
+    container_name: omnidesk-caddy
     image: caddy:2
     environment:
       WEB_UPSTREAM: ${WEB_UPSTREAM:-web:5173}
@@ -68,6 +72,7 @@ services:
   # Build de producción de la web servido por `vite preview`, para verificar la PWA.
   # Uso: WEB_UPSTREAM=web-preview:4173 docker compose --profile pwa up
   web-preview:
+    container_name: omnidesk-web-preview
     profiles: [pwa]
     build:
       context: .
@@ -92,6 +97,7 @@ services:
   # Túnel con dominio fijo (el hostname se configura en Cloudflare). Comparte la red de
   # caddy: en el panel del túnel, el servicio público debe apuntar a http://localhost:80.
   cloudflared:
+    container_name: omnidesk-cloudflared
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
     network_mode: service:caddy

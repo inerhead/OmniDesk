@@ -20,6 +20,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { OUTBOX_PORT, type OutboxPort } from '../../shared/application/outbox.port';
 import { sha256Hex } from '../../shared/infrastructure/crypto/sha256';
+import { enqueueAttachmentDownload } from '../attachments/application/enqueue-attachment-download';
 import { RegisterInboundMessageUseCase } from '../conversations/application/register-inbound-message.use-case';
 import { UpdateDeliveryStatusUseCase } from '../conversations/application/update-delivery-status.use-case';
 import {
@@ -80,9 +81,17 @@ export class WhatsAppWebhookController {
     }
     for (const event of events) {
       if (event.kind === 'inbound') {
+        // Los adjuntos y los no soportados quedan para atención humana: nunca van a la IA.
+        const aiEligible = !event.attachment && !event.unsupportedType;
         await this.inbound.execute(integration, event, async (result) => {
+          if (result.duplicate) return;
+          if (result.attachmentId)
+            await enqueueAttachmentDownload(this.outbox, channel.tenantId, {
+              attachmentId: result.attachmentId,
+              channelId: id,
+            });
           if (
-            !result.duplicate &&
+            aiEligible &&
             result.aiAllowed &&
             channel.aiEnabled &&
             channel.webhookUrl &&

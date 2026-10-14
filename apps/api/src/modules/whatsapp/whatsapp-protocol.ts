@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
-import { E164Schema, MessageTextSchema } from '@omnidesk/contracts';
+import { E164Schema, MessageTextSchema, type AttachmentKind } from '@omnidesk/contracts';
 import type { InboundMessageInput } from '../conversations/application/register-inbound-message.use-case';
 import type { DeliveryStatus } from '../conversations/domain/delivery';
 
@@ -27,16 +27,33 @@ const Timestamp = z
       .refine((value) => Number.isFinite(value.getTime())),
   );
 const PhoneNumberId = z.union([z.string(), z.number()]).transform((value) => String(value));
-const TextMessage = z.object({
+const From = z
+  .string()
+  .transform((v) => (v.startsWith('+') ? v : `+${v}`))
+  .pipe(E164Schema);
+const BaseMessage = z.object({
   id: z.string().min(1).max(200),
-  from: z
-    .string()
-    .transform((v) => (v.startsWith('+') ? v : `+${v}`))
-    .pipe(E164Schema),
+  from: From,
   timestamp: Timestamp,
-  type: z.literal('text'),
-  text: z.object({ body: MessageTextSchema }),
+  type: z.string().min(1).max(50),
 });
+const TextBody = z.object({ body: MessageTextSchema });
+const Media = z.object({
+  id: z.string().min(1),
+  mime_type: z.string().min(1).max(255),
+  sha256: z.string().optional(),
+  caption: z.string().max(4096).optional(),
+  filename: z.string().max(255).optional(),
+  voice: z.boolean().optional(),
+});
+const MEDIA_KINDS = {
+  image: 'IMAGE',
+  document: 'DOCUMENT',
+  audio: 'AUDIO',
+  video: 'VIDEO',
+  sticker: 'STICKER',
+} as const satisfies Record<string, AttachmentKind>;
+type MediaType = keyof typeof MEDIA_KINDS;
 const Status = z.object({
   id: z.string().min(1),
   status: z
@@ -61,7 +78,7 @@ const Envelope = z.object({
   ),
 });
 export type WhatsAppEvent =
-  | ({ kind: 'inbound' } & InboundMessageInput)
+  | ({ kind: 'inbound'; unsupportedType?: string } & InboundMessageInput)
   | {
       kind: 'status';
       providerMessageId: string;
@@ -69,6 +86,41 @@ export type WhatsAppEvent =
       status: DeliveryStatus;
       occurredAt: Date;
     };
+
+type ParsedInbound = Omit<InboundMessageInput, 'from'> & { from: string; unsupportedType?: string };
+
+/** `null` = no es un mensaje nuevo del cliente (reacción) o el sobre es inválido. */
+function parseInboundMessage(raw: unknown): ParsedInbound | null {
+  const base = BaseMessage.safeParse(raw);
+  if (!base.success) return null;
+  const { id, from, timestamp, type } = base.data;
+  const common = { externalMessageId: id, from, sentAt: timestamp };
+  const record = raw as Record<string, unknown>;
+  if (type === 'text') {
+    const text = TextBody.safeParse(record.text);
+    return text.success ? { ...common, text: text.data.body } : null;
+  }
+  if (type === 'reaction') return null;
+  if (Object.hasOwn(MEDIA_KINDS, type)) {
+    const media = Media.safeParse(record[type]);
+    if (media.success) {
+      const m = media.data;
+      return {
+        ...common,
+        text: m.caption ?? '',
+        attachment: {
+          kind: MEDIA_KINDS[type as MediaType],
+          mimeType: m.mime_type,
+          providerMediaId: m.id,
+          ...(m.sha256 !== undefined && { sha256: m.sha256 }),
+          ...(m.filename !== undefined && { fileName: m.filename }),
+          ...(m.voice === true && { voice: true }),
+        },
+      };
+    }
+  }
+  return { ...common, text: `[Mensaje de WhatsApp no soportado: ${type}]`, unsupportedType: type };
+}
 
 export function parseWhatsAppEvents(body: unknown, externalId: string): WhatsAppEvent[] {
   const parsed = Envelope.safeParse(body);
@@ -82,21 +134,18 @@ export function parseWhatsAppEvents(body: unknown, externalId: string): WhatsApp
         .array(z.object({ wa_id: z.string(), profile: z.object({ name: z.string() }).optional() }))
         .safeParse(value.contacts);
       for (const raw of asList(value.messages)) {
-        const message = TextMessage.safeParse(raw);
-        if (!message.success) continue;
-        const m = message.data;
+        const message = parseInboundMessage(raw);
+        if (!message) continue;
         const contact = contacts.success
-          ? contacts.data.find((item) => `+${item.wa_id}` === m.from)
+          ? contacts.data.find((item) => `+${item.wa_id}` === message.from)
           : undefined;
         events.push({
           kind: 'inbound',
-          externalMessageId: m.id,
+          ...message,
           from: {
-            externalId: m.from,
+            externalId: message.from,
             ...(contact?.profile && { displayName: contact.profile.name }),
           },
-          text: m.text.body,
-          sentAt: m.timestamp,
         });
       }
       for (const raw of asList(value.statuses)) {

@@ -183,7 +183,7 @@ describe('Webhook de Meta', () => {
       }),
     ]);
   });
-  it('ignora notificaciones ajenas y tipos sin soporte', () => {
+  it('ignora notificaciones ajenas y mensajes sin id ni remitente', () => {
     expect(parseWhatsAppEvents({ object: 'other', entry: [] }, 'own')).toEqual([]);
     expect(
       parseWhatsAppEvents(
@@ -200,5 +200,99 @@ describe('Webhook de Meta', () => {
         'own',
       ),
     ).toEqual([]);
+  });
+});
+
+describe('parseWhatsAppEvents — media', () => {
+  const phoneId = '1322469280958506';
+  const envelope = (message: Record<string, unknown>) => ({
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: '28766413009634402',
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: { display_phone_number: '573001167601', phone_number_id: phoneId },
+              contacts: [
+                { profile: { name: 'Gossio', username: 'gossio' }, wa_id: '573008018173' },
+              ],
+              messages: [
+                { from: '573008018173', id: 'wamid.X', timestamp: '1791947497', ...message },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  it('traduce la imagen real que se perdía (sin caption)', () => {
+    const [event] = parseWhatsAppEvents(
+      envelope({
+        type: 'image',
+        image: {
+          mime_type: 'image/jpeg',
+          sha256: 'OB6bxx08SvN4XPAqCi9Nh6oFkKjraEfFM73xLTIN78A=',
+          id: '1501404631865040',
+          url: 'https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=1',
+        },
+      }),
+      phoneId,
+    );
+    expect(event).toMatchObject({
+      kind: 'inbound',
+      externalMessageId: 'wamid.X',
+      from: { externalId: '+573008018173', displayName: 'Gossio' },
+      text: '',
+      attachment: {
+        kind: 'IMAGE',
+        mimeType: 'image/jpeg',
+        providerMediaId: '1501404631865040',
+        sha256: 'OB6bxx08SvN4XPAqCi9Nh6oFkKjraEfFM73xLTIN78A=',
+      },
+    });
+  });
+
+  it('documento con nombre y pie, nota de voz, video y sticker', () => {
+    const parse = (type: string, media: Record<string, unknown>) =>
+      parseWhatsAppEvents(
+        envelope({ type, [type]: { id: 'm1', mime_type: 'x/y', ...media } }),
+        phoneId,
+      )[0];
+    expect(parse('document', { filename: 'cotización.pdf', caption: 'Te paso' })).toMatchObject({
+      text: 'Te paso',
+      attachment: { kind: 'DOCUMENT', fileName: 'cotización.pdf' },
+    });
+    expect(parse('audio', { voice: true })).toMatchObject({
+      attachment: { kind: 'AUDIO', voice: true },
+    });
+    expect(parse('video', {})).toMatchObject({ attachment: { kind: 'VIDEO' } });
+    expect(parse('sticker', {})).toMatchObject({ attachment: { kind: 'STICKER' } });
+  });
+
+  it('registra los tipos no soportados como texto e ignora las reacciones', () => {
+    const [location] = parseWhatsAppEvents(
+      envelope({ type: 'location', location: { latitude: 4.6, longitude: -74 } }),
+      phoneId,
+    );
+    expect(location).toMatchObject({
+      text: '[Mensaje de WhatsApp no soportado: location]',
+      unsupportedType: 'location',
+    });
+    expect(location).not.toHaveProperty('attachment');
+    expect(
+      parseWhatsAppEvents(
+        envelope({ type: 'reaction', reaction: { message_id: 'w', emoji: '👍' } }),
+        phoneId,
+      ),
+    ).toEqual([]);
+  });
+
+  it('no confunde un tipo con propiedades del prototipo', () => {
+    const [event] = parseWhatsAppEvents(envelope({ type: 'constructor' }), phoneId);
+    expect(event).toMatchObject({ unsupportedType: 'constructor' });
   });
 });

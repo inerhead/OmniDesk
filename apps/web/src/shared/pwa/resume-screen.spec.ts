@@ -3,7 +3,6 @@ import { resumeNeedsReload } from './resume-screen';
 
 const fresh = {
   wasDiscarded: false,
-  restoredFromCache: false,
   rootChildCount: 2,
   rootHeight: 800,
   now: 20_000,
@@ -15,9 +14,8 @@ describe('resumeNeedsReload', () => {
     expect(resumeNeedsReload(fresh)).toBe(false);
   });
 
-  it('recarga si iOS descartó la página o la restauró en blanco desde la caché', () => {
+  it('recarga si iOS descartó la página', () => {
     expect(resumeNeedsReload({ ...fresh, wasDiscarded: true })).toBe(true);
-    expect(resumeNeedsReload({ ...fresh, restoredFromCache: true })).toBe(true);
   });
 
   it('recarga si la raíz quedó vacía', () => {

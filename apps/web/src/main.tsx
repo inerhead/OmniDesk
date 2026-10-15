@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import { StrictMode, useLayoutEffect, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router/dom';
 import '@/shared/config/env';
@@ -13,10 +13,19 @@ startThemeSync();
 bindKeyboardInset();
 bindResumeScreen();
 
+function DismissBoot({ children }: { children: ReactNode }) {
+  useLayoutEffect(() => {
+    document.getElementById('boot')?.remove();
+  }, []);
+  return children;
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <Providers>
-      <RouterProvider router={router} />
-    </Providers>
+    <DismissBoot>
+      <Providers>
+        <RouterProvider router={router} />
+      </Providers>
+    </DismissBoot>
   </StrictMode>,
 );

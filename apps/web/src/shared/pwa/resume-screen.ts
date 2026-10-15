@@ -1,18 +1,17 @@
 const RELOAD_GAP_MS = 15_000;
 const reloadKey = 'omnidesk-resume-reload';
 
-/** La página que iOS restaura al volver a veces no tiene contenido, o la capa fija se perdió. */
+/** La página que iOS restaura al volver a veces no tiene contenido, o el sistema la descartó. */
 export function resumeNeedsReload(input: {
   wasDiscarded: boolean;
-  restoredFromCache: boolean;
   rootChildCount: number;
   rootHeight: number;
   now: number;
   lastReloadAt: number;
 }): boolean {
   if (input.now - input.lastReloadAt < RELOAD_GAP_MS) return false;
-  if (input.wasDiscarded || input.restoredFromCache) return true;
-  return input.rootChildCount === 0 || input.rootHeight < 2;
+  if (input.rootChildCount === 0 || input.rootHeight < 2) return true;
+  return input.wasDiscarded;
 }
 
 function lastReloadAt(): number {
@@ -36,7 +35,7 @@ function replayRootLayer(): void {
   root.style.transform = previous;
 }
 
-function recover(restoredFromCache: boolean): void {
+function recover(): void {
   replayRootLayer();
   const root = document.getElementById('root');
   const discarded =
@@ -45,7 +44,6 @@ function recover(restoredFromCache: boolean): void {
   if (
     !resumeNeedsReload({
       wasDiscarded: discarded,
-      restoredFromCache,
       rootChildCount: root?.childElementCount ?? 0,
       rootHeight: root?.getBoundingClientRect().height ?? 0,
       now: Date.now(),
@@ -61,11 +59,11 @@ function recover(restoredFromCache: boolean): void {
 export function bindResumeScreen(): () => void {
   const onVisible = () => {
     if (document.visibilityState !== 'visible') return;
-    recover(false);
+    recover();
   };
   const onPageShow = (event: PageTransitionEvent) => {
     if (!event.persisted) return;
-    recover(true);
+    recover();
   };
 
   document.addEventListener('visibilitychange', onVisible);

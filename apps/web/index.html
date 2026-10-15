@@ -14,6 +14,7 @@
     <meta name="theme-color" content="#ffffff" />
     <!-- Tema antes del primer render (síncrono, sin parpadeo). Ver public/theme-init.js. -->
     <script src="/theme-init.js"></script>
+    <link rel="stylesheet" href="/boot.css" />
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" href="/logo.svg" sizes="any" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" />
@@ -23,6 +24,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   </head>
   <body>
+    <div id="boot">
+      <img src="/logo.svg" alt="" width="72" height="72" />
+      <p>OmniDesk</p>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

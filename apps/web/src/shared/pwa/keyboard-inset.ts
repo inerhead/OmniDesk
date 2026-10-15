@@ -1,26 +1,49 @@
+/** Por debajo de esto es el notch o el indicador de inicio, no el teclado. */
+const KEYBOARD_MIN_PX = 120;
+
+export type KeyboardFrame = {
+  top: number;
+  height: number | null;
+  open: boolean;
+  /** Sube solo el composer. La página no cambia de alto, así el foco no parece una recarga. */
+  overlap: number;
+};
+
+const CLOSED: KeyboardFrame = { top: 0, height: null, open: false, overlap: 0 };
+
 /**
- * Con el teclado abierto el iPhone a veces encoge el layout y a veces solo desplaza
- * el viewport. La caja debe ocupar exactamente el rectángulo visible: así la cabecera
- * sigue arriba y el composer queda pegado al teclado.
+ * El iPhone a veces encoge el layout, a veces solo lo desplaza y a veces no toca
+ * ninguno de los dos. En el último caso el composer sube con `overlap` y el resto
+ * de la pantalla se queda quieto.
  */
 export function keyboardFrame(
   baseline: number,
+  innerHeight: number,
   viewportHeight: number,
   viewportOffsetTop: number,
   textFocused: boolean,
-): { top: number; height: number | null; open: boolean } {
-  // En la PWA el viewport visible ya es más bajo (notch + indicador). Sin un campo
-  // enfocado eso no es el teclado.
-  if (!textFocused) return { top: 0, height: null, open: false };
-  // No restar el desplazamiento: en el iPhone el viewport se mueve tanto que esa
-  // resta deja el teclado en cero y la caja sigue flotando.
-  const keyboard = Math.max(0, Math.round(baseline - viewportHeight));
-  if (keyboard <= 80) return { top: 0, height: null, open: false };
-  return {
-    top: Math.max(0, Math.round(viewportOffsetTop)),
-    height: Math.round(viewportHeight),
-    open: true,
-  };
+): KeyboardFrame {
+  if (!textFocused) return CLOSED;
+  const covered = Math.max(0, Math.round(baseline - viewportHeight));
+  if (covered <= KEYBOARD_MIN_PX) return CLOSED;
+
+  const layoutShrunk = innerHeight < baseline - 80;
+  // El navegador ya encogió la página: mover #root otra vez se ve como una recarga.
+  if (layoutShrunk && viewportOffsetTop < 24) {
+    return { top: 0, height: null, open: true, overlap: 0 };
+  }
+
+  // Desplazó el viewport y la cabecera se iría. Ahí sí hay que seguir el rectángulo visible.
+  if (viewportOffsetTop >= 24) {
+    return {
+      top: Math.round(viewportOffsetTop),
+      height: Math.round(viewportHeight),
+      open: true,
+      overlap: 0,
+    };
+  }
+
+  return { top: 0, height: null, open: true, overlap: covered };
 }
 
 function editingText(): boolean {
@@ -43,7 +66,7 @@ function editingText(): boolean {
   ].includes(el.type);
 }
 
-/** Pega `#root` al viewport visible mientras se escribe, y anula el hueco del indicador de inicio. */
+/** Mientras se escribe, sube solo el composer y anula el hueco del indicador de inicio. */
 export function bindKeyboardInset(): () => void {
   const viewport = window.visualViewport;
   if (!viewport) return () => undefined;
@@ -53,15 +76,18 @@ export function bindKeyboardInset(): () => void {
   const sync = () => {
     const focused = editingText();
     if (!focused) baseline = Math.max(baseline, window.innerHeight, viewport.height);
-    const { top, height, open } = keyboardFrame(
+    const { top, height, open, overlap } = keyboardFrame(
       baseline,
+      window.innerHeight,
       viewport.height,
       viewport.offsetTop,
       focused,
     );
     root.style.setProperty('--vv-top', `${top}px`);
     root.style.setProperty('--vv-height', height === null ? '100%' : `${height}px`);
+    root.style.setProperty('--keyboard-overlap', `${overlap}px`);
     root.toggleAttribute('data-keyboard', open);
+    root.toggleAttribute('data-keyboard-frame', height !== null);
   };
 
   const onOrientation = () => {
@@ -85,6 +111,8 @@ export function bindKeyboardInset(): () => void {
     window.removeEventListener('orientationchange', onOrientation);
     root.style.removeProperty('--vv-top');
     root.style.removeProperty('--vv-height');
+    root.style.removeProperty('--keyboard-overlap');
     root.removeAttribute('data-keyboard');
+    root.removeAttribute('data-keyboard-frame');
   };
 }

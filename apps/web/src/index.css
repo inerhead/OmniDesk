@@ -12,6 +12,7 @@
   --safe-bottom: max(2.75rem, env(safe-area-inset-bottom, 0px));
   --vv-top: 0px;
   --vv-height: 100%;
+  --keyboard-overlap: 0px;
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.21 0.02 270);
@@ -160,8 +161,8 @@ html[data-keyboard] {
     overflow: hidden;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
   }
-  /* `top` en un fixed no se mueve con el teclado del iPhone; translateY sí. */
-  html[data-keyboard] #root {
+  /* Solo si el iPhone desplazó la página. `top` en un fixed no sigue al teclado; translateY sí. */
+  html[data-keyboard-frame] #root {
     top: 0;
     bottom: auto;
     height: var(--vv-height);

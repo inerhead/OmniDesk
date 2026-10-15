@@ -370,6 +370,9 @@ export function ChatView({ conversationId }: { conversationId: string }) {
             {WINDOW_CLOSED_NOTICE}
           </p>
         )}
+        {/* El teclado no encoge la página: este hueco empuja el composer y el ResizeObserver
+            ancla los mensajes. Cambiar el alto de #root se veía como una recarga. */}
+        <div aria-hidden className="h-[var(--keyboard-overlap)]" />
         </div>
       </div>
 

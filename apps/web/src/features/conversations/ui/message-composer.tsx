@@ -142,6 +142,28 @@ export function MessageComposer({
     return () => captureRef.current?.cancel();
   }, []);
 
+  useEffect(() => {
+    const field = textareaRef.current;
+    if (!field) return;
+    // iOS enfoca en touchstart y desplaza toda la página. preventDefault ahí solo
+    // vale en un listener no pasivo; luego el foco se abre sin ese scroll.
+    const onTouchStart = (event: TouchEvent) => {
+      if (document.activeElement === field) return;
+      event.preventDefault();
+    };
+    const onTouchEnd = (event: TouchEvent) => {
+      if (document.activeElement === field) return;
+      event.preventDefault();
+      field.focus({ preventScroll: true });
+    };
+    field.addEventListener('touchstart', onTouchStart, { passive: false });
+    field.addEventListener('touchend', onTouchEnd);
+    return () => {
+      field.removeEventListener('touchstart', onTouchStart);
+      field.removeEventListener('touchend', onTouchEnd);
+    };
+  }, []);
+
   const submit = () => {
     if (!canSend) return;
     onSend(

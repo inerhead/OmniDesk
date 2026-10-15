@@ -33,6 +33,8 @@ function fakeStore() {
       return { conversations: ids.length, messages: 2 };
     },
     deleteOrphanContacts: async () => 1,
+    lockContactConversations: async () => null,
+    deleteContact: async () => undefined,
     logDeletion: async (entry) => void logged.push(entry.tenantId),
     purgeTechnical: async () => {
       purged = true;

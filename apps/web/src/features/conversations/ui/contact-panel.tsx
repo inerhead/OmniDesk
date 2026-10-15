@@ -1,15 +1,21 @@
 import type { Member } from '@omnidesk/contracts';
-import { Check, Copy } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Check, Copy, Trash2 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
+import { useLocation, useNavigate } from 'react-router';
+import { ApiHttpError } from '@/shared/api/http-client';
 import { Avatar } from '@/shared/ui/avatar';
 import { Button } from '@/shared/ui/button';
 import { Skeleton } from '@/shared/ui/skeleton';
 import { Tooltip } from '@/shared/ui/tooltip';
+import { deleteContact } from '../api/conversations-api';
 import type { useConversationCommand } from '../api/use-conversation-command';
 import { useConversation } from '../api/use-conversations';
+import { markConversationDeleted } from '../model/deleted-conversations';
 import { statusLabel } from '../model/describe-event';
 import { contactLabel } from '../model/to-bubble-view';
 import { ConversationActions } from './conversation-actions';
+import { DeleteContactDialog } from './delete-contact-dialog';
 import { StatusChip } from './status-chip';
 
 const CHANNEL_LABEL = { WHATSAPP: 'WhatsApp' } as const;
@@ -56,6 +62,69 @@ function CopyPhone({ phone }: { phone: string }) {
         {copied ? 'Copiado' : 'Copiar'}
       </Button>
     </Tooltip>
+  );
+}
+
+/**
+ * Borrar el contacto y su historial (SPEC 12, solo OWNER). Al terminar vuelve a la bandeja de la que
+ * se abrió la conversación; las demás pestañas la quitan con el evento `deleted`.
+ */
+function DeleteContact({
+  conversationId,
+  contactId,
+  contactName,
+  phone,
+}: {
+  conversationId: string;
+  contactId: string;
+  contactName: string;
+  phone: string;
+}) {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { search } = useLocation();
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const remove = useMutation({
+    mutationFn: () => deleteContact(contactId),
+    onSuccess: async () => {
+      setOpen(false);
+      markConversationDeleted(conversationId);
+      await navigate({ pathname: '/conversations', search }, { replace: true });
+      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    },
+    onError: (failure) =>
+      setError(
+        failure instanceof ApiHttpError && failure.status === 403
+          ? 'Solo un Owner puede borrar contactos.'
+          : 'No se pudo borrar el contacto. Inténtalo de nuevo.',
+      ),
+  });
+
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        className="border-destructive/50 text-destructive hover:text-destructive"
+        onClick={() => {
+          setError(null);
+          setOpen(true);
+        }}
+      >
+        <Trash2 aria-hidden />
+        Borrar contacto y su historial
+      </Button>
+      <DeleteContactDialog
+        open={open}
+        contactName={contactName}
+        phone={phone}
+        pending={remove.isPending}
+        error={error}
+        onConfirm={() => remove.mutate()}
+        onOpenChange={setOpen}
+      />
+    </>
   );
 }
 
@@ -123,6 +192,15 @@ export function ContactPanel({
           pending={command.pending}
           onRun={command.run}
           layout="stacked"
+        />
+      )}
+
+      {actor?.role === 'OWNER' && (
+        <DeleteContact
+          conversationId={conversationId}
+          contactId={summary.contact.id}
+          contactName={name}
+          phone={summary.contact.externalId}
         />
       )}
     </div>

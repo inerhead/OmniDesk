@@ -21,7 +21,7 @@
 	# API: se quita la subruta (también para <BASE_PATH>/api/realtime, el WebSocket).
 	handle {$BASE_PATH}/api/* {
 		uri strip_prefix {$BASE_PATH}
-		reverse_proxy api:5001
+		reverse_proxy api:{$API_PORT:5001}
 	}
 
 	# Assets con hash: inmutables. Si no existe, 404 (nunca index.html con caché de un año).

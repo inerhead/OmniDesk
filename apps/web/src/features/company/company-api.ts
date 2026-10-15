@@ -1,5 +1,7 @@
 import {
+  RetentionPreviewResponseSchema,
   TenantDetailsSchema,
+  type RetentionDays,
   type TenantDetails,
   type UpdateTenantRequest,
 } from '@omnidesk/contracts';
@@ -7,6 +9,7 @@ import { apiCodeError } from '@/shared/api/api-error';
 import { deleteJson, getJson, patchJson, postJson, putForm } from '@/shared/api/http-client';
 
 export const COMPANY_QUERY_KEY = ['tenant-current'] as const;
+export const RETENTION_PREVIEW_QUERY_KEY = ['retention-preview'] as const;
 
 async function parsed(request: Promise<{ status: number; body: unknown }>): Promise<TenantDetails> {
   const { status, body } = await request;
@@ -42,4 +45,11 @@ export function deactivateCompany(confirmName: string): Promise<TenantDetails> {
 
 export function reactivateCompany(): Promise<TenantDetails> {
   return parsed(postJson('/api/v1/tenants/current/reactivate', {}));
+}
+
+/** Conversaciones cerradas que la próxima ejecución borraría con esos días (solo OWNER). */
+export async function fetchRetentionPreview(days: Exclude<RetentionDays, null>): Promise<number> {
+  const { status, body } = await getJson(`/api/v1/tenants/current/retention-preview?days=${days}`);
+  if (status !== 200) throw apiCodeError(status, body);
+  return RetentionPreviewResponseSchema.parse(body).conversations;
 }

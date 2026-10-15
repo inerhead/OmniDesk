@@ -38,7 +38,7 @@ describe('WhatsAppCloudProvider con adjunto', () => {
     provider = new WhatsAppCloudProvider(
       settings,
       cipher,
-      parseEnv({ DATABASE_URL: 'postgresql://u:p@h:5432/d' }),
+      parseEnv({ DATABASE_URL: 'postgresql://u:p@h:5432/d', DATABASE_APP_URL: 'postgresql://a:p@h:5432/d' }),
       storage,
     );
     fetchMock

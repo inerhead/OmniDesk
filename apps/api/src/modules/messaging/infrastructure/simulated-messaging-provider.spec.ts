@@ -29,6 +29,7 @@ const build = (rate: string, random = 0.5) => {
   } as unknown as UpdateDeliveryStatusUseCase;
   const env = parseEnv({
     DATABASE_URL: 'postgresql://omnidesk:omnidesk@postgres:5432/omnidesk',
+    DATABASE_APP_URL: 'postgresql://omnidesk_app_login:app@postgres:5432/omnidesk',
     SIMULATED_PROVIDER_FAILURE_RATE: rate,
   });
   const provider = new SimulatedMessagingProvider(

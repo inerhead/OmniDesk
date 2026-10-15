@@ -4,6 +4,7 @@
     "NODE_ENV",
     "API_PORT",
     "DATABASE_URL",
+    "DATABASE_APP_URL",
     "LOG_LEVEL",
     "CORS_ORIGINS",
     "CHOKIDAR_USEPOLLING",

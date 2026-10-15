@@ -28,6 +28,7 @@ import {
   type ConversationRepository,
 } from '../conversations/application/ports/conversation.repository';
 import { parseWhatsAppEvents, describeWhatsAppWebhook } from './whatsapp-protocol';
+import { TenantPrisma } from '../../shared/infrastructure/prisma/tenant-prisma';
 import { WhatsAppSettings } from './whatsapp-settings';
 
 @Controller({ path: 'integrations/whatsapp', version: '1' })
@@ -39,6 +40,7 @@ export class WhatsAppWebhookController {
     @Inject(CONVERSATION_REPOSITORY) private readonly conversations: ConversationRepository,
     private readonly inbound: RegisterInboundMessageUseCase,
     private readonly delivery: UpdateDeliveryStatusUseCase,
+    private readonly tenantPrisma: TenantPrisma,
   ) {}
 
   @Get(':id')
@@ -64,17 +66,26 @@ export class WhatsAppWebhookController {
   @Post(':id')
   @HttpCode(200)
   async receive(@Param('id', new ParseUUIDPipe()) id: string, @Req() req: RawBodyRequest<Request>) {
+    // El canal se resuelve con el rol dueño (aún no se sabe la empresa); lo demás, en su nombre.
     const channel = await this.settings.find(id);
     if (!channel) throw new NotFoundException('Canal no encontrado');
+    return this.tenantPrisma.run(channel.tenantId, () => this.process(id, channel, req.body));
+  }
+
+  private async process(
+    id: string,
+    channel: NonNullable<Awaited<ReturnType<WhatsAppSettings['find']>>>,
+    body: unknown,
+  ) {
     const integration = { tenantId: channel.tenantId, channelId: channel.id };
     let needsRetry = false;
-    const events = parseWhatsAppEvents(req.body, channel.externalId);
+    const events = parseWhatsAppEvents(body, channel.externalId);
     const statuses = events.filter((event) => event.kind === 'status');
     const inboundEvents = events.filter((event) => event.kind === 'inbound');
     if (statuses.length === 0 && inboundEvents.length === 0) {
-      this.logger.warn(`Webhook sin estados: ${describeWhatsAppWebhook(req.body)}`);
+      this.logger.warn(`Webhook sin estados: ${describeWhatsAppWebhook(body)}`);
       try {
-        writeFileSync('/tmp/wa-last.json', JSON.stringify(req.body));
+        writeFileSync('/tmp/wa-last.json', JSON.stringify(body));
       } catch {
         // El diagnóstico en el log alcanza si el disco del contenedor no deja escribir.
       }

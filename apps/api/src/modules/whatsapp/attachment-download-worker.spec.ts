@@ -44,7 +44,7 @@ describe('AttachmentDownloadWorker', () => {
       find: async () => ({ id: channelId, whatsappAccessTokenEnc: Buffer.from('enc') }),
     } as unknown as WhatsAppSettings;
     const cipher = { encrypt: () => Buffer.alloc(0), decrypt: () => 'token-meta' };
-    const env = parseEnv({ DATABASE_URL: 'postgresql://u:p@localhost:5432/db', ATTACHMENT_INBOUND_MAX_BYTES: '100' });
+    const env = parseEnv({ DATABASE_URL: 'postgresql://u:p@localhost:5432/db', DATABASE_APP_URL: 'postgresql://a:p@localhost:5432/db', ATTACHMENT_INBOUND_MAX_BYTES: '100' });
     worker = new AttachmentDownloadWorker(settings, cipher, env, attachments, storage, outbox);
     vi.stubGlobal('fetch', fetchMock);
   });

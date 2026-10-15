@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { InvalidEnvError, parseEnv } from './env';
 
-const valid = { DATABASE_URL: 'postgresql://omnidesk:omnidesk@postgres:5432/omnidesk' };
+const valid = {
+  DATABASE_URL: 'postgresql://omnidesk:omnidesk@postgres:5432/omnidesk',
+  DATABASE_APP_URL: 'postgresql://omnidesk_app_login:app@postgres:5432/omnidesk',
+};
 
 describe('parseEnv', () => {
   it('aplica los valores por defecto con un entorno mínimo válido', () => {
@@ -24,6 +27,10 @@ describe('parseEnv', () => {
   it('falla nombrando DATABASE_URL cuando falta', () => {
     expect(() => parseEnv({})).toThrowError(InvalidEnvError);
     expect(() => parseEnv({})).toThrowError(/DATABASE_URL/);
+  });
+
+  it('falla nombrando DATABASE_APP_URL cuando falta', () => {
+    expect(() => parseEnv({ DATABASE_URL: valid.DATABASE_URL })).toThrowError(/DATABASE_APP_URL/);
   });
 
   it('falla nombrando CORS_ORIGINS cuando contiene algo que no es URL', () => {
@@ -237,7 +244,9 @@ describe('parseEnv — adjuntos', () => {
 describe('parseEnv — Web Push', () => {
   it('sin claves deja el módulo apagado y exige las tres juntas', () => {
     expect(parseEnv(valid).VAPID_PUBLIC_KEY).toBeUndefined();
-    expect(() => parseEnv({ ...valid, VAPID_PUBLIC_KEY: 'public' })).toThrowError(/VAPID_PUBLIC_KEY/);
+    expect(() => parseEnv({ ...valid, VAPID_PUBLIC_KEY: 'public' })).toThrowError(
+      /VAPID_PUBLIC_KEY/,
+    );
     const env = parseEnv({
       ...valid,
       VAPID_PUBLIC_KEY: 'public',

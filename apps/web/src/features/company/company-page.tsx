@@ -31,6 +31,7 @@ import {
   reactivateCompany,
 } from './company-api';
 import { DeactivateDialog } from './deactivate-dialog';
+import { RetentionCard } from './retention-card';
 
 const loadCropDialog = () => import('@/shared/ui/image-crop-dialog');
 const ImageCropDialog = lazy(loadCropDialog);
@@ -58,8 +59,8 @@ function logoNotice(error: unknown): string {
 }
 
 /**
- * `/settings/company` (solo Owner): datos, logo e inactivación de la empresa activa. Con la empresa
- * inactiva solo muestra el aviso y "Reactivar" (SPEC 16).
+ * `/settings/company` (solo Owner): datos, logo, retención (SPEC 12) e inactivación de la empresa
+ * activa. Con la empresa inactiva solo muestra el aviso y "Reactivar" (SPEC 16).
  */
 export function CompanyPage() {
   const { data: me } = useMe();
@@ -155,6 +156,7 @@ function InactiveCompany({ company }: { company: TenantDetails }) {
 }
 
 function ActiveCompany({ company }: { company: TenantDetails }) {
+  const applyCompany = useApplyCompany();
   // El recorte se descarga al abrir la página, no en el bundle inicial ni al elegir el logo.
   useEffect(() => {
     void loadCropDialog();
@@ -164,6 +166,7 @@ function ActiveCompany({ company }: { company: TenantDetails }) {
     <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col gap-4 overflow-y-auto p-4">
       <CompanyData company={company} />
       <CompanyLogo company={company} />
+      <RetentionCard company={company} onSaved={applyCompany} />
       <DangerZone company={company} />
     </div>
   );

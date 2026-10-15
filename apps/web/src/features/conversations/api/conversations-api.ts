@@ -14,7 +14,7 @@ import {
   type ListTimelineResponse,
   type Message,
 } from '@omnidesk/contracts';
-import { ApiHttpError, getJson, postForm, postJson } from '@/shared/api/http-client';
+import { ApiHttpError, deleteJson, getJson, postForm, postJson } from '@/shared/api/http-client';
 
 export async function fetchInboxChannels(): Promise<ListInboxChannelsResponse> {
   const { status, body } = await getJson('/api/v1/channels/inbox');
@@ -158,4 +158,10 @@ export async function postRetryMessage(
   );
   if (status === 200) return SendAgentMessageResponseSchema.parse(body);
   throw sendError(status, body);
+}
+
+/** Borra el contacto y todo su historial (SPEC 12, solo OWNER). `403` sin permiso, `404` si no existe. */
+export async function deleteContact(contactId: string): Promise<void> {
+  const { status } = await deleteJson(`/api/v1/contacts/${encodeURIComponent(contactId)}`);
+  if (status !== 204) throw new ApiHttpError(status);
 }

@@ -44,7 +44,10 @@ export const EnvSchema = z
       .regex(/^v\d+\.\d+$/)
       .default('v25.0'),
     API_PORT: z.coerce.number().int().positive().default(5001),
+    /** Dueño de las tablas: migraciones y caminos de sistema (SPEC 12). */
     DATABASE_URL: z.url(),
+    /** Rol de aplicación sin BYPASSRLS: todo lo que actúa en nombre de una empresa (SPEC 12). */
+    DATABASE_APP_URL: z.url(),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
     CORS_ORIGINS: csvOfUrls.default(['http://localhost:8080', 'http://localhost:5173']),
     /** Habilita el tenant demo (seed + lectura sin login). Prohibido en producción. */
@@ -96,7 +99,10 @@ export const EnvSchema = z
       (value) => value || undefined,
       z
         .string()
-        .regex(/^mailto:[^@\s]+@[^@\s]+$/, 'Debe ser un mailto: (p. ej. mailto:soporte@gastromesa.com)')
+        .regex(
+          /^mailto:[^@\s]+@[^@\s]+$/,
+          'Debe ser un mailto: (p. ej. mailto:soporte@gastromesa.com)',
+        )
         .optional(),
     ),
   })

@@ -12,6 +12,7 @@ import { S3AttachmentStorage } from './s3-attachment-storage';
 
 const env = parseEnv({
   DATABASE_URL: 'postgresql://omnidesk:omnidesk@postgres:5432/omnidesk',
+  DATABASE_APP_URL: 'postgresql://omnidesk_app_login:app@postgres:5432/omnidesk',
   ATTACHMENT_STORAGE_DRIVER: 's3',
   S3_ENDPOINT: 'http://minio:9000',
   S3_ACCESS_KEY_ID: 'omnidesk',

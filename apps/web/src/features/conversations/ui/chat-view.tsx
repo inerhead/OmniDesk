@@ -16,6 +16,7 @@ import { useSendMessage } from '../api/use-send-message';
 import { isNotFound, useConversation, useTimeline } from '../api/use-conversations';
 import { WINDOW_CLOSED_NOTICE, composerMode } from '../model/composer-mode';
 import { setContactPanelOpen, useContactPanelOpen } from '../model/contact-panel-store';
+import { useConversationDeleted } from '../model/deleted-conversations';
 import { groupConsecutiveBubbles, groupTimelineByDay } from '../model/group-timeline';
 import { contactLabel } from '../model/to-bubble-view';
 import { ContactPanel } from './contact-panel';
@@ -56,6 +57,7 @@ export function ChatView({ conversationId }: { conversationId: string }) {
   const { actor, members } = useCurrentActor();
   const timeline = useTimeline(conversationId);
   const conversation = useConversation(conversationId);
+  const deleted = useConversationDeleted(conversationId);
   const command = useConversationCommand(conversationId);
   const messaging = useSendMessage(conversationId);
   const notice = command.notice ?? messaging.notice;
@@ -174,6 +176,7 @@ export function ChatView({ conversationId }: { conversationId: string }) {
   };
 
   if (
+    deleted ||
     (timeline.isError && isNotFound(timeline.error)) ||
     (conversation.isError && isNotFound(conversation.error))
   ) {
@@ -182,11 +185,21 @@ export function ChatView({ conversationId }: { conversationId: string }) {
         <div className="border-b px-2 py-2">
           <BackLink />
         </div>
-        <EmptyState
-          icon={MessageSquareOff}
-          title="Conversación no encontrada"
-          className="flex-1 justify-center"
-        />
+        {deleted ? (
+          <EmptyState
+            icon={MessageSquareOff}
+            title="Esta conversación fue eliminada"
+            description="Se borró el contacto y todo su historial."
+            className="flex-1 justify-center"
+          />
+        ) : (
+          <EmptyState
+            icon={MessageSquareOff}
+            title="Conversación no encontrada"
+            description="Puede que se haya eliminado o que ya no tengas acceso."
+            className="flex-1 justify-center"
+          />
+        )}
       </div>
     );
   }

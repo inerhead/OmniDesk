@@ -12,6 +12,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
+    "db:app-role": "node scripts/ensure-app-role.mjs",
     "test:e2e": "prisma generate && vitest run --config vitest.e2e.config.ts",
     "vapid:generate": "node scripts/vapid-generate.mjs"
   },

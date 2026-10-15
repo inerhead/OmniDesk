@@ -85,7 +85,7 @@ main() {
   done
 
   deployed=$("${compose[@]}" exec -T api node -e \
-    "fetch('http://127.0.0.1:5001/api/v1/health').then((r) => r.json()).then((b) => console.log(b.version))")
+    "fetch('http://127.0.0.1:' + process.env.API_PORT + '/api/v1/health').then((r) => r.json()).then((b) => console.log(b.version))")
   [[ $deployed == "$APP_VERSION" ]] || fail "El API responde la versión '$deployed', se esperaba '$APP_VERSION'"
 
   "${compose[@]}" ps

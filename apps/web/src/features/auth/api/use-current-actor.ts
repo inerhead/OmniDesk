@@ -32,6 +32,7 @@ export function useCurrentActor(): CurrentActor {
     ? (list.find((member) => member.id === membership.memberId) ?? {
         id: membership.memberId,
         displayName: me.data!.user.displayName,
+        email: me.data!.user.email,
         role: membership.role,
         avatarUrl: me.data!.user.avatarUrl,
       })

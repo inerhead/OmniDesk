@@ -131,24 +131,24 @@ export const MemberSchema = z.object({
 
 - [ ] El rail y la barra móvil muestran el icono de dos bocadillos en Conversaciones. El primero aparece, después el segundo, y se desvanecen en bucle de 2,4 s.
 - [ ] El segundo bocadillo tapa limpio al primero en el rail inactivo, en el rail activo y en la barra móvil, en tema claro y oscuro.
-- [ ] Con "reducir movimiento" activado en el sistema, el icono queda quieto con los dos bocadillos visibles.
+- [x] Con "reducir movimiento" activado en el sistema, el icono queda quieto con los dos bocadillos visibles.
 
 **Miembros:**
 
-- [ ] `GET /api/v1/members` devuelve `email` en cada miembro, también a un Agent. No existe forma de editarlo.
-- [ ] En `/settings/members`, avatar, rol y menú "⋯" quedan en la misma columna en todas las filas, con nombres de distinta longitud y con miembros sin acciones.
-- [ ] Cada fila muestra el email bajo el nombre.
-- [ ] Las pestañas muestran "Miembros (n)" e "Invitaciones (n)" con los números reales. `?tab=invitations` abre la segunda, y recargar la conserva.
+- [x] `GET /api/v1/members` devuelve `email` en cada miembro, también a un Agent. No existe forma de editarlo.
+- [x] En `/settings/members`, avatar, rol y menú "⋯" quedan en la misma columna en todas las filas, con nombres de distinta longitud y con miembros sin acciones.
+- [x] Cada fila muestra el email bajo el nombre.
+- [x] Las pestañas muestran "Miembros (n)" e "Invitaciones (n)" con los números reales. `?tab=invitations` abre la segunda, y recargar la conserva.
 - [ ] Buscar "jose" encuentra a "José" y buscar parte de un email lo encuentra. Sin coincidencias aparece "Nadie coincide con «…»".
 - [ ] El Owner cambia el rol desde un menú con la descripción de cada rol. Un Admin ve el rol como insignia.
 - [ ] "Quitar de la empresa" está en el menú "⋯" y pide confirmación. `LAST_OWNER` sigue mostrando su aviso.
-- [ ] A 400 px de ancho no hay scroll horizontal y cada fila se apila (nombre y email arriba, rol abajo).
+- [x] A 400 px de ancho no hay scroll horizontal y cada fila se apila (nombre y email arriba, rol abajo).
 
 **Canales:**
 
 - [ ] `/settings/channels` lista los canales con sus insignias correctas: un canal WhatsApp Cloud sin secretos muestra "Meta pendiente" y uno con secretos e IA muestra "Meta conectado" e "IA activa".
 - [ ] Tocar un canal abre el panel lateral con la URL `?channel=<id>`, y recargar lo deja abierto.
-- [ ] El panel de un canal WhatsApp Cloud muestra los pasos 1 Conectar Meta, 2 IA con n8n y 3 Credenciales, con su indicador de completo o pendiente. El de un canal n8n muestra solo dos pasos.
+- [x] El panel de un canal WhatsApp Cloud muestra los pasos 1 Conectar Meta, 2 IA con n8n y 3 Credenciales, con su indicador de completo o pendiente. El de un canal n8n muestra solo dos pasos.
 - [ ] Renombrar el canal desde la cabecera y cambiar el webhook de n8n desde el paso 2 se guardan sin el diálogo "Editar canal", que ya no existe.
 - [ ] Guardar secretos de Meta, activar la IA, generar o rotar credenciales y probar la conexión funcionan como antes, y su aviso aparece dentro del paso.
 - [ ] Crear un canal con "Añadir WhatsApp" abre su panel en el paso 1.
@@ -156,7 +156,7 @@ export const MemberSchema = z.object({
 
 **General:**
 
-- [ ] Lint, typecheck, test, build y e2e pasan.
+- [x] Lint, typecheck, test, build y e2e pasan.
 
 ## Decisiones tomadas y descartadas
 
@@ -191,3 +191,49 @@ export const MemberSchema = z.object({
 - Cambios en Empresa, Mi perfil o Notificaciones.
 
 Cada uno de esos, si llega, va en su propio spec.
+
+## Verificación de implementación
+
+2026-10-14, rama `spec-17-pulido-ui`.
+
+Automatizado, en verde:
+
+- `pnpm lint`, `pnpm typecheck`, `pnpm test` y `pnpm build` en todo el monorepo: 347 unitarias del API, 153 de la web y 104 de contratos. El único aviso de lint (`main.tsx`) ya estaba en `main`.
+- `pnpm --filter @omnidesk/api test:e2e` desde el host contra el Postgres local (`_e2e`): 188 pruebas, 187 pasaron y 1 se saltó (MinIO).
+- La e2e de `GET /members` de `assignment.e2e-spec.ts` ahora exige el email (antes exigía que no hubiera ninguno) y añade un caso: un Agent recibe el email de sus compañeros.
+- Unitarias nuevas: `filterMembers` (nombre, email, tildes, vacío) y `channelBadges`/`channelSteps` (WhatsApp Cloud a medias, completo y n8n).
+
+Capturas con Playwright contra el stack local (`localhost:8088`), como Owner demo, con "reducir movimiento" activo, a 1280 px y 400 px:
+
+- **Miembros:**
+  - Las filas quedan alineadas, también la del Owner, que no tiene menú "⋯".
+  - El email aparece bajo el nombre.
+  - Las pestañas muestran "Miembros (2)" e "Invitaciones (0)", y `?tab=invitations` abre la segunda con su estado vacío.
+  - En móvil la fila se apila.
+- **Sin scroll horizontal:** en ninguna de las tres vistas, a ninguno de los dos anchos.
+- **Canales:**
+  - Insignias en la lista.
+  - Tocar un canal abre el panel con `?channel=<id>`.
+  - Un canal WhatsApp Cloud muestra tres pasos y el canal demo (simulado) muestra dos.
+  - El panel ocupa toda la pantalla a 400 px.
+- **Icono:** quieto, con los dos bocadillos visibles en el rail y en la barra móvil.
+
+Corrección durante la verificación:
+
+- El paso "IA con n8n" trataba el canal demo (`SIMULATED`) como n8n y exigía el webhook. Ahora el texto "Webhook n8n de envío" y la obligatoriedad solo aplican a `provider === 'N8N'`, como antes.
+
+Detalles de implementación que el spec no fijaba:
+
+- Los campos compartidos (`Field`, `CopyValue`) pasaron a `channel-fields.tsx`.
+- Cada paso usa `useStepAction` para su estado de envío y su aviso.
+- El alta de canal ya no pide el webhook de n8n: ese campo vive en el paso 2.
+- La página de Canales sin acceso usa el mismo `EmptyState` que Miembros.
+
+Sin comprobar en navegador:
+
+- La animación en movimiento y que el relleno del segundo bocadillo tape limpio en hover y en tema oscuro.
+- El buscador escribiendo, el menú de rol y "Quitar de la empresa".
+- Renombrar desde la cabecera, guardar el webhook, guardar secretos de Meta, activar la IA, rotar credenciales y probar la conexión.
+- Recargar con el panel abierto.
+- El alta de un canal y la apertura de su panel.
+- El estado vacío de Canales y un canal WhatsApp Cloud con IA activa.

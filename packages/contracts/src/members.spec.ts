@@ -5,14 +5,17 @@ describe('MemberSchema', () => {
   const member = {
     id: '0199c0de-0000-7000-8000-000000000002',
     displayName: 'Laura',
+    email: 'laura@demo.omnidesk.local',
     role: 'AGENT',
   };
 
-  it('acepta un miembro válido y no expone el email', () => {
-    expect(MemberSchema.parse({ ...member, email: 'laura@demo.omnidesk.local' })).toEqual({
-      ...member,
-      avatarUrl: null,
-    });
+  it('acepta un miembro válido con su email (SPEC 17)', () => {
+    expect(MemberSchema.parse(member)).toEqual({ ...member, avatarUrl: null });
+  });
+
+  it('exige un email válido', () => {
+    expect(MemberSchema.safeParse({ ...member, email: undefined }).success).toBe(false);
+    expect(MemberSchema.safeParse({ ...member, email: 'laura' }).success).toBe(false);
   });
 
   it('conserva la foto si viene', () => {

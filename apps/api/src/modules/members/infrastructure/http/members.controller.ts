@@ -27,9 +27,10 @@ export class MembersController {
   async list(@CurrentTenant() tenant: TenantContext): Promise<ListMembersResponse> {
     const members = await this.listMembers.execute(tenant);
     return {
-      items: members.map(({ id, displayName, role, avatarUrl }) => ({
+      items: members.map(({ id, displayName, email, role, avatarUrl }) => ({
         id,
         displayName,
+        email,
         role,
         avatarUrl,
       })),

@@ -7,6 +7,8 @@ export type MemberRole = z.infer<typeof MemberRoleSchema>;
 export const MemberSchema = z.object({
   id: z.uuid(),
   displayName: z.string(),
+  /** Visible para todos los miembros de la empresa, solo lectura (SPEC 17). */
+  email: z.email(),
   role: MemberRoleSchema,
   avatarUrl: AvatarUrlSchema,
 });

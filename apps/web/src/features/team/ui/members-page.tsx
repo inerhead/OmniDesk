@@ -1,27 +1,31 @@
 import type { Member, MemberRole } from '@omnidesk/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ShieldOff, X } from 'lucide-react';
+import { Search, ShieldOff, X } from 'lucide-react';
 import { useState } from 'react';
+import { Link, useLocation, useSearchParams } from 'react-router';
 import { useCurrentActor } from '@/features/auth/api/use-current-actor';
-import { ROLE_LABEL } from '@/features/auth/model/role-label';
 import { ApiCodeError } from '@/shared/api/api-error';
-import { Avatar } from '@/shared/ui/avatar';
-import { Badge } from '@/shared/ui/badge';
+import { cn } from '@/shared/lib/utils';
 import { Button } from '@/shared/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/card';
+import { Card } from '@/shared/ui/card';
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog';
 import { EmptyState } from '@/shared/ui/empty-state';
+import { Input } from '@/shared/ui/input';
+import { SegmentedControl } from '@/shared/ui/segmented-control';
 import { Skeleton } from '@/shared/ui/skeleton';
 import { deleteInvitation, deleteMember, fetchInvitations, patchMemberRole } from '../api/team-api';
+import { filterMembers } from '../model/member-search';
 import {
   canChangeRoles,
   canManageTeam,
   canRemoveMember,
   canRevokeInvitation,
 } from '../model/team-permissions';
+import { InvitationRow } from './invitation-row';
 import { InviteDialog } from './invite-dialog';
+import { MemberRow } from './member-row';
 
-const dateFormat = new Intl.DateTimeFormat('es', { dateStyle: 'medium' });
+type Tab = 'members' | 'invitations';
 
 function errorNotice(error: unknown): string {
   if (error instanceof ApiCodeError && error.code === 'LAST_OWNER') {
@@ -32,10 +36,17 @@ function errorNotice(error: unknown): string {
   return 'No se pudo completar la acción. Inténtalo de nuevo.';
 }
 
-/** `/settings/members`: miembros activos, invitaciones pendientes, invitar, cambiar rol y quitar. */
+/**
+ * `/settings/members`: pestañas Miembros e Invitaciones (la activa en `?tab=`), buscador por nombre o
+ * email, y filas alineadas con rol y acciones (SPEC 17).
+ */
 export function MembersPage() {
   const { actor, members, isLoading } = useCurrentActor();
   const queryClient = useQueryClient();
+  const { pathname } = useLocation();
+  const [searchParams] = useSearchParams();
+  const tab: Tab = searchParams.get('tab') === 'invitations' ? 'invitations' : 'members';
+  const [query, setQuery] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [removing, setRemoving] = useState<Member | null>(null);
   const manager = actor !== null && canManageTeam(actor.role);
@@ -68,9 +79,10 @@ export function MembersPage() {
 
   if (isLoading) {
     return (
-      <div className="mx-auto flex max-w-3xl flex-col gap-3 px-4 py-6">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-6">
         <Skeleton className="h-8 w-40" />
-        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-9 w-full" />
+        <Skeleton className="h-48 w-full" />
       </div>
     );
   }
@@ -87,9 +99,16 @@ export function MembersPage() {
     );
   }
 
+  const pendingInvitations = invitations.data?.items ?? [];
+  const visibleMembers = filterMembers(members, query);
+  const tabs: { value: Tab; label: string; count: number | undefined }[] = [
+    { value: 'members', label: 'Miembros', count: members.length },
+    { value: 'invitations', label: 'Invitaciones', count: invitations.data?.items.length },
+  ];
+
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <section className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 md:px-8 md:py-10">
+      <section className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6 md:px-8 md:py-10">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex flex-col gap-1">
             <h1 className="text-2xl font-semibold tracking-tight">Miembros</h1>
@@ -117,97 +136,101 @@ export function MembersPage() {
           </div>
         )}
 
-        <Card className="gap-0 py-0">
-          <ul className="divide-y">
-            {members.map((member) => {
-              const isSelf = member.id === actor.id;
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <SegmentedControl
+            label="Miembros e invitaciones"
+            value={tab}
+            options={tabs}
+            className="sm:w-80"
+            renderOption={(option, { className, active }) => {
+              const count = tabs.find((item) => item.value === option.value)?.count;
               return (
-                <li key={member.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                  <Avatar
-                    id={member.id}
-                    name={member.displayName}
-                    fallback="?"
-                    imageUrl={member.avatarUrl}
-                  />
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-sm font-medium">
-                      {member.displayName}
-                      {isSelf && <span className="text-muted-foreground font-normal"> (tú)</span>}
-                    </span>
-                  </div>
-                  {canChangeRoles(actor.role) ? (
-                    <select
-                      aria-label={`Rol de ${member.displayName}`}
-                      className="border-input bg-background h-8 rounded-md border px-2 text-sm"
-                      value={member.role}
-                      disabled={pending}
-                      onChange={(event) =>
-                        changeRole.mutate({ id: member.id, role: event.target.value as MemberRole })
-                      }
-                    >
-                      {(['OWNER', 'ADMIN', 'AGENT'] as const).map((role) => (
-                        <option key={role} value={role}>
-                          {ROLE_LABEL[role]}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <Badge variant="outline">{ROLE_LABEL[member.role]}</Badge>
+                <Link
+                  key={option.value}
+                  to={{
+                    pathname,
+                    search: option.value === 'invitations' ? '?tab=invitations' : '',
+                  }}
+                  replace
+                  aria-current={active ? 'page' : undefined}
+                  className={cn(className, 'inline-flex items-center justify-center gap-1.5')}
+                >
+                  {option.label}
+                  {count !== undefined && (
+                    <span className="text-muted-foreground text-xs tabular-nums">({count})</span>
                   )}
-                  {!isSelf && canRemoveMember(actor.role, member.role) && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-destructive hover:text-destructive"
-                      disabled={pending}
-                      onClick={() => setRemoving(member)}
-                    >
-                      Quitar
-                    </Button>
-                  )}
-                </li>
+                </Link>
               );
-            })}
-          </ul>
-        </Card>
+            }}
+          />
+          {tab === 'members' && (
+            <label className="relative flex-1">
+              <span className="sr-only">Buscar por nombre o email</span>
+              <Search
+                aria-hidden
+                className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+              />
+              <Input
+                id="members-search"
+                type="search"
+                value={query}
+                placeholder="Buscar por nombre o email"
+                className="pl-9"
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </label>
+          )}
+        </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Invitaciones pendientes</CardTitle>
-            <CardDescription>Enlaces sin usar, válidos durante 7 días.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {invitations.isPending ? (
-              <Skeleton className="h-10 w-full" />
-            ) : !invitations.data?.items.length ? (
-              <p className="text-muted-foreground text-sm">No hay invitaciones pendientes.</p>
+        {tab === 'members' ? (
+          <Card className="gap-0 py-0">
+            {visibleMembers.length === 0 ? (
+              <p className="text-muted-foreground px-4 py-8 text-center text-sm">
+                Nadie coincide con «{query.trim()}».
+              </p>
             ) : (
               <ul className="divide-y">
-                {invitations.data.items.map((invitation) => (
-                  <li key={invitation.id} className="flex flex-wrap items-center gap-3 py-3">
-                    <div className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-sm font-medium">{invitation.email}</span>
-                      <span className="text-muted-foreground text-xs">
-                        {ROLE_LABEL[invitation.role]} · invitó {invitation.invitedBy.displayName} ·
-                        vence el {dateFormat.format(new Date(invitation.expiresAt))}
-                      </span>
-                    </div>
-                    {canRevokeInvitation(actor.role, invitation.role) && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={pending}
-                        onClick={() => revoke.mutate(invitation.id)}
-                      >
-                        Revocar
-                      </Button>
-                    )}
-                  </li>
+                {visibleMembers.map((member) => (
+                  <MemberRow
+                    key={member.id}
+                    member={member}
+                    isSelf={member.id === actor.id}
+                    canChangeRole={canChangeRoles(actor.role)}
+                    canRemove={member.id !== actor.id && canRemoveMember(actor.role, member.role)}
+                    pending={pending}
+                    onChangeRole={(role) => changeRole.mutate({ id: member.id, role })}
+                    onRemove={() => setRemoving(member)}
+                  />
                 ))}
               </ul>
             )}
-          </CardContent>
-        </Card>
+          </Card>
+        ) : invitations.isPending ? (
+          <Skeleton className="h-24 w-full" />
+        ) : pendingInvitations.length === 0 ? (
+          <Card className="py-0">
+            <EmptyState
+              title="No hay invitaciones pendientes"
+              description="Los enlaces de invitación valen 7 días y se usan una sola vez."
+              action={<InviteDialog actorRole={actor.role} />}
+            />
+          </Card>
+        ) : (
+          <Card className="gap-0 py-0">
+            <ul className="divide-y">
+              {pendingInvitations.map((invitation) => (
+                <InvitationRow
+                  key={invitation.id}
+                  invitation={invitation}
+                  canRevoke={canRevokeInvitation(actor.role, invitation.role)}
+                  pending={pending}
+                  onRevoke={() => revoke.mutate(invitation.id)}
+                />
+              ))}
+            </ul>
+          </Card>
+        )}
+
         <ConfirmDialog
           open={removing !== null}
           title={removing ? `Quitar a ${removing.displayName}` : 'Quitar miembro'}

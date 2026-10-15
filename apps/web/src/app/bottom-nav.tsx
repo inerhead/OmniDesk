@@ -16,7 +16,10 @@ export function BottomNav() {
             className={({ isActive }) =>
               cn(
                 'focus-visible:ring-ring/50 flex min-w-16 flex-col items-center gap-0.5 rounded-full px-3 py-1.5 text-[10px] font-medium outline-none focus-visible:ring-[3px]',
-                isActive ? 'bg-muted text-foreground' : 'text-muted-foreground',
+                // `--nav-icon-bg`: el fondo opaco del botón, para los iconos que tapan un trazo.
+                isActive
+                  ? 'bg-muted text-foreground [--nav-icon-bg:var(--muted)]'
+                  : 'text-muted-foreground [--nav-icon-bg:var(--background)]',
               )
             }
           >

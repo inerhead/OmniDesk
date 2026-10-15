@@ -45,9 +45,10 @@ export function NavRail() {
               className={({ isActive }) =>
                 cn(
                   'focus-visible:ring-ring/50 flex size-10 shrink-0 items-center justify-center rounded-lg transition-colors outline-none focus-visible:ring-[3px]',
+                  // `--nav-icon-bg`: el fondo opaco del botón, para los iconos que tapan un trazo.
                   isActive
-                    ? 'bg-primary/12 text-primary dark:bg-primary/20'
-                    : 'hover:bg-accent hover:text-accent-foreground',
+                    ? 'bg-primary/12 text-primary dark:bg-primary/20 [--nav-icon-bg:color-mix(in_oklch,var(--sidebar),var(--primary)_12%)] dark:[--nav-icon-bg:color-mix(in_oklch,var(--sidebar),var(--primary)_20%)]'
+                    : 'hover:bg-accent hover:text-accent-foreground [--nav-icon-bg:var(--sidebar)] hover:[--nav-icon-bg:var(--accent)]',
                 )
               }
             >

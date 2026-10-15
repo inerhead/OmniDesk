@@ -124,16 +124,22 @@ describe('Asignación y control de IA (e2e)', () => {
   });
 
   describe('GET /members', () => {
-    it('lista los 3 miembros demo con id, nombre y rol, sin email', async () => {
+    it('lista los 3 miembros demo con id, nombre, email y rol', async () => {
       const res = await get(owner, '/api/v1/members').expect(200);
       const { items } = ListMembersResponseSchema.parse(res.body);
 
-      expect(items.map((m) => [m.displayName, m.role])).toEqual([
-        ['Sup. Demo', 'OWNER'],
-        ['Laura', 'AGENT'],
-        ['Mateo', 'AGENT'],
+      expect(items.map((m) => [m.displayName, m.email, m.role])).toEqual([
+        ['Sup. Demo', 'supervisor@demo.omnidesk.local', 'OWNER'],
+        ['Laura', 'laura@demo.omnidesk.local', 'AGENT'],
+        ['Mateo', 'mateo@demo.omnidesk.local', 'AGENT'],
       ]);
-      expect(JSON.stringify(res.body)).not.toContain('@');
+    });
+
+    it('un Agent también recibe el email de sus compañeros (SPEC 17)', async () => {
+      const { items } = ListMembersResponseSchema.parse(
+        (await get(laura, '/api/v1/members').expect(200)).body,
+      );
+      expect(items.find((m) => m.displayName === 'Mateo')?.email).toBe('mateo@demo.omnidesk.local');
     });
   });
 

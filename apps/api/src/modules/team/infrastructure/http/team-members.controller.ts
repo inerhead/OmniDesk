@@ -66,10 +66,10 @@ export class TeamMembersController {
     @Param('id', new ParseUUIDPipe()) id: string,
     @Body() body: UpdateMemberRoleRequestDto,
   ): Promise<Member> {
-    const { displayName, role, avatarUrl } = unwrap(
+    const { displayName, email, role, avatarUrl } = unwrap(
       await this.updateRole.execute(actor, id, body.role),
     );
-    return { id, displayName, role, avatarUrl };
+    return { id, displayName, email, role, avatarUrl };
   }
 
   @Delete(':id')

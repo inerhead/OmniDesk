@@ -1,7 +1,7 @@
 import type { SVGProps } from 'react';
 
 /**
- * Icono de Estado: el trazo recorre el electrocardiograma y el pico se enciende en rojo.
+ * Icono de Estado: el trazo recorre el electrocardiograma y enciende en rojo el pico de arriba y el de abajo.
  * Mismo ritmo en `.ecg-sweep` y `.ecg-dot` (index.css).
  */
 export function StatusPulseIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
@@ -27,6 +27,10 @@ export function StatusPulseIcon({ className, ...props }: SVGProps<SVGSVGElement>
       <g className="ecg-dot">
         <circle cx="9" cy="3" r="2.6" fill="#ef4444" opacity="0.35" />
         <circle cx="9" cy="3" r="1.15" fill="#ef4444" />
+      </g>
+      <g className="ecg-dot ecg-dot-low">
+        <circle cx="15" cy="21" r="2.6" fill="#ef4444" opacity="0.35" />
+        <circle cx="15" cy="21" r="1.15" fill="#ef4444" />
       </g>
     </svg>
   );

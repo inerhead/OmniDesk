@@ -167,7 +167,8 @@ html[data-keyboard] {
   }
 }
 
-/* Pulso del icono Estado. El trazo (18 de 100) pasa el pico hacia el 36 % del ciclo. */
+/* Pulso del icono Estado. El trazo (18 de 100) pasa el pico alto hacia el 36 %
+   y el pico bajo hacia el 77 % del ciclo. */
 .ecg-sweep {
   stroke-dasharray: 18 82;
   animation: ecg-sweep 1.5s linear infinite;
@@ -177,6 +178,10 @@ html[data-keyboard] {
   transform-box: fill-box;
   transform-origin: center;
   animation: ecg-dot 1.5s linear infinite;
+}
+
+.ecg-dot-low {
+  animation-name: ecg-dot-low;
 }
 
 @keyframes ecg-sweep {
@@ -205,9 +210,27 @@ html[data-keyboard] {
   }
 }
 
+@keyframes ecg-dot-low {
+  0%,
+  65% {
+    opacity: 0.3;
+    transform: scale(0.65);
+  }
+  77% {
+    opacity: 1;
+    transform: scale(1.45);
+  }
+  91%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.65);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ecg-sweep,
-  .ecg-dot {
+  .ecg-dot,
+  .ecg-dot-low {
     animation: none;
   }
   .ecg-sweep {

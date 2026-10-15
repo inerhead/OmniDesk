@@ -41,6 +41,23 @@ describe('parseEnv', () => {
     );
   });
 
+  it('PLATFORM_ADMIN_EMAILS es una lista vacía por defecto', () => {
+    expect(parseEnv(valid).PLATFORM_ADMIN_EMAILS).toEqual([]);
+    expect(parseEnv({ ...valid, PLATFORM_ADMIN_EMAILS: '' }).PLATFORM_ADMIN_EMAILS).toEqual([]);
+  });
+
+  it('normaliza PLATFORM_ADMIN_EMAILS a minúsculas y sin espacios', () => {
+    const env = parseEnv({ ...valid, PLATFORM_ADMIN_EMAILS: ' Ana@Example.com ,, b@example.com' });
+
+    expect(env.PLATFORM_ADMIN_EMAILS).toEqual(['ana@example.com', 'b@example.com']);
+  });
+
+  it('falla nombrando PLATFORM_ADMIN_EMAILS cuando contiene algo que no es email', () => {
+    expect(() => parseEnv({ ...valid, PLATFORM_ADMIN_EMAILS: 'no-es-email' })).toThrowError(
+      /PLATFORM_ADMIN_EMAILS/,
+    );
+  });
+
   it('falla nombrando CORS_ORIGINS cuando contiene algo que no es URL', () => {
     expect(() => parseEnv({ ...valid, CORS_ORIGINS: 'no-es-url' })).toThrowError(/CORS_ORIGINS/);
   });

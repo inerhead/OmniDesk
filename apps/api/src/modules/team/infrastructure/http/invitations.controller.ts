@@ -161,7 +161,7 @@ export class InvitationsController {
   @ApiGoneResponse({ description: 'Vencida, ya usada o revocada (`INVITATION_EXPIRED`).' })
   @ApiConflictResponse({
     description:
-      'Otro email (`INVITATION_EMAIL_MISMATCH`), ya es miembro (`ALREADY_MEMBER`) o la empresa está inactiva (`TENANT_INACTIVE`).',
+      'Otro email (`INVITATION_EMAIL_MISMATCH`), ya es miembro (`ALREADY_MEMBER`), la empresa está inactiva (`TENANT_INACTIVE`) o suspendida (`TENANT_SUSPENDED`).',
   })
   async accept(
     @CurrentSession() session: SessionContext,
@@ -185,6 +185,12 @@ export class InvitationsController {
         throw apiError(HttpStatus.CONFLICT, 'ALREADY_MEMBER', 'Ya eres miembro de esta empresa');
       case 'tenant-inactive':
         throw apiError(HttpStatus.CONFLICT, 'TENANT_INACTIVE', 'La empresa está inactiva');
+      case 'tenant-suspended':
+        throw apiError(
+          HttpStatus.CONFLICT,
+          'TENANT_SUSPENDED',
+          'La empresa está suspendida por la plataforma',
+        );
     }
   }
 }

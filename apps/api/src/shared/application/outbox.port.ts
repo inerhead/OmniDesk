@@ -12,7 +12,8 @@ export interface OutboxPort {
       | 'ai.reply_requested'
       | 'attachment.download_requested'
       | 'notification.requested'
-      | 'tenant.status_changed';
+      | 'tenant.status_changed'
+      | 'platform.push_requested';
     payload: object;
   }): Promise<void>;
 }

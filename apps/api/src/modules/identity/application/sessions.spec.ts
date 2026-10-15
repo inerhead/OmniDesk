@@ -62,6 +62,10 @@ const acme: Membership = {
   role: 'ADMIN',
   tenantLogoUrl: null,
   tenantActive: true,
+  tenantState: 'active',
+  suspensionReason: null,
+  suspendedAt: null,
+  requestedAt: null,
 };
 
 function memberships(list: Membership[]): MembershipRepository {

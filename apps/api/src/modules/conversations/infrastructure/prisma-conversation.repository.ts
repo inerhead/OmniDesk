@@ -273,6 +273,14 @@ export class PrismaConversationRepository implements ConversationRepository {
     });
   }
 
+  async relabelFailedOutbound(tenantId: string, from: string, to: string): Promise<number> {
+    const { count } = await this.db.client.message.updateMany({
+      where: { tenantId, direction: 'OUTBOUND', status: 'FAILED', failureReason: from },
+      data: { failureReason: to },
+    });
+    return count;
+  }
+
   async findMessageByIdempotencyKey(
     conversationId: string,
     idempotencyKey: string,

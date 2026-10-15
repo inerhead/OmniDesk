@@ -112,4 +112,11 @@ export class PrismaRetentionStore implements RetentionStore {
       invitations: invitations.count,
     };
   }
+
+  async deleteTenantRejectionsBefore(cutoff: Date): Promise<number> {
+    const { count } = await this.db.client.tenantRejection.deleteMany({
+      where: { rejectedAt: { lt: cutoff } },
+    });
+    return count;
+  }
 }

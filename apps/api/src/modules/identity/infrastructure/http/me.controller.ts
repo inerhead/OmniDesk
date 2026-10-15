@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiForbiddenResponse,
+  ApiNoContentResponse,
   ApiOkResponse,
   ApiTags,
   ApiUnauthorizedResponse,
@@ -19,7 +20,7 @@ import type { SessionContext } from '../../../../shared/application/request-cont
 import { apiError } from '../../../../shared/infrastructure/http/api-error';
 import { OriginGuard } from '../../../../shared/infrastructure/http/origin.guard';
 import { CurrentSession } from '../../../../shared/infrastructure/http/request-context.decorators';
-import { GetMeUseCase } from '../../application/get-me.use-case';
+import { DismissTenantRejectionUseCase, GetMeUseCase } from '../../application/get-me.use-case';
 import { SetActiveTenantUseCase } from '../../application/set-active-tenant.use-case';
 import { MeResponseDto, SetActiveTenantRequestDto, toMeResponse } from './identity.dto';
 import { UserSessionGuard } from './session.guard';
@@ -32,6 +33,7 @@ export class MeController {
   constructor(
     private readonly getMe: GetMeUseCase,
     private readonly setActiveTenant: SetActiveTenantUseCase,
+    private readonly dismissRejection: DismissTenantRejectionUseCase,
   ) {}
 
   @Get()
@@ -51,6 +53,14 @@ export class MeController {
     const result = await this.setActiveTenant.execute(session, body.tenantId);
     if (result === 'not-member') throw new ForbiddenException('No eres miembro de esa empresa');
     return this.load({ ...session, activeTenantId: body.tenantId });
+  }
+
+  /** Cierra el aviso de una solicitud de empresa rechazada (SPEC 18). */
+  @Post('tenant-rejection/dismiss')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiNoContentResponse({ description: 'Aviso cerrado (o no había ninguno).' })
+  async dismissTenantRejection(@CurrentSession() session: SessionContext): Promise<void> {
+    await this.dismissRejection.execute(session);
   }
 
   private async load(session: SessionContext): Promise<MeResponse> {

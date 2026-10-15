@@ -146,7 +146,9 @@ export type AcceptInvitationResult =
   | { kind: 'email-mismatch' }
   | { kind: 'already-member' }
   /** La empresa está inactiva (SPEC 16): sus invitaciones se revocaron al inactivarla. */
-  | { kind: 'tenant-inactive' };
+  | { kind: 'tenant-inactive' }
+  /** La plataforma la suspendió (SPEC 18): sus invitaciones siguen, pero no se aceptan. */
+  | { kind: 'tenant-suspended' };
 
 /**
  * Acepta la invitación con la sesión de un usuario del mismo email: crea su membresía (o reactiva la
@@ -167,6 +169,7 @@ export class AcceptInvitationUseCase {
     const now = this.clock.now();
     const invitation = await this.invitations.findByTokenHash(hashToken(token));
     if (!invitation) return { kind: 'not-found' };
+    if (invitation.tenantSuspended) return { kind: 'tenant-suspended' };
     if (!invitation.tenantActive) return { kind: 'tenant-inactive' };
     if (!isInvitationPending(invitation, now)) return { kind: 'expired' };
 

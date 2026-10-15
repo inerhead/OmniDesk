@@ -21,6 +21,7 @@ function fakeStore() {
   ]);
   const logged: string[] = [];
   let purged = false;
+  let rejectionsCutoff: Date | null = null;
   const store: RetentionStore = {
     tenantsWithRetention: async () => [
       { tenantId: 'tenant-a', retentionDays: 90 },
@@ -40,8 +41,18 @@ function fakeStore() {
       purged = true;
       return { outboxEvents: 0, inboxEvents: 0, sessions: 0, invitations: 0 };
     },
+    deleteTenantRejectionsBefore: async (cutoff) => {
+      rejectionsCutoff = cutoff;
+      return 2;
+    },
   };
-  return { store, pending, logged, purged: () => purged };
+  return {
+    store,
+    pending,
+    logged,
+    purged: () => purged,
+    rejectionsCutoff: () => rejectionsCutoff,
+  };
 }
 
 function storageFailingOn(failingKey: string): AttachmentStorage & { deleted: string[] } {
@@ -73,6 +84,16 @@ describe('RetentionJob', () => {
     expect(fake.pending.get('tenant-a')).toEqual(['conv-a']);
     expect(fake.logged).toEqual(['tenant-b']);
     expect(fake.purged()).toBe(true);
+  });
+
+  it('borra los rechazos de solicitudes de más de 20 días (SPEC 18)', async () => {
+    const fake = fakeStore();
+    const job = new RetentionJob(fake.store, freeLock, tx, storageFailingOn(''), clock);
+
+    const report = await job.run();
+
+    expect(report?.tenantRejections).toBe(2);
+    expect(fake.rejectionsCutoff()).toEqual(new Date('2026-09-24T03:30:00.000Z'));
   });
 
   it('sin el lock no toca nada y devuelve null', async () => {

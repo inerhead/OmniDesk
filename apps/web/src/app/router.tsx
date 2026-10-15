@@ -1,6 +1,7 @@
 import { ChannelsPage } from '@/features/channels/channels-page';
 import { CompanyPage } from '@/features/company/company-page';
 import { NotificationsPage } from '@/features/notifications/notifications-page';
+import { PlatformPage } from '@/features/platform/platform-page';
 import { ProfilePage } from '@/features/profile/profile-page';
 import { createBrowserRouter, Navigate } from 'react-router';
 import { AuthGate, RequireActiveTenant } from '@/features/auth/ui/auth-gate';
@@ -28,6 +29,8 @@ export const router = createBrowserRouter(
       element: <AuthGate />,
       children: [
         { path: '/onboarding', element: <OnboardingPage /> },
+        // Admin de plataforma (SPEC 18): no necesita empresa activa.
+        { path: '/platform', element: <PlatformPage /> },
         {
           path: '/',
           element: (

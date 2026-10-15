@@ -5,6 +5,7 @@ import {
   TenantSchema,
   type AuthProvidersResponse,
   type CreateTenantRequest,
+  type DevLoginRequest,
   type ListMembersResponse,
   type MeResponse,
   type Tenant,
@@ -25,9 +26,9 @@ export async function fetchAuthProviders(): Promise<AuthProvidersResponse> {
   return AuthProvidersResponseSchema.parse(body);
 }
 
-/** Login de desarrollo (`DEMO_MODE`): el API deja la cookie de sesión. */
-export async function postDevLogin(memberId: string): Promise<MeResponse> {
-  const { status, body } = await postJson('/api/v1/auth/dev-login', { memberId });
+/** Login de desarrollo (`DEMO_MODE`): un miembro o un usuario demo. El API deja la cookie de sesión. */
+export async function postDevLogin(request: DevLoginRequest): Promise<MeResponse> {
+  const { status, body } = await postJson('/api/v1/auth/dev-login', request);
   if (status !== 200) throw new ApiHttpError(status);
   return MeResponseSchema.parse(body);
 }
@@ -43,11 +44,20 @@ export async function postActiveTenant(tenantId: string): Promise<MeResponse> {
   return MeResponseSchema.parse(body);
 }
 
-/** Lanza `ApiCodeError` con `SLUG_TAKEN` si el slug ya existe. */
+/**
+ * Pide el alta de una empresa: queda en revisión salvo para un admin de plataforma (SPEC 18). Lanza
+ * `ApiCodeError` con `SLUG_TAKEN` si el slug ya existe o `REQUEST_PENDING` si ya hay una en revisión.
+ */
 export async function postTenant(input: CreateTenantRequest): Promise<Tenant> {
   const { status, body } = await postJson('/api/v1/tenants', input);
   if (status !== 201) throw apiCodeError(status, body);
   return TenantSchema.parse(body);
+}
+
+/** Cierra el aviso de una solicitud de empresa rechazada (SPEC 18). */
+export async function postDismissTenantRejection(): Promise<void> {
+  const { status } = await postJson('/api/v1/me/tenant-rejection/dismiss', undefined);
+  if (status !== 204) throw new ApiHttpError(status);
 }
 
 /** Miembros activos de la empresa activa. */

@@ -30,7 +30,7 @@ describe('Retención y purga técnica (integración)', () => {
 
   const createTenant = async (retentionDays: number | null) => {
     const tenant = await db.tenant.create({
-      data: { name: 'Retención', slug: `ret-${randomUUID()}`, retentionDays },
+      data: { approval: 'APPROVED', name: 'Retención', slug: `ret-${randomUUID()}`, retentionDays },
     });
     const channel = await db.channel.create({
       data: {
@@ -385,5 +385,31 @@ describe('Retención y purga técnica (integración)', () => {
 
     // Que el dispatcher de otros archivos no se encuentre este evento pendiente.
     await db.outboxEvent.deleteMany({ where: { tenantId: tenant.tenantId } });
+  });
+
+  it('borra los rechazos de solicitudes de empresa de más de 20 días (SPEC 18)', async () => {
+    const user = await db.user.create({
+      data: { email: `rechazos-${randomUUID()}@e2e.local`, displayName: 'Solicitante' },
+    });
+    const rejection = (rejectedAt: Date) =>
+      db.tenantRejection.create({
+        data: {
+          userId: user.id,
+          tenantName: 'Acme',
+          tenantSlug: `acme-${randomUUID()}`,
+          reason: 'Datos incompletos',
+          requestedAt: rejectedAt,
+          rejectedAt,
+        },
+      });
+    const old = await rejection(daysAgo(21));
+    const recent = await rejection(daysAgo(19));
+
+    await job.run(now);
+
+    expect(
+      (await db.tenantRejection.findMany({ where: { userId: user.id } })).map((row) => row.id),
+    ).toEqual([recent.id]);
+    expect(await db.tenantRejection.count({ where: { id: old.id } })).toBe(0);
   });
 });

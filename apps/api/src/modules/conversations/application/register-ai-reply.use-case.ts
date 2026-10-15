@@ -29,7 +29,12 @@ export type AiReplyResult =
   | { kind: 'accepted'; messageId: string }
   | {
       kind: 'rejected';
-      reason: 'CONTROL_CHANGED' | 'CONVERSATION_CLOSED' | 'WINDOW_CLOSED' | 'TENANT_INACTIVE';
+      reason:
+        | 'CONTROL_CHANGED'
+        | 'CONVERSATION_CLOSED'
+        | 'WINDOW_CLOSED'
+        | 'TENANT_INACTIVE'
+        | 'TENANT_SUSPENDED';
     }
   | { kind: 'not-found' };
 
@@ -64,10 +69,12 @@ export class RegisterAiReplyUseCase {
       input.idempotencyKey,
     );
     if (existing) return { kind: 'accepted', messageId: existing.id };
-    // Empresa inactiva (SPEC 16): no se acepta nada nuevo para enviar.
-    if (this.tenantStatus && !(await this.tenantStatus.isActive(integration.tenantId))) {
-      return { kind: 'rejected', reason: 'TENANT_INACTIVE' };
-    }
+    // Empresa no activa (SPEC 16 y 18): no se acepta nada nuevo para enviar.
+    const state = this.tenantStatus
+      ? await this.tenantStatus.state(integration.tenantId)
+      : 'active';
+    if (state === 'suspended') return { kind: 'rejected', reason: 'TENANT_SUSPENDED' };
+    if (state !== 'active') return { kind: 'rejected', reason: 'TENANT_INACTIVE' };
 
     const now = new Date();
     const decision = decideAiReply(conversation, input.controlVersion, now);

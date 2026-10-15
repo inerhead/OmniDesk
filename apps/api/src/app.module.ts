@@ -11,6 +11,7 @@ import { MembersModule } from './modules/members/members.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ObservabilityModule } from './modules/observability/observability.module';
+import { PlatformModule } from './modules/platform/platform.module';
 import { ProfileModule } from './modules/profile/profile.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { RetentionModule } from './modules/retention/retention.module';
@@ -35,6 +36,7 @@ export class AppModule {
         IdentityModule,
         DemoModule,
         TenancyModule,
+        PlatformModule,
         MembersModule,
         TeamModule,
         ConversationsModule,

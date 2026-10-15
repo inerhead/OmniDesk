@@ -131,7 +131,7 @@ describe('Atención humana (e2e)', () => {
     // Otro tenant con su canal y su credencial, para probar el aislamiento por canal.
     foreignKey = `otro-canal-key-${randomUUID()}`;
     const tenant = await prisma.tenant.create({
-      data: { slug: `otro-${randomUUID()}`, name: 'Otro tenant' },
+      data: { approval: 'APPROVED', slug: `otro-${randomUUID()}`, name: 'Otro tenant' },
     });
     const channel = await prisma.channel.create({
       data: {

@@ -17,8 +17,9 @@ import {
 } from '@/shared/ui/dropdown-menu';
 import { Tooltip } from '@/shared/ui/tooltip';
 import { activeMembership, isManagerRole, useMe } from '../api/use-me';
+import { blockedActiveMembership } from '../model/tenant-request';
 import { useLogout } from '../api/use-session-actions';
-import { SettingsMenuItems, TenantMenuItems } from './account-menu-items';
+import { PlatformMenuItem, SettingsMenuItems, TenantMenuItems } from './account-menu-items';
 
 /**
  * Perfil: avatar con el estado de conexión en la esquina (resaltado en `/settings/*`). Su menú reúne, en este orden, la cuenta, la
@@ -88,7 +89,13 @@ export function UserMenu({ variant }: { variant: 'rail' | 'bar' }) {
         <DropdownMenuSeparator />
 
         <TenantMenuItems me={me} />
-        {membership && isManagerRole(membership.role) && (
+        {me.isPlatformAdmin && (
+          <>
+            <DropdownMenuSeparator />
+            <PlatformMenuItem pendingCount={me.platformPendingCount} />
+          </>
+        )}
+        {membership && !blockedActiveMembership(me) && isManagerRole(membership.role) && (
           <>
             <DropdownMenuSeparator />
             <SettingsMenuItems

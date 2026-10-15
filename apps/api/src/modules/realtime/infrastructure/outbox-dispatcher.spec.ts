@@ -123,10 +123,16 @@ class FakeSender implements OutboundMessageSender {
 
 class FakePush implements PushSender {
   calls = 0;
+  platform: unknown[] = [];
   error: Error | null = new Error('push caído');
 
   async deliver() {
     this.calls += 1;
+    if (this.error) throw this.error;
+  }
+
+  async deliverPlatform(payload: unknown) {
+    this.platform.push(payload);
     if (this.error) throw this.error;
   }
 }
@@ -436,7 +442,7 @@ describe('OutboxDispatcher con la empresa inactiva (SPEC 16)', () => {
   let sender: FakeSender;
   let push: FakePush;
   let dispatcher: OutboxDispatcher;
-  const inactive = { isActive: async () => false };
+  const inactive = { state: async () => 'inactive' as const, isActive: async () => false };
 
   beforeEach(() => {
     store = new InMemoryStore();
@@ -492,5 +498,60 @@ describe('OutboxDispatcher con la empresa inactiva (SPEC 16)', () => {
 
     expect(publisher.published).toHaveLength(1);
     expect(publisher.statuses).toEqual([{ tenantId: 't1', event: status.payload }]);
+  });
+});
+
+describe('OutboxDispatcher: push de plataforma (SPEC 18)', () => {
+  const platformPush = {
+    userIds: ['0199c0de-0000-7000-8000-0000000000b1'],
+    title: 'Solicitud rechazada',
+    body: 'Acme: datos falsos',
+    url: '/onboarding',
+    tag: 'tenant-request-x',
+  };
+
+  it.each([
+    ['en revisión', 'pending' as const],
+    ['borrada', null],
+  ])('se entrega con la empresa %s', async (_label, state) => {
+    const store = new InMemoryStore();
+    const push = new FakePush();
+    push.error = null;
+    const dispatcher = new OutboxDispatcher(
+      noTransaction,
+      store,
+      new FakePublisher(),
+      new FakeSender(),
+      undefined,
+      undefined,
+      push,
+      { state: async () => state, isActive: async () => false },
+    );
+    const event = store.add({ type: 'platform.push_requested', payload: platformPush });
+
+    await dispatcher.tick(T0);
+
+    expect(push.platform).toEqual([platformPush]);
+    expect(event.publishedAt).toEqual(T0);
+  });
+
+  it('un fallo se reintenta como el resto de push', async () => {
+    const store = new InMemoryStore();
+    const push = new FakePush();
+    const dispatcher = new OutboxDispatcher(
+      noTransaction,
+      store,
+      new FakePublisher(),
+      new FakeSender(),
+      undefined,
+      undefined,
+      push,
+    );
+    const event = store.add({ type: 'platform.push_requested', payload: platformPush });
+
+    await dispatcher.tick(T0);
+
+    expect(event.publishedAt).toBeNull();
+    expect(event.attempts).toBe(1);
   });
 });

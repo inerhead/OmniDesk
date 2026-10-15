@@ -38,14 +38,21 @@ describe('MeResponseSchema', () => {
   };
 
   it('acepta un usuario con membresías y empresa activa', () => {
-    // Sin `tenantLogoUrl` ni `tenantActive` (respuestas previas a SPEC 16): activa y sin logo.
+    // Sin los campos de SPEC 16 y 18 (respuestas previas): activa, sin logo y sin plataforma.
     expect(MeResponseSchema.parse(me)).toEqual({
       ...me,
       memberships: me.memberships.map((membership) => ({
         ...membership,
         tenantLogoUrl: null,
         tenantActive: true,
+        tenantState: 'active',
+        suspensionReason: null,
+        suspendedAt: null,
+        requestedAt: null,
       })),
+      isPlatformAdmin: false,
+      platformPendingCount: null,
+      tenantRejection: null,
     });
   });
 
@@ -69,6 +76,15 @@ describe('peticiones de sesión', () => {
     expect(DevLoginRequestSchema.safeParse({}).success).toBe(false);
   });
 
+  it('dev-login acepta los usuarios demo sin empresa (SPEC 18)', () => {
+    expect(DevLoginRequestSchema.safeParse({ demoUser: 'platform-admin' }).success).toBe(true);
+    expect(DevLoginRequestSchema.safeParse({ demoUser: 'new-user' }).success).toBe(true);
+    expect(DevLoginRequestSchema.safeParse({ demoUser: 'root' }).success).toBe(false);
+    expect(
+      DevLoginRequestSchema.safeParse({ memberId: uuid(1), demoUser: 'new-user' }).success,
+    ).toBe(false);
+  });
+
   it('providers lista los miembros demo', () => {
     expect(
       AuthProvidersResponseSchema.safeParse({
@@ -81,21 +97,42 @@ describe('peticiones de sesión', () => {
 
 describe('CreateTenantRequestSchema', () => {
   it('recorta el nombre y acepta un slug en minúsculas con guiones simples', () => {
-    expect(CreateTenantRequestSchema.parse({ name: '  Acme  ', slug: 'acme-sur' })).toEqual({
-      name: 'Acme',
-      slug: 'acme-sur',
-    });
+    expect(
+      CreateTenantRequestSchema.parse({
+        name: '  Acme  ',
+        slug: 'acme-sur',
+        contactPhone: '+573001234567',
+      }),
+    ).toEqual({ name: 'Acme', slug: 'acme-sur', contactPhone: '+573001234567' });
   });
+
+  it.each([undefined, '', '3001234567', '+0573001234567', '+57 300 123 4567'])(
+    'exige un móvil E.164 y rechaza %s (SPEC 18)',
+    (contactPhone) => {
+      expect(
+        CreateTenantRequestSchema.safeParse({ name: 'Acme', slug: 'acme', contactPhone }).success,
+      ).toBe(false);
+    },
+  );
 
   it.each(['Acme', 'ac', 'acme--sur', '-acme', 'acme-', 'acme_sur', 'a'.repeat(41)])(
     'rechaza el slug %s',
     (slug) => {
-      expect(CreateTenantRequestSchema.safeParse({ name: 'Acme', slug }).success).toBe(false);
+      expect(
+        CreateTenantRequestSchema.safeParse({ name: 'Acme', slug, contactPhone: '+573001234567' })
+          .success,
+      ).toBe(false);
     },
   );
 
   it('rechaza un nombre de menos de 2 caracteres tras recortar', () => {
-    expect(CreateTenantRequestSchema.safeParse({ name: ' A ', slug: 'acme' }).success).toBe(false);
+    expect(
+      CreateTenantRequestSchema.safeParse({
+        name: ' A ',
+        slug: 'acme',
+        contactPhone: '+573001234567',
+      }).success,
+    ).toBe(false);
   });
 });
 

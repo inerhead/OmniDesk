@@ -264,7 +264,7 @@ describe('Tiempo real: Outbox + Socket.IO (e2e)', () => {
 
     it('con sesión, recibe solo los eventos de su empresa activa', async () => {
       const tenant = await prisma.tenant.create({
-        data: { slug: `rt-${randomUUID()}`, name: 'Otra empresa' },
+        data: { approval: 'APPROVED', slug: `rt-${randomUUID()}`, name: 'Otra empresa' },
       });
       const user = await prisma.user.create({
         data: { email: `rt-${randomUUID()}@otra.local`, displayName: 'Ajena' },

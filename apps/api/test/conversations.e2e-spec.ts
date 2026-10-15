@@ -63,16 +63,23 @@ describe('Bandeja de conversaciones (e2e)', () => {
   beforeAll(async () => {
     app = await createApp();
     prisma = app.get(PrismaService);
-    const supervisorId = (
-      await prisma.tenantMember.findFirstOrThrow({
-        where: { role: 'OWNER', tenant: { slug: 'demo' } },
-      })
-    ).id;
+    const supervisorId =
+      // Activo y con usuario: otros archivos dejan OWNER dados de baja en la demo.
+      (
+        await prisma.tenantMember.findFirstOrThrow({
+          where: {
+            role: 'OWNER',
+            tenant: { slug: 'demo' },
+            removedAt: null,
+            userId: { not: null },
+          },
+        })
+      ).id;
     supervisorCookie = await devLogin(app, supervisorId);
 
     // Segundo tenant con su propio canal y credencial, para probar el aislamiento.
     const tenant = await prisma.tenant.create({
-      data: { slug: `otro-${randomUUID()}`, name: 'Otro tenant' },
+      data: { approval: 'APPROVED', slug: `otro-${randomUUID()}`, name: 'Otro tenant' },
     });
     const channel = await prisma.channel.create({
       data: {

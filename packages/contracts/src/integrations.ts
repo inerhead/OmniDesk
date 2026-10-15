@@ -51,7 +51,13 @@ export type OutboundAiMessageResponse = z.infer<typeof OutboundAiMessageResponse
 export const OutboundAiMessageRejectedSchema = z.object({
   sendAllowed: z.literal(false),
   /** `TENANT_INACTIVE`: la empresa está inactiva (SPEC 16). */
-  reason: z.enum(['CONTROL_CHANGED', 'CONVERSATION_CLOSED', 'WINDOW_CLOSED', 'TENANT_INACTIVE']),
+  reason: z.enum([
+    'CONTROL_CHANGED',
+    'CONVERSATION_CLOSED',
+    'WINDOW_CLOSED',
+    'TENANT_INACTIVE',
+    'TENANT_SUSPENDED',
+  ]),
 });
 export type OutboundAiMessageRejected = z.infer<typeof OutboundAiMessageRejectedSchema>;
 

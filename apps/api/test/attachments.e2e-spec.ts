@@ -99,7 +99,7 @@ describe('Adjuntos de WhatsApp (e2e)', () => {
   });
   beforeEach(async () => {
     const tenant = await db.tenant.create({
-      data: { name: 'Adjuntos', slug: `att-${randomUUID()}` },
+      data: { approval: 'APPROVED', name: 'Adjuntos', slug: `att-${randomUUID()}` },
     });
     tenantId = tenant.id;
     const user = await db.user.create({
@@ -269,7 +269,9 @@ describe('Adjuntos de WhatsApp (e2e)', () => {
 
   it('404 a otra empresa, sin sesión 401 y 404 mientras está PENDING', async () => {
     const attachment = await readyImage();
-    const other = await db.tenant.create({ data: { name: 'Otra', slug: `other-${randomUUID()}` } });
+    const other = await db.tenant.create({
+      data: { approval: 'APPROVED', name: 'Otra', slug: `other-${randomUUID()}` },
+    });
     const user = await db.user.create({
       data: { email: `${randomUUID()}@test.local`, displayName: 'X' },
     });

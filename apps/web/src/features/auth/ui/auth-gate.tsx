@@ -5,6 +5,7 @@ import { isStatus } from '@/shared/api/api-error';
 import { Button } from '@/shared/ui/button';
 import { EmptyState } from '@/shared/ui/empty-state';
 import { useMe } from '../api/use-me';
+import { waitsInOnboarding } from '../model/tenant-request';
 
 export function FullScreenLoader() {
   return (
@@ -38,9 +39,15 @@ export function AuthGate() {
   return <Outlet />;
 }
 
-/** Sin empresa activa (usuario nuevo) se va al alta de empresa. */
+/**
+ * Sin empresa activa (usuario nuevo) se va al alta de empresa; un admin de plataforma, a `/platform`.
+ * Con su única empresa en revisión, la espera también vive en `/onboarding` (SPEC 18).
+ */
 export function RequireActiveTenant({ children }: { children: ReactNode }) {
   const { data: me } = useMe();
-  if (!me?.activeTenantId) return <Navigate to="/onboarding" replace />;
+  if (!me?.activeTenantId) {
+    return <Navigate to={me?.isPlatformAdmin ? '/platform' : '/onboarding'} replace />;
+  }
+  if (waitsInOnboarding(me)) return <Navigate to="/onboarding" replace />;
   return children;
 }

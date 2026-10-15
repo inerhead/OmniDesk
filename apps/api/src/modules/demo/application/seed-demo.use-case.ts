@@ -19,11 +19,13 @@ import {
   TENANT_REPOSITORY,
   type TenantRepository,
 } from '../../tenancy/application/ports/tenant.repository';
+import { DEMO_USERS } from '../../identity/application/demo-users';
 import { DEMO_CHANNEL, DEMO_MEMBERS, DEMO_TENANT } from './demo.constants';
 
 /**
  * Crea o actualiza tenant, miembros, canal y credencial demo. Cada miembro demo queda enlazado a un
- * usuario sin cuenta de Google (login de desarrollo). Idempotente.
+ * usuario sin cuenta de Google (login de desarrollo). Crea además los usuarios demo sin empresa: el
+ * admin de plataforma y un usuario nuevo (SPEC 18). Idempotente.
  */
 @Injectable()
 export class SeedDemoUseCase {
@@ -44,6 +46,7 @@ export class SeedDemoUseCase {
         const user = await this.users.upsertDemo(member);
         await this.members.upsertByEmail(tenant.id, { ...member, userId: user.id });
       }
+      for (const user of Object.values(DEMO_USERS)) await this.users.upsertDemo(user);
     });
   }
 }

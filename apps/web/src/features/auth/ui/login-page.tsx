@@ -1,3 +1,4 @@
+import type { DemoUser } from '@omnidesk/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { basePath } from '@/shared/config/env';
@@ -10,6 +11,12 @@ import { DEFAULT_NEXT_PATH, safeNextPath } from '../model/next-path';
 import { ROLE_LABEL } from '../model/role-label';
 import { AuthCard } from './auth-card';
 import { GoogleButton } from './google-button';
+
+/** Usuarios demo sin empresa (SPEC 18): prueban la revisión de empresas en local. */
+const DEMO_USER_LABEL: Record<DemoUser, string> = {
+  'platform-admin': 'Admin de plataforma',
+  'new-user': 'usuario nuevo',
+};
 
 const ERROR_MESSAGE: Record<string, string> = {
   oauth: 'No se pudo completar el login con Google. Inténtalo de nuevo.',
@@ -66,7 +73,7 @@ export function LoginPage() {
               variant="secondary"
               className="h-auto w-full justify-start py-2"
               disabled={devLogin.isPending}
-              onClick={() => devLogin.mutate(member.memberId)}
+              onClick={() => devLogin.mutate({ memberId: member.memberId })}
             >
               <Avatar
                 id={member.memberId}
@@ -80,6 +87,21 @@ export function LoginPage() {
                 <span className="text-muted-foreground text-xs font-normal">
                   {ROLE_LABEL[member.role]}
                 </span>
+              </span>
+            </Button>
+          ))}
+          {providers.data.demoUsers.map((user) => (
+            <Button
+              key={user.demoUser}
+              variant="secondary"
+              className="h-auto w-full justify-start py-2"
+              disabled={devLogin.isPending}
+              onClick={() => devLogin.mutate({ demoUser: user.demoUser })}
+            >
+              <Avatar id={user.demoUser} name={user.displayName} fallback="?" size="sm" />
+              <span className="flex flex-col items-start">
+                <span>Entrar como {DEMO_USER_LABEL[user.demoUser]}</span>
+                <span className="text-muted-foreground text-xs font-normal">Sin empresa</span>
               </span>
             </Button>
           ))}

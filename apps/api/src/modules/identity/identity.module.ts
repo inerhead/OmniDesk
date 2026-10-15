@@ -1,10 +1,12 @@
 import { Module } from '@nestjs/common';
 import { CreateSessionUseCase } from './application/create-session.use-case';
 import { DevLoginUseCase } from './application/dev-login.use-case';
-import { GetMeUseCase } from './application/get-me.use-case';
+import { DismissTenantRejectionUseCase, GetMeUseCase } from './application/get-me.use-case';
 import { GoogleLoginUseCase } from './application/google-login.use-case';
 import { MEMBERSHIP_REPOSITORY } from './application/ports/membership.repository';
+import { PLATFORM_OVERVIEW } from './application/ports/platform-overview.port';
 import { SESSION_REPOSITORY } from './application/ports/session.repository';
+import { TENANT_REJECTION_REPOSITORY } from './application/ports/tenant-rejection.repository';
 import { USER_REPOSITORY } from './application/ports/user.repository';
 import { ResolveActorUseCase } from './application/resolve-actor.use-case';
 import { ResolveSessionUseCase } from './application/resolve-session.use-case';
@@ -15,12 +17,15 @@ import { GoogleAuthController } from './infrastructure/http/google-auth.controll
 import { MeController } from './infrastructure/http/me.controller';
 import { SessionGuard, UserSessionGuard } from './infrastructure/http/session.guard';
 import { PrismaMembershipRepository } from './infrastructure/prisma-membership.repository';
+import { PrismaPlatformOverview } from './infrastructure/prisma-platform-overview';
 import { PrismaSessionRepository } from './infrastructure/prisma-session.repository';
+import { PrismaTenantRejectionRepository } from './infrastructure/prisma-tenant-rejection.repository';
 import { PrismaUserRepository } from './infrastructure/prisma-user.repository';
 
 /**
  * Usuarios, sesiones y login (SPEC 07). Exporta los guards de sesión para el resto de módulos de la
- * web y los repositorios de usuario y sesión (alta de empresa, invitaciones, quitar miembros).
+ * web y los repositorios de usuario y sesión (alta de empresa, invitaciones, quitar miembros), y el
+ * de rechazos de solicitudes (SPEC 18: alta, plataforma y retención).
  */
 @Module({
   controllers: [AuthController, GoogleAuthController, MeController],
@@ -28,11 +33,14 @@ import { PrismaUserRepository } from './infrastructure/prisma-user.repository';
     { provide: SESSION_REPOSITORY, useClass: PrismaSessionRepository },
     { provide: USER_REPOSITORY, useClass: PrismaUserRepository },
     { provide: MEMBERSHIP_REPOSITORY, useClass: PrismaMembershipRepository },
+    { provide: TENANT_REJECTION_REPOSITORY, useClass: PrismaTenantRejectionRepository },
+    { provide: PLATFORM_OVERVIEW, useClass: PrismaPlatformOverview },
     CreateSessionUseCase,
     ResolveSessionUseCase,
     RevokeSessionUseCase,
     ResolveActorUseCase,
     GetMeUseCase,
+    DismissTenantRejectionUseCase,
     SetActiveTenantUseCase,
     DevLoginUseCase,
     GoogleLoginUseCase,
@@ -43,6 +51,7 @@ import { PrismaUserRepository } from './infrastructure/prisma-user.repository';
     SESSION_REPOSITORY,
     USER_REPOSITORY,
     MEMBERSHIP_REPOSITORY,
+    TENANT_REJECTION_REPOSITORY,
     ResolveSessionUseCase,
     ResolveActorUseCase,
     CreateSessionUseCase,

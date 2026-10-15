@@ -5,7 +5,7 @@ export interface TenantRepository {
   findBySlug(slug: string): Promise<Tenant | null>;
   upsertBySlug(data: { slug: string; name: string }): Promise<Tenant>;
   /** Lanza `UniqueConflictError` si el slug ya existe. */
-  create(data: { slug: string; name: string }): Promise<Tenant>;
+  create(data: NewTenant): Promise<Tenant>;
   findDetails(tenantId: string): Promise<TenantDetails | null>;
   /** Clave del logo y estado; `null` si la empresa no existe. */
   findLogo(tenantId: string): Promise<{ logoKey: string | null; active: boolean } | null>;
@@ -30,6 +30,17 @@ export interface TenantRepository {
   reactivate(tenantId: string): Promise<boolean>;
   /** Revoca las invitaciones pendientes (al inactivar). Devuelve cuántas. */
   revokePendingInvitations(tenantId: string, at: Date): Promise<number>;
+}
+
+/** Alta de empresa (SPEC 18): en revisión, o aprobada si la pide un admin de plataforma. */
+export interface NewTenant {
+  slug: string;
+  name: string;
+  contactPhone: string;
+  contactEmail: string;
+  approval: Tenant['approval'];
+  approvedAt: Date | null;
+  approvedByUserId: string | null;
 }
 
 export const TENANT_REPOSITORY = Symbol('TENANT_REPOSITORY');

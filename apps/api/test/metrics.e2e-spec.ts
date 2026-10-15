@@ -56,7 +56,7 @@ describe('Métricas Prometheus (e2e)', () => {
     it('los gauges del Outbox se calculan al leer: pendientes por tipo y antigüedad', async () => {
       const db = app.get(PrismaService);
       const tenant = await db.tenant.create({
-        data: { name: 'Métricas', slug: `metricas-${Date.now()}` },
+        data: { approval: 'APPROVED', name: 'Métricas', slug: `metricas-${Date.now()}` },
       });
       await db.outboxEvent.create({
         data: {

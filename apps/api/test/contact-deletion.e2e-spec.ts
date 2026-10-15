@@ -110,7 +110,9 @@ describe('Borrado de un contacto a petición (e2e)', () => {
 
   beforeEach(async () => {
     tenantId = (
-      await db.tenant.create({ data: { name: 'Borrados', slug: `borrados-${randomUUID()}` } })
+      await db.tenant.create({
+        data: { approval: 'APPROVED', name: 'Borrados', slug: `borrados-${randomUUID()}` },
+      })
     ).id;
     owner = await addMember('OWNER');
     admin = await addMember('ADMIN');
@@ -224,7 +226,7 @@ describe('Borrado de un contacto a petición (e2e)', () => {
     await as(owner.cookie).delete('/api/v1/contacts/no-es-uuid').expect(400);
 
     const otherTenant = await db.tenant.create({
-      data: { name: 'Ajena', slug: `ajena-${randomUUID()}` },
+      data: { approval: 'APPROVED', name: 'Ajena', slug: `ajena-${randomUUID()}` },
     });
     const outsider = await addMember('OWNER', otherTenant.id);
     await as(outsider.cookie).delete(`/api/v1/contacts/${contactId}`).expect(404);

@@ -8,6 +8,7 @@ import {
   ATTACHMENT_STORAGE,
   type AttachmentStorage,
 } from '../../attachments/application/ports/attachment-storage';
+import { tenantRejectionCutoff } from '../../identity/application/ports/tenant-rejection.repository';
 import { retentionCutoff } from '../../tenancy/domain/retention';
 import { RETENTION_BATCH_SIZE, technicalPurgeCutoff } from '../domain/retention-schedule';
 import { deleteStoredObjects } from './delete-stored-objects';
@@ -33,12 +34,15 @@ export interface TenantRetentionResult {
 export interface RetentionRunReport {
   tenants: TenantRetentionResult[];
   purge: TechnicalPurgeResult;
+  /** Rechazos de solicitudes de empresa de más de 20 días (SPEC 18). */
+  tenantRejections: number;
 }
 
 /**
  * Retención diaria (SPEC 12): por cada empresa con `retentionDays`, borra las conversaciones
  * cerradas antiguas (con sus adjuntos del bucket) y los contactos que quedan sin conversaciones;
- * después purga las tablas técnicas. Corre una sola vez a la vez entre instancias (advisory lock).
+ * después purga las tablas técnicas y los rechazos de solicitudes de más de 20 días (SPEC 18). Corre
+ * una sola vez a la vez entre instancias (advisory lock).
  */
 @Injectable()
 export class RetentionJob {
@@ -72,7 +76,11 @@ export class RetentionJob {
       `Purga técnica: ${purge.outboxEvents} eventos del Outbox, ${purge.inboxEvents} del Inbox, ` +
         `${purge.sessions} sesiones y ${purge.invitations} invitaciones`,
     );
-    return { tenants, purge };
+    const tenantRejections = await this.store.deleteTenantRejectionsBefore(
+      tenantRejectionCutoff(now),
+    );
+    this.logger.log(`Retención: ${tenantRejections} rechazos de solicitudes borrados`);
+    return { tenants, purge, tenantRejections };
   }
 
   private async applyTenant(

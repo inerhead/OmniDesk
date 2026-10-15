@@ -44,7 +44,7 @@ describe('Row Level Security (integración)', () => {
   /** Una fila en cada una de las 12 tablas, creada con el rol dueño. */
   const seedTenant = async () => {
     const tenant = await db.tenant.create({
-      data: { name: 'RLS', slug: `rls-${randomUUID()}` },
+      data: { approval: 'APPROVED', name: 'RLS', slug: `rls-${randomUUID()}` },
     });
     const tenantId = tenant.id;
     const user = await db.user.create({

@@ -26,8 +26,15 @@ export class TenantsController {
   constructor(private readonly createTenant: CreateTenantUseCase) {}
 
   @Post()
-  @ApiCreatedResponse({ type: TenantDto.Output, description: 'Empresa creada y activa.' })
-  @ApiConflictResponse({ description: 'El slug ya existe (`SLUG_TAKEN`).' })
+  @ApiCreatedResponse({
+    type: TenantDto.Output,
+    description:
+      'Empresa creada y activa: en revisión (`PENDING`) salvo para un admin de plataforma.',
+  })
+  @ApiConflictResponse({
+    description:
+      'El slug ya existe (`SLUG_TAKEN`) o ya hay una solicitud en revisión (`REQUEST_PENDING`).',
+  })
   @ApiForbiddenResponse({
     description: 'Solo quien no tiene empresa o es OWNER en alguna (`TENANT_CREATION_FORBIDDEN`).',
   })
@@ -38,6 +45,13 @@ export class TenantsController {
     const result = await this.createTenant.execute(session, body);
     if (result.kind === 'slug-taken') {
       throw apiError(HttpStatus.CONFLICT, 'SLUG_TAKEN', 'Ese identificador ya está en uso');
+    }
+    if (result.kind === 'request-pending') {
+      throw apiError(
+        HttpStatus.CONFLICT,
+        'REQUEST_PENDING',
+        'Ya tienes una solicitud de empresa en revisión',
+      );
     }
     if (result.kind === 'forbidden') {
       throw apiError(

@@ -45,7 +45,7 @@ export class OutboundMessagesController {
   @ApiConflictResponse({
     type: OutboundAiMessageRejectedDto.Output,
     description:
-      'El control cambió, la conversación está cerrada, venció la ventana de 18 h (`WINDOW_CLOSED`) o la empresa está inactiva (`TENANT_INACTIVE`): la integración NO debe enviar el mensaje.',
+      'El control cambió, la conversación está cerrada, venció la ventana de 18 h (`WINDOW_CLOSED`) la empresa está inactiva (`TENANT_INACTIVE`) o suspendida (`TENANT_SUSPENDED`): la integración NO debe enviar el mensaje.',
   })
   @ApiNotFoundResponse({ description: 'La conversación no existe en el canal de la credencial.' })
   @ApiUnauthorizedResponse({ description: 'Credencial de integración ausente o inválida.' })

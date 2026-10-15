@@ -48,6 +48,8 @@ export interface RetentionStore {
   deleteContact(tenantId: string, contactId: string): Promise<void>;
   /** Outbox publicado, Inbox, sesiones e invitaciones terminadas antes de `cutoff`. */
   purgeTechnical(cutoff: Date): Promise<TechnicalPurgeResult>;
+  /** Rechazos de solicitudes de empresa anteriores a `cutoff` (SPEC 18). Devuelve cuántos. */
+  deleteTenantRejectionsBefore(cutoff: Date): Promise<number>;
 }
 
 export const RETENTION_STORE = Symbol('RETENTION_STORE');

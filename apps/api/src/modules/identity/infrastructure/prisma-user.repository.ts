@@ -65,6 +65,15 @@ export class PrismaUserRepository implements UserRepository {
     );
   }
 
+  async findIdsByEmails(emails: string[]): Promise<string[]> {
+    if (emails.length === 0) return [];
+    const rows = await this.db.client.user.findMany({
+      where: { email: { in: emails.map(normalizeEmail) } },
+      select: { id: true },
+    });
+    return rows.map(({ id }) => id);
+  }
+
   async upsertDemo(data: { email: string; displayName: string }): Promise<User> {
     const email = normalizeEmail(data.email);
     return toUser(

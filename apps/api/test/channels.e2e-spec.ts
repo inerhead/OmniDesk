@@ -110,7 +110,7 @@ describe('Canales: firma HMAC de entrada (e2e)', () => {
     app = await createApp();
     prisma = app.get(PrismaService);
     const tenant = await prisma.tenant.create({
-      data: { slug: `firma-${randomUUID().slice(0, 8)}`, name: 'Firma e2e' },
+      data: { approval: 'APPROVED', slug: `firma-${randomUUID().slice(0, 8)}`, name: 'Firma e2e' },
     });
     tenantId = tenant.id;
     const channel = await prisma.channel.create({
@@ -368,7 +368,11 @@ describe('Canales: API de gestión y envío por n8n (e2e)', () => {
     prisma = app.get(PrismaService);
     tenantId = (
       await prisma.tenant.create({
-        data: { slug: `canales-${randomUUID().slice(0, 8)}`, name: 'Canales e2e' },
+        data: {
+          approval: 'APPROVED',
+          slug: `canales-${randomUUID().slice(0, 8)}`,
+          name: 'Canales e2e',
+        },
       })
     ).id;
     ({ memberId: ownerMemberId, cookie: ownerCookie } = await memberWithSession('OWNER'));

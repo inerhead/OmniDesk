@@ -1,5 +1,5 @@
 import type { MeResponse } from '@omnidesk/contracts';
-import { Building2, MessageSquare, Plus, Users } from 'lucide-react';
+import { Building2, MessageSquare, Plus, ShieldCheck, Users } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { cn } from '@/shared/lib/utils';
 import {
@@ -11,9 +11,13 @@ import {
 import { TenantMark } from '@/shared/ui/tenant-mark';
 import { useSwitchTenant } from '../api/use-session-actions';
 import { ROLE_LABEL } from '../model/role-label';
+import { CREATE_TENANT_PATH, hasPendingRequest, tenantStateLabel } from '../model/tenant-request';
 import { canCreateTenant } from '../model/tenant-permissions';
 
-/** Empresas del usuario (la activa marcada) y «Crear empresa» si puede (`canCreateTenant`). */
+/**
+ * Empresas del usuario (la activa marcada, con su estado: inactiva, en revisión o suspendida) y
+ * «Crear empresa» si puede (`canCreateTenant`) y no tiene ya una solicitud en revisión (SPEC 18).
+ */
 export function TenantMenuItems({ me, label = 'Empresa' }: { me: MeResponse; label?: string }) {
   const navigate = useNavigate();
   const switchTenant = useSwitchTenant();
@@ -28,6 +32,7 @@ export function TenantMenuItems({ me, label = 'Empresa' }: { me: MeResponse; lab
       >
         {me.memberships.map((item) => {
           const current = item.tenantId === me.activeTenantId;
+          const state = tenantStateLabel(item.tenantState);
           return (
             <DropdownMenuRadioItem
               key={item.tenantId}
@@ -48,7 +53,7 @@ export function TenantMenuItems({ me, label = 'Empresa' }: { me: MeResponse; lab
                 </span>
                 <span className="text-muted-foreground text-xs">
                   {ROLE_LABEL[item.role]}
-                  {!item.tenantActive && ' · Inactiva'}
+                  {state && ` · ${state}`}
                   {current && ' · Actual'}
                 </span>
               </span>
@@ -56,13 +61,32 @@ export function TenantMenuItems({ me, label = 'Empresa' }: { me: MeResponse; lab
           );
         })}
       </DropdownMenuRadioGroup>
-      {canCreateTenant(me) && (
-        <DropdownMenuItem onSelect={() => void navigate('/onboarding')}>
+      {canCreateTenant(me) && !hasPendingRequest(me) && (
+        <DropdownMenuItem onSelect={() => void navigate(CREATE_TENANT_PATH)}>
           <Plus aria-hidden />
           Crear empresa
         </DropdownMenuItem>
       )}
     </>
+  );
+}
+
+/** «Plataforma» (SPEC 18), solo para admins de plataforma, con las solicitudes pendientes. */
+export function PlatformMenuItem({ pendingCount }: { pendingCount: number | null }) {
+  const navigate = useNavigate();
+  return (
+    <DropdownMenuItem onSelect={() => void navigate('/platform')}>
+      <ShieldCheck aria-hidden />
+      <span className="flex-1">Plataforma</span>
+      {pendingCount !== null && pendingCount > 0 && (
+        <span
+          className="bg-primary text-primary-foreground rounded-full px-1.5 text-xs font-medium tabular-nums"
+          aria-label={`${pendingCount} solicitudes pendientes`}
+        >
+          {pendingCount}
+        </span>
+      )}
+    </DropdownMenuItem>
   );
 }
 

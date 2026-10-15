@@ -165,6 +165,7 @@ function ActiveCompany({ company }: { company: TenantDetails }) {
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col gap-4 overflow-y-auto p-4">
       <CompanyData company={company} />
+      <CompanyContact company={company} />
       <CompanyLogo company={company} />
       <RetentionCard company={company} onSaved={applyCompany} />
       <DangerZone company={company} />
@@ -242,6 +243,35 @@ function CompanyData({ company }: { company: TenantDetails }) {
             )}
           </div>
         </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Datos de contacto del alta (SPEC 18): solo lectura, los ve el Owner y la plataforma. */
+function CompanyContact({ company }: { company: TenantDetails }) {
+  const hasContact = company.contactPhone !== null || company.contactEmail !== null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Contacto</CardTitle>
+        <CardDescription>Los datos que se enviaron al pedir el alta de la empresa.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {hasContact ? (
+          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <dt className="text-muted-foreground text-xs">Teléfono móvil</dt>
+              <dd className="truncate font-medium">{company.contactPhone ?? '—'}</dd>
+            </div>
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <dt className="text-muted-foreground text-xs">Email</dt>
+              <dd className="truncate font-medium">{company.contactEmail ?? '—'}</dd>
+            </div>
+          </dl>
+        ) : (
+          <p className="text-muted-foreground text-sm">Sin datos de contacto.</p>
+        )}
       </CardContent>
     </Card>
   );

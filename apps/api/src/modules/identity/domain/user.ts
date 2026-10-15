@@ -1,3 +1,5 @@
+import type { TenantState } from '../../tenancy/domain/tenant-state';
+
 export interface User {
   id: string;
   email: string;
@@ -43,18 +45,37 @@ export interface Membership {
   role: MemberRole;
   /** Logo de la empresa (SPEC 16); `null` = iniciales. */
   tenantLogoUrl: string | null;
-  /** `false`: inactiva; solo sus OWNER la ven, para reactivarla. */
+  /** `true` solo con `tenantState === 'active'`. */
   tenantActive: boolean;
+  /** Estado efectivo (SPEC 16 y 18). */
+  tenantState: TenantState;
+  /** Motivo de la suspensión de la plataforma; `null` si no está suspendida. */
+  suspensionReason: string | null;
+  /** ISO; `null` si no está suspendida. */
+  suspendedAt: string | null;
+  /** ISO, solo en una empresa en revisión (la pantalla de espera). */
+  requestedAt: string | null;
 }
 
-/** Una empresa inactiva solo la ven sus OWNER, para reactivarla (SPEC 16). */
-export function canSeeMembership(membership: Pick<Membership, 'role' | 'tenantActive'>): boolean {
-  return membership.tenantActive || membership.role === 'OWNER';
+/**
+ * Una empresa inactiva solo la ven sus OWNER, para reactivarla (SPEC 16). Una en revisión o
+ * suspendida la ven todos sus miembros, para mostrar la espera o el aviso (SPEC 18).
+ */
+export function canSeeMembership(membership: Pick<Membership, 'role' | 'tenantState'>): boolean {
+  return membership.tenantState !== 'inactive' || membership.role === 'OWNER';
 }
 
-/** Empresa de respaldo de una sesión: la primera activa; sin ninguna, `null` (va a `/onboarding`). */
+/**
+ * Empresa de respaldo de una sesión, entre las que puede ver (`canSeeMembership`): la primera activa;
+ * si no hay, la primera en revisión o suspendida (SPEC 18), para ver la espera o el aviso; si
+ * tampoco, la inactiva de un OWNER, para reactivarla (SPEC 16). Sin ninguna, `null` (`/onboarding`).
+ */
 export function fallbackTenantId(memberships: Membership[]): string | null {
-  return memberships.find((membership) => membership.tenantActive)?.tenantId ?? null;
+  const active = memberships.find((membership) => membership.tenantState === 'active');
+  const waiting = memberships.find(
+    (membership) => membership.tenantState === 'pending' || membership.tenantState === 'suspended',
+  );
+  return (active ?? waiting ?? memberships[0])?.tenantId ?? null;
 }
 
 export function normalizeEmail(email: string): string {

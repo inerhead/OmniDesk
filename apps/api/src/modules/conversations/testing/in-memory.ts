@@ -221,6 +221,12 @@ export class InMemoryConversations implements ConversationRepository {
       )
       .map(({ id, conversationId }) => ({ id, conversationId }));
   }
+
+  async relabelFailedOutbound(tenantId: string, from: string, to: string) {
+    const failed = await this.listFailedOutboundByReason(tenantId, from);
+    for (const { id } of failed) this.messages.find((m) => m.id === id)!.failureReason = to;
+    return failed.length;
+  }
 }
 
 export class InMemoryMembers implements MemberRepository {

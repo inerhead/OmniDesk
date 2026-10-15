@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { MemberRefSchema } from './conversations';
+import { E164Schema } from './integrations';
 
 export const TenantSlugSchema = z
   .string()
@@ -7,14 +8,32 @@ export const TenantSlugSchema = z
   .max(40)
   .regex(/^[a-z0-9](-?[a-z0-9])*$/, 'Solo minúsculas, números y guiones simples');
 
-/** `POST /api/v1/tenants`: quien la crea queda como OWNER y la empresa pasa a ser la activa. */
+/**
+ * `POST /api/v1/tenants`: quien la crea queda como OWNER y la empresa pasa a ser la activa. Queda en
+ * revisión hasta que la apruebe la plataforma (SPEC 18). El email de contacto es el del login.
+ */
 export const CreateTenantRequestSchema = z.object({
   name: z.string().trim().min(2).max(80),
   slug: TenantSlugSchema,
+  /** Móvil de contacto (SPEC 18). */
+  contactPhone: E164Schema,
 });
 export type CreateTenantRequest = z.infer<typeof CreateTenantRequestSchema>;
 
-export const TenantSchema = z.object({ id: z.uuid(), name: z.string(), slug: z.string() });
+/** Revisión de la plataforma (SPEC 18). */
+export const TenantApprovalSchema = z.enum(['PENDING', 'APPROVED']);
+export type TenantApproval = z.infer<typeof TenantApprovalSchema>;
+
+/** Estado efectivo de una empresa para quien la usa (SPEC 16 y 18). */
+export const TenantStateSchema = z.enum(['active', 'inactive', 'pending', 'suspended']);
+export type TenantState = z.infer<typeof TenantStateSchema>;
+
+export const TenantSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  slug: z.string(),
+  approval: TenantApprovalSchema,
+});
 export type Tenant = z.infer<typeof TenantSchema>;
 
 /** Días que se conservan las conversaciones cerradas (SPEC 12); `null` = indefinidamente. */
@@ -53,6 +72,9 @@ export const TenantDetailsSchema = z.object({
   /** La demo no cambia de slug: el login de desarrollo la busca por `demo`. */
   slugLocked: z.boolean(),
   retentionDays: RetentionDaysSchema,
+  /** Datos de contacto del alta (SPEC 18); `null` en empresas anteriores. Solo lectura. */
+  contactPhone: z.string().nullable(),
+  contactEmail: z.string().nullable(),
 });
 export type TenantDetails = z.infer<typeof TenantDetailsSchema>;
 
@@ -72,6 +94,9 @@ export type DeactivateTenantRequest = z.infer<typeof DeactivateTenantRequestSche
 
 /** `failureReason` de los envíos cortados por una empresa inactiva. */
 export const TENANT_INACTIVE_REASON = 'TENANT_INACTIVE';
+
+/** `failureReason` de los envíos cortados por una suspensión de la plataforma (SPEC 18). */
+export const TENANT_SUSPENDED_REASON = 'TENANT_SUSPENDED';
 
 /** Logo de una empresa, relativo a la base del API; `version` = `logoUpdatedAt` en ms. */
 export function tenantLogoPath(tenantId: string, version: number): string {

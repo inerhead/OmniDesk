@@ -117,7 +117,9 @@ describe('Empresa: editar, logo, inactivar y reactivar (e2e)', () => {
   beforeEach(async () => {
     tenantName = `Acme ${randomUUID().slice(0, 6)}`;
     tenantId = (
-      await db.tenant.create({ data: { name: tenantName, slug: `acme-${randomUUID()}` } })
+      await db.tenant.create({
+        data: { approval: 'APPROVED', name: tenantName, slug: `acme-${randomUUID()}` },
+      })
     ).id;
     owner = await addMember('OWNER');
     admin = await addMember('ADMIN');
@@ -224,7 +226,9 @@ describe('Empresa: editar, logo, inactivar y reactivar (e2e)', () => {
         .put('/api/v1/tenants/current/logo', webp, 'logo.webp')
         .expect(200);
       const otherTenant = (
-        await db.tenant.create({ data: { name: 'Otra', slug: `otra-${randomUUID()}` } })
+        await db.tenant.create({
+          data: { approval: 'APPROVED', name: 'Otra', slug: `otra-${randomUUID()}` },
+        })
       ).id;
       const stranger = await addMember('OWNER', otherTenant);
       await as(stranger.cookie).get(res.body.logoUrl).expect(404);

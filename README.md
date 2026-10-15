@@ -28,29 +28,29 @@ Abre <http://localhost:8080/omnidesk> (el gateway; usa siempre esta URL). La app
 
 ## Servicios y puertos
 
-| Servicio      | URL en el host                        | Qué es                                                                                 |
-| ------------- | ------------------------------------- | -------------------------------------------------------------------------------------- |
-| `caddy`       | <http://localhost:8080/omnidesk>      | Gateway de mismo origen: `/omnidesk/api/*` → API (sin el prefijo), `/omnidesk/*` → web |
-| `web`         | <http://localhost:5173/omnidesk/>     | Vite dev sin proxy: ahí `/api` no llega al API. Usa 8080                               |
-| `api`         | <http://localhost:5001/api/v1/health> | API NestJS                                                                             |
-| Swagger       | <http://localhost:5001/api/docs>      | Documentación del API generada desde `@omnidesk/contracts`                             |
-| `postgres`    | `localhost:5532`                      | PostgreSQL 18                                                                          |
-| `web-preview` | <http://localhost:4173/omnidesk/>     | Build de producción de la web (profile `pwa`)                                          |
-| `cloudflared` | `https://<tu-dominio>/omnidesk`       | Túnel Cloudflare con dominio fijo hacia `caddy` (`CLOUDFLARE_TUNNEL_TOKEN`)            |
-| `minio`       | `localhost:9050` (consola en <http://localhost:9051>) | Adjuntos (SPEC 14). El API los sirve; el navegador no habla con MinIO. |
+| Servicio      | URL en el host                                        | Qué es                                                                                 |
+| ------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `caddy`       | <http://localhost:8080/omnidesk>                      | Gateway de mismo origen: `/omnidesk/api/*` → API (sin el prefijo), `/omnidesk/*` → web |
+| `web`         | <http://localhost:5173/omnidesk/>                     | Vite dev sin proxy: ahí `/api` no llega al API. Usa 8080                               |
+| `api`         | <http://localhost:5001/api/v1/health>                 | API NestJS                                                                             |
+| Swagger       | <http://localhost:5001/api/docs>                      | Documentación del API generada desde `@omnidesk/contracts`                             |
+| `postgres`    | `localhost:5532`                                      | PostgreSQL 18                                                                          |
+| `web-preview` | <http://localhost:4173/omnidesk/>                     | Build de producción de la web (profile `pwa`)                                          |
+| `cloudflared` | `https://<tu-dominio>/omnidesk`                       | Túnel Cloudflare con dominio fijo hacia `caddy` (`CLOUDFLARE_TUNNEL_TOKEN`)            |
+| `minio`       | `localhost:9050` (consola en <http://localhost:9051>) | Adjuntos (SPEC 14). El API los sirve; el navegador no habla con MinIO.                 |
 
 Variables de adjuntos (`.env.example`; en el VPS van en `infra/deploy/.env.*.example`):
 
-| Variable | Valor local |
-| --- | --- |
-| `ATTACHMENT_STORAGE_DRIVER` | `s3` (si no se define, el API usa `memory` y pierde los archivos al reiniciar; en producción `s3` es obligatorio) |
-| `S3_ENDPOINT` | `http://minio:9000` |
-| `S3_REGION` | `us-east-1` |
-| `S3_BUCKET` | `omnidesk-attachments` |
-| `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | Las mismas que `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` |
-| `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` | `omnidesk` / `omnidesk-dev-secret` |
-| `MINIO_HOST_PORT` / `MINIO_CONSOLE_HOST_PORT` | `9050` / `9051` |
-| `ATTACHMENT_INBOUND_MAX_BYTES` | `26214400` (25 MB) |
+| Variable                                      | Valor local                                                                                                       |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `ATTACHMENT_STORAGE_DRIVER`                   | `s3` (si no se define, el API usa `memory` y pierde los archivos al reiniciar; en producción `s3` es obligatorio) |
+| `S3_ENDPOINT`                                 | `http://minio:9000`                                                                                               |
+| `S3_REGION`                                   | `us-east-1`                                                                                                       |
+| `S3_BUCKET`                                   | `omnidesk-attachments`                                                                                            |
+| `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`   | Las mismas que `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD`                                                          |
+| `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD`     | `omnidesk` / `omnidesk-dev-secret`                                                                                |
+| `MINIO_HOST_PORT` / `MINIO_CONSOLE_HOST_PORT` | `9050` / `9051`                                                                                                   |
+| `ATTACHMENT_INBOUND_MAX_BYTES`                | `26214400` (25 MB)                                                                                                |
 
 ¿Algún puerto ya está ocupado en tu máquina? Cámbialo en `.env`: `GATEWAY_HOST_PORT`, `API_HOST_PORT` o `POSTGRES_HOST_PORT`. Si cambias el del gateway, añade su origen a `CORS_ORIGINS`.
 
@@ -101,6 +101,11 @@ La web exige sesión (SPEC 07). Sin ella, cualquier ruta redirige a `/login?next
 
 Con `DEMO_MODE=true`, `/login` muestra **Entrar como Sup. Demo / Laura / Mateo**. Crea una sesión real para ese miembro demo, sin Google (`POST /api/v1/auth/dev-login`). Sustituye al antiguo selector **Actuar como** y a la cabecera `X-Demo-Member-Id`, que ya no existen. Sin `DEMO_MODE`, el endpoint responde `404`.
 
+Para probar la revisión de empresas (SPEC 18), el login de desarrollo también ofrece dos usuarios sin empresa:
+
+- **Entrar como Admin de plataforma** (`platform-admin@demo.omnidesk.local`): con `DEMO_MODE` cuenta como admin de plataforma y entra a `/platform`.
+- **Entrar como usuario nuevo** (`new-user@demo.omnidesk.local`): pide una empresa y ve la pantalla de espera.
+
 ### Login con Google (local)
 
 1. En [Google Cloud Console](https://console.cloud.google.com/apis/credentials) crea un proyecto y configura la **pantalla de consentimiento** (tipo _Externo_, en modo _Testing_, y añade tu cuenta como usuario de prueba).
@@ -133,6 +138,8 @@ El primer login sin empresas lleva a `/onboarding` (**Crea tu empresa**): quien 
 
   Un OWNER invita ADMIN y AGENT; un ADMIN, solo AGENT.
 
+- **Alta de empresa (SPEC 18):** toda empresa nueva pide nombre, identificador y un móvil en formato E.164 (`+573001234567`). El email de contacto es el de la cuenta de Google. La empresa queda **En revisión** hasta que un admin de plataforma la aprueba o la rechaza con motivo. Mientras tanto, la API de esa empresa responde `403 TENANT_PENDING` y la web muestra la espera, que se actualiza sola cada 30 s. Un rechazo borra la empresa y libera el identificador. El solicitante ve el motivo y puede enviar otra solicitud. Se admite una solicitud en revisión por usuario (`409 REQUEST_PENDING`).
+- **Admin de plataforma (SPEC 18):** son los emails de `PLATFORM_ADMIN_EMAILS` (separados por comas; en local, vacía, porque con `DEMO_MODE` ya cuenta el admin demo). Menú de usuario → **Plataforma** (con el número de solicitudes pendientes). Pestañas **Pendientes**, **Aprobadas** y **Rechazadas** (últimos 20 días). Desde **Aprobadas** se suspende una empresa con motivo: nadie entra, ni el Owner (`403 TENANT_SUSPENDED`), y se cortan la IA, los avisos y los envíos. Al levantarla, se reenvían los mensajes cortados que siguen dentro de la ventana de 18 h. Para quien no es admin, `/api/v1/platform/*` responde `404`.
 - **Roles y bajas:** en **Miembros**, el OWNER cambia roles. OWNER y ADMIN quitan miembros: un ADMIN, solo agentes. Siempre queda al menos un OWNER (`409 LAST_OWNER`). Quitar a alguien hace tres cosas:
   - cierra su sesión en esa empresa;
   - devuelve sus conversaciones abiertas a la IA;

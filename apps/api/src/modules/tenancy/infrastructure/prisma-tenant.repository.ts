@@ -2,11 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { rethrowUniqueConflict } from '../../../shared/infrastructure/prisma/prisma-errors';
 import { PrismaDb } from '../../../shared/infrastructure/prisma/prisma-transaction-runner';
 import { memberRefSelect, toMemberRefOrNull } from '../../identity/infrastructure/member-ref';
-import type { TenantRepository } from '../application/ports/tenant.repository';
+import type { NewTenant, TenantRepository } from '../application/ports/tenant.repository';
 import { toRetentionDays, type RetentionDays } from '../domain/retention';
 import type { Tenant, TenantDetails } from '../domain/tenant';
 
-const select = { id: true, slug: true, name: true } as const;
+const select = { id: true, slug: true, name: true, approval: true } as const;
 
 @Injectable()
 export class PrismaTenantRepository implements TenantRepository {
@@ -17,15 +17,16 @@ export class PrismaTenantRepository implements TenantRepository {
   }
 
   upsertBySlug(data: { slug: string; name: string }): Promise<Tenant> {
+    // La semilla demo nace aprobada: el default de la columna es PENDING (SPEC 18).
     return this.db.client.tenant.upsert({
       where: { slug: data.slug },
-      create: data,
+      create: { ...data, approval: 'APPROVED' },
       update: { name: data.name },
       select,
     });
   }
 
-  create(data: { slug: string; name: string }): Promise<Tenant> {
+  create(data: NewTenant): Promise<Tenant> {
     return this.db.client.tenant.create({ data, select }).catch(rethrowUniqueConflict);
   }
 
@@ -39,6 +40,8 @@ export class PrismaTenantRepository implements TenantRepository {
         deactivatedAt: true,
         deactivatedBy: { select: memberRefSelect },
         retentionDays: true,
+        contactPhone: true,
+        contactEmail: true,
       },
     });
     return (

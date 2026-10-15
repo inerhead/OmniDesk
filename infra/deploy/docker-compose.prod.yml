@@ -71,6 +71,8 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+      # Admins de plataforma (SPEC 18): vacío = nadie aprueba empresas nuevas.
+      PLATFORM_ADMIN_EMAILS: ${PLATFORM_ADMIN_EMAILS:-}
       # Métricas Prometheus (SPEC 11): vacío = /api/v1/metrics no existe.
       METRICS_TOKEN: ${METRICS_TOKEN:-}
       OUTBOX_LAG_THRESHOLD_SECONDS: ${OUTBOX_LAG_THRESHOLD_SECONDS:-60}

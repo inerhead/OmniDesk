@@ -9,6 +9,7 @@ export * from './images';
 export * from './integrations';
 export * from './invitations';
 export * from './members';
+export * from './platform';
 export * from './profile';
 export * from './push';
 export * from './realtime';

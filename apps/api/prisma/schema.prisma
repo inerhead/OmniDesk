@@ -26,6 +26,12 @@ enum ChannelProvider {
   CUSTOM
 }
 
+/// Revisión de la plataforma (SPEC 18). Una empresa rechazada se borra: no hay `REJECTED`.
+enum TenantApproval {
+  PENDING
+  APPROVED
+}
+
 enum ConversationStatus {
   OPEN
   CLOSED
@@ -80,21 +86,35 @@ enum AttachmentStatus {
 }
 
 model Tenant {
-  id                    String    @id @default(uuid(7)) @db.Uuid
-  slug                  String    @unique
+  id                    String         @id @default(uuid(7)) @db.Uuid
+  slug                  String         @unique
   name                  String
   /// Clave del logo en el bucket (SPEC 16); null sin logo.
-  logoKey               String?   @map("logo_key")
+  logoKey               String?        @map("logo_key")
   /// Versiona la URL del logo para la caché.
-  logoUpdatedAt         DateTime? @map("logo_updated_at") @db.Timestamptz(3)
+  logoUpdatedAt         DateTime?      @map("logo_updated_at") @db.Timestamptz(3)
   /// null = activa (SPEC 16).
-  deactivatedAt         DateTime? @map("deactivated_at") @db.Timestamptz(3)
-  deactivatedByMemberId String?   @map("deactivated_by_member_id") @db.Uuid
+  deactivatedAt         DateTime?      @map("deactivated_at") @db.Timestamptz(3)
+  deactivatedByMemberId String?        @map("deactivated_by_member_id") @db.Uuid
   /// Días que se conservan las conversaciones cerradas (SPEC 12): null = indefinidamente; si no, 90 | 180 | 365.
-  retentionDays         Int?      @map("retention_days")
-  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  retentionDays         Int?           @map("retention_days")
+  /// PENDING hasta que la plataforma la aprueba (SPEC 18).
+  approval              TenantApproval @default(PENDING)
+  approvedAt            DateTime?      @map("approved_at") @db.Timestamptz(3)
+  approvedByUserId      String?        @map("approved_by_user_id") @db.Uuid
+  /// null = no suspendida (SPEC 18).
+  suspendedAt           DateTime?      @map("suspended_at") @db.Timestamptz(3)
+  suspendedByUserId     String?        @map("suspended_by_user_id") @db.Uuid
+  suspensionReason      String?        @map("suspension_reason")
+  /// Móvil E.164 del solicitante; null en empresas anteriores a SPEC 18.
+  contactPhone          String?        @map("contact_phone")
+  /// Email de login del solicitante al pedir el alta; null en empresas anteriores a SPEC 18.
+  contactEmail          String?        @map("contact_email")
+  createdAt             DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
 
   deactivatedBy TenantMember? @relation("TenantDeactivatedBy", fields: [deactivatedByMemberId], references: [id], onDelete: Restrict)
+  approvedBy    User?         @relation("TenantApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  suspendedBy   User?         @relation("TenantSuspendedBy", fields: [suspendedByUserId], references: [id], onDelete: SetNull)
 
   channels      Channel[]
   credentials   IntegrationCredential[]
@@ -273,8 +293,36 @@ model User {
   memberships       TenantMember[]
   sessions          Session[]
   pushSubscriptions PushSubscription[]
+  approvedTenants   Tenant[]           @relation("TenantApprovedBy")
+  suspendedTenants  Tenant[]           @relation("TenantSuspendedBy")
+  tenantRejections  TenantRejection[]  @relation("TenantRejectionUser")
+  rejectionsMade    TenantRejection[]  @relation("TenantRejectionBy")
 
   @@map("users")
+}
+
+/// Solicitud rechazada (SPEC 18). La empresa se borra; queda esto para el aviso y la pestaña
+/// Rechazadas. Sin tenant_id ni RLS: solo la leen caminos de sistema. Se borra a los 20 días.
+model TenantRejection {
+  id               String    @id @default(uuid(7)) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  tenantName       String    @map("tenant_name")
+  tenantSlug       String    @map("tenant_slug")
+  reason           String
+  contactPhone     String?   @map("contact_phone")
+  contactEmail     String?   @map("contact_email")
+  requestedAt      DateTime  @map("requested_at") @db.Timestamptz(3)
+  rejectedAt       DateTime  @map("rejected_at") @db.Timestamptz(3)
+  rejectedByUserId String?   @map("rejected_by_user_id") @db.Uuid
+  /// El solicitante cerró el aviso o envió otra solicitud.
+  dismissedAt      DateTime? @map("dismissed_at") @db.Timestamptz(3)
+
+  user       User  @relation("TenantRejectionUser", fields: [userId], references: [id], onDelete: Cascade)
+  rejectedBy User? @relation("TenantRejectionBy", fields: [rejectedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([rejectedAt])
+  @@map("tenant_rejections")
 }
 
 /// Suscripción Web Push de un dispositivo. Pertenece al usuario, no a una empresa.
@@ -337,20 +385,20 @@ model Invitation {
 }
 
 model TenantMember {
-  id          String     @id @default(uuid(7)) @db.Uuid
-  tenantId    String     @map("tenant_id") @db.Uuid
-  displayName String     @map("display_name")
-  email       String
-  role        MemberRole
+  id                      String     @id @default(uuid(7)) @db.Uuid
+  tenantId                String     @map("tenant_id") @db.Uuid
+  displayName             String     @map("display_name")
+  email                   String
+  role                    MemberRole
   /// null solo en filas previas a SPEC 07 (la semilla demo las enlaza).
-  userId      String?    @map("user_id") @db.Uuid
+  userId                  String?    @map("user_id") @db.Uuid
   /// Baja lógica: el historial lo sigue referenciando.
-  removedAt   DateTime?  @map("removed_at") @db.Timestamptz(3)
-  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
-  notifyAssigned          Boolean @default(true) @map("notify_assigned")
-  notifyCustomerMessage   Boolean @default(true) @map("notify_customer_message")
-  notifySendFailed        Boolean @default(true) @map("notify_send_failed")
-  notifyNewAiConversation Boolean @default(false) @map("notify_new_ai_conversation")
+  removedAt               DateTime?  @map("removed_at") @db.Timestamptz(3)
+  createdAt               DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  notifyAssigned          Boolean    @default(true) @map("notify_assigned")
+  notifyCustomerMessage   Boolean    @default(true) @map("notify_customer_message")
+  notifySendFailed        Boolean    @default(true) @map("notify_send_failed")
+  notifyNewAiConversation Boolean    @default(false) @map("notify_new_ai_conversation")
 
   tenant                Tenant              @relation(fields: [tenantId], references: [id])
   user                  User?               @relation(fields: [userId], references: [id])

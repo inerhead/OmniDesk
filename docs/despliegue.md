@@ -63,6 +63,7 @@ Requisitos: Docker Engine con el plugin Compose v2, git y el Nginx que ya sirve 
 
    - `POSTGRES_PASSWORD`: solo letras y números, porque va dentro de `DATABASE_URL`.
    - `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`: los de la credencial del paso 2.
+   - `PLATFORM_ADMIN_EMAILS`: los emails de Google, separados por comas, que aprueban, rechazan y suspenden empresas en `/platform` (SPEC 18). Vacía, el API arranca con un aviso en el log y las empresas nuevas se quedan en revisión.
    - Ya vienen fijados: `NODE_ENV=production`, `DEMO_MODE=false`, `SESSION_COOKIE_SECURE=true` y `TRUST_PROXY=2` (Nginx + Caddy).
    - `APP_VERSION` se deja vacía: la rellena `deploy.sh`.
 
@@ -233,6 +234,7 @@ Todos los servicios tienen `restart: unless-stopped`: vuelven solos tras reinici
 | Google responde `redirect_uri_mismatch` | Falta la URI de §1.2 en la credencial, o `GOOGLE_CALLBACK_URL` no coincide con ella. |
 | `403 Origen no permitido` al enviar | `CORS_ORIGINS` no es exactamente `https://<dominio>` (sin `/omnidesk` ni barra final). |
 | El API no arranca tras un despliegue | Una migración falló: `$C logs api`. Corrige en el repo y vuelve a desplegar, o haz rollback (§4). |
+| Las empresas nuevas se quedan en **Solicitud en revisión** y nadie ve **Plataforma** | `PLATFORM_ADMIN_EMAILS` está vacía o no tiene el email exacto de tu cuenta de Google (SPEC 18). Al arrancar, el API lo avisa en `$C logs api`. Corrige el `.env` y vuelve a desplegar. |
 | `413` al adjuntar | Falta `client_max_body_size 20m` en el `location /omnidesk/` de Nginx. Sin esa línea, Nginx corta a partir de 1 MB. |
 
 ## 8. Evolución (fuera de SPEC 08)

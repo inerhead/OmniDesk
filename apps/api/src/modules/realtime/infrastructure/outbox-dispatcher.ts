@@ -10,6 +10,7 @@ import { AiReplyWorker } from '../../whatsapp/ai-reply-worker';
 import {
   RealtimeEventSchema,
   TENANT_INACTIVE_REASON,
+  TENANT_SUSPENDED_REASON,
   TenantStatusChangedEventSchema,
 } from '@omnidesk/contracts';
 import { ATTACHMENT_DOWNLOAD_REQUESTED } from '../../attachments/application/enqueue-attachment-download';
@@ -40,7 +41,11 @@ import {
   REALTIME_PUBLISHER,
   type RealtimePublisher,
 } from '../application/ports/realtime-publisher';
-import { PUSH_SENDER, type PushSender } from '../../notifications/application/deliver-push.use-case';
+import {
+  PUSH_SENDER,
+  type PushSender,
+} from '../../notifications/application/deliver-push.use-case';
+import { PLATFORM_PUSH_REQUESTED } from '../../../shared/application/platform-push';
 
 /** Un aviso tardío no aporta: 3 intentos en total (el primero y dos reintentos). */
 export const PUSH_MAX_ATTEMPTS = 3;
@@ -126,7 +131,8 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
         return this.failDownload(event, message, error instanceof PermanentDownloadError, now);
       if (event.type === MESSAGE_SEND_REQUESTED || event.type === 'ai.reply_requested')
         return this.failSend(event, message, now);
-      if (event.type === 'notification.requested') return this.failPush(event, message, now);
+      if (event.type === 'notification.requested' || event.type === PLATFORM_PUSH_REQUESTED)
+        return this.failPush(event, message, now);
 
       const attempts = event.attempts + 1;
       const delaySeconds = Math.min(2 ** attempts, MAX_BACKOFF_SECONDS);
@@ -141,8 +147,9 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
   }
 
   /**
-   * Empresa inactiva (SPEC 16): no sale nada. Los envíos pasan a `FAILED` con `TENANT_INACTIVE` sin
-   * llamar al proveedor (también los que ya estaban en cola); la IA y el push se dan por publicados.
+   * Empresa no activa (SPEC 16 y 18): no sale nada. Los envíos pasan a `FAILED` sin llamar al
+   * proveedor (también los que ya estaban en cola): con `TENANT_SUSPENDED` si la suspendió la
+   * plataforma y con `TENANT_INACTIVE` en otro caso. La IA y el push se dan por publicados.
    * Devuelve `true` si el evento queda resuelto así.
    */
   private async cutForInactiveTenant(event: PendingOutboxEvent): Promise<boolean> {
@@ -151,9 +158,11 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
       event.type === 'ai.reply_requested' ||
       event.type === 'notification.requested';
     if (!outgoing || !this.tenantStatus) return false;
-    if (await this.tenantStatus.isActive(event.tenantId)) return false;
+    const state = await this.tenantStatus.state(event.tenantId);
+    if (state === 'active') return false;
     if (event.type === MESSAGE_SEND_REQUESTED) {
-      await this.sender.fail(event.tenantId, event.payload, TENANT_INACTIVE_REASON);
+      const reason = state === 'suspended' ? TENANT_SUSPENDED_REASON : TENANT_INACTIVE_REASON;
+      await this.sender.fail(event.tenantId, event.payload, reason);
     }
     return true;
   }
@@ -184,6 +193,11 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
       case 'notification.requested':
         if (!this.pushes) throw new Error('Envío de notificaciones no disponible');
         await this.pushes.deliver(event.payload);
+        return;
+      // SPEC 18: no pasa por `cutForInactiveTenant`; la empresa puede estar en revisión o borrada.
+      case PLATFORM_PUSH_REQUESTED:
+        if (!this.pushes) throw new Error('Envío de notificaciones no disponible');
+        await this.pushes.deliverPlatform(event.payload);
         return;
       default:
         throw new Error(`Tipo de evento no soportado: ${event.type}`);

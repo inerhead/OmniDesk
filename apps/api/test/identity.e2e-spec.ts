@@ -65,11 +65,18 @@ describe('Identidad y tenancy (e2e)', () => {
     return { user, cookie, client: as(cookie) };
   }
 
-  /** Empresa nueva creada por un usuario nuevo (OWNER), con su sesión. */
+  /** La plataforma aprueba la empresa (SPEC 18), directo en la base. */
+  const approve = (tenantId: string) =>
+    prisma.tenant.update({ where: { id: tenantId }, data: { approval: 'APPROVED' } });
+
+  /** Empresa nueva creada por un usuario nuevo (OWNER) y aprobada, con su sesión. */
   async function newCompany(ownerName = 'Dueña') {
     const owner = await signedUpUser(ownerName);
     const slug = `acme-${unique()}`;
-    const res = await owner.client.post('/api/v1/tenants', { name: 'Acme', slug }).expect(201);
+    const res = await owner.client
+      .post('/api/v1/tenants', { name: 'Acme', slug, contactPhone: phone() })
+      .expect(201);
+    await approve(res.body.id as string);
     return { ...owner, tenantId: res.body.id as string, slug };
   }
 
@@ -259,7 +266,9 @@ describe('Identidad y tenancy (e2e)', () => {
       ]);
 
       const other = await signedUpUser();
-      const res = await other.client.post('/api/v1/tenants', { name: 'Otra', slug }).expect(409);
+      const res = await other.client
+        .post('/api/v1/tenants', { name: 'Otra', slug, contactPhone: phone() })
+        .expect(409);
       expect(res.body.code).toBe('SLUG_TAKEN');
     });
 
@@ -270,7 +279,11 @@ describe('Identidad y tenancy (e2e)', () => {
 
       for (const member of [agent, admin]) {
         const res = await member.client
-          .post('/api/v1/tenants', { name: 'Propia', slug: `propia-${unique()}` })
+          .post('/api/v1/tenants', {
+            name: 'Propia',
+            slug: `propia-${unique()}`,
+            contactPhone: phone(),
+          })
           .expect(403);
         expect(res.body.code).toBe('TENANT_CREATION_FORBIDDEN');
       }
@@ -328,9 +341,14 @@ describe('Identidad y tenancy (e2e)', () => {
       const { client, tenantId: first } = await newCompany();
       const second = (
         await client
-          .post('/api/v1/tenants', { name: 'Segunda', slug: `seg-${unique()}` })
+          .post('/api/v1/tenants', {
+            name: 'Segunda',
+            slug: `seg-${unique()}`,
+            contactPhone: phone(),
+          })
           .expect(201)
       ).body.id as string;
+      await approve(second);
 
       await client.post('/api/v1/me/active-tenant', { tenantId: first }).expect(200);
       expect((await client.get('/api/v1/me').expect(200)).body.activeTenantId).toBe(first);

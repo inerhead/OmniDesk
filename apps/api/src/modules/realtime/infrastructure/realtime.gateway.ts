@@ -55,6 +55,9 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       if (resolution.kind === 'inactive' && resolution.actor.role !== 'OWNER') {
         return this.reject(client, 'Empresa inactiva');
       }
+      // En revisión o suspendida (SPEC 18): nadie entra a la sala. La web consulta `/me`.
+      if (resolution.kind === 'pending') return this.reject(client, 'Empresa en revisión');
+      if (resolution.kind === 'suspended') return this.reject(client, 'Empresa suspendida');
       (client as PresenceSocket).data.memberId = resolution.actor.memberId;
       await client.join(tenantRoom(resolution.actor.tenantId));
       // Solo los sockets aceptados; si se desconectó mientras se resolvía la sesión, no cuenta.

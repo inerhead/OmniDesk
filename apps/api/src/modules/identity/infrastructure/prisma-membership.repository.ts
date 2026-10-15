@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaDb } from '../../../shared/infrastructure/prisma/prisma-transaction-runner';
 import type { MembershipRepository } from '../application/ports/membership.repository';
 import { tenantLogoUrl } from '../../tenancy/domain/tenant';
+import { tenantState, tenantStateSelect } from '../../tenancy/domain/tenant-state';
 import type { Membership } from '../domain/user';
 import { avatarSourceSelect, memberAvatarUrl } from './member-ref';
 
@@ -11,7 +12,15 @@ const select = {
   role: true,
   userId: true,
   tenant: {
-    select: { name: true, slug: true, logoKey: true, logoUpdatedAt: true, deactivatedAt: true },
+    select: {
+      name: true,
+      slug: true,
+      logoKey: true,
+      logoUpdatedAt: true,
+      suspensionReason: true,
+      createdAt: true,
+      ...tenantStateSelect,
+    },
   },
 } as const;
 
@@ -25,19 +34,30 @@ type Row = {
     slug: string;
     logoKey: string | null;
     logoUpdatedAt: Date | null;
+    suspensionReason: string | null;
+    createdAt: Date;
+    approval: 'PENDING' | 'APPROVED';
+    suspendedAt: Date | null;
     deactivatedAt: Date | null;
   };
 };
 
-const toMembership = (row: Row): Membership => ({
-  memberId: row.id,
-  tenantId: row.tenantId,
-  tenantName: row.tenant.name,
-  tenantSlug: row.tenant.slug,
-  role: row.role,
-  tenantLogoUrl: tenantLogoUrl({ id: row.tenantId, ...row.tenant }),
-  tenantActive: row.tenant.deactivatedAt === null,
-});
+const toMembership = (row: Row): Membership => {
+  const state = tenantState(row.tenant);
+  return {
+    memberId: row.id,
+    tenantId: row.tenantId,
+    tenantName: row.tenant.name,
+    tenantSlug: row.tenant.slug,
+    role: row.role,
+    tenantLogoUrl: tenantLogoUrl({ id: row.tenantId, ...row.tenant }),
+    tenantActive: state === 'active',
+    tenantState: state,
+    suspensionReason: state === 'suspended' ? row.tenant.suspensionReason : null,
+    suspendedAt: state === 'suspended' ? (row.tenant.suspendedAt?.toISOString() ?? null) : null,
+    requestedAt: state === 'pending' ? row.tenant.createdAt.toISOString() : null,
+  };
+};
 
 @Injectable()
 export class PrismaMembershipRepository implements MembershipRepository {
@@ -70,9 +90,9 @@ export class PrismaMembershipRepository implements MembershipRepository {
 
   async listLoginMembersOfTenant(tenantSlug: string) {
     const rows = await this.db.client.tenantMember.findMany({
-      // Una empresa inactiva (SPEC 16) no ofrece login de desarrollo.
+      // Una empresa inactiva (SPEC 16) o suspendida (SPEC 18) no ofrece login de desarrollo.
       where: {
-        tenant: { slug: tenantSlug, deactivatedAt: null },
+        tenant: { slug: tenantSlug, deactivatedAt: null, suspendedAt: null, approval: 'APPROVED' },
         removedAt: null,
         userId: { not: null },
       },

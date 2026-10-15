@@ -7,6 +7,9 @@ export type ActorResolution =
   | { kind: 'ok'; actor: ActorContext }
   /** La empresa activa está inactiva (SPEC 16): solo sus OWNER entran, y solo a reactivarla. */
   | { kind: 'inactive'; actor: ActorContext }
+  /** En revisión o suspendida por la plataforma (SPEC 18): nadie entra, ni el OWNER. */
+  | { kind: 'pending'; actor: ActorContext }
+  | { kind: 'suspended'; actor: ActorContext }
   /** La sesión no tiene empresa activa o ya no es miembro activo de ella. */
   | { kind: 'no-active-tenant' };
 
@@ -25,6 +28,7 @@ export class ResolveActorUseCase {
       memberId: membership.memberId,
       role: membership.role,
     };
-    return { kind: membership.tenantActive ? 'ok' : 'inactive', actor };
+    const state = membership.tenantState;
+    return { kind: state === 'active' ? 'ok' : state, actor };
   }
 }

@@ -20,8 +20,18 @@ const NotificationRequestedSchema = z.object({
   messageId: z.uuid().optional(),
 });
 
+const PlatformPushRequestedSchema = z.object({
+  userIds: z.array(z.uuid()),
+  title: z.string(),
+  body: z.string(),
+  url: z.string().startsWith('/'),
+  tag: z.string(),
+});
+
 export interface PushSender {
   deliver(payload: unknown): Promise<void>;
+  /** `platform.push_requested` (SPEC 18): a usuarios, sin preferencias ni presencia. */
+  deliverPlatform(payload: unknown): Promise<void>;
 }
 
 export const PUSH_SENDER = Symbol('PUSH_SENDER');
@@ -61,6 +71,35 @@ export class DeliverPushUseCase implements PushSender {
         continue;
       }
       for (const subscription of target.subscriptions) {
+        try {
+          await this.transport.send(subscription, body, { ttl: PUSH_TTL_SECONDS, topic });
+          await this.notifications.touch(subscription.endpoint, new Date());
+        } catch (error) {
+          if (error instanceof PushEndpointGoneError) {
+            await this.notifications.deleteByEndpoint(subscription.endpoint);
+            continue;
+          }
+          throw error;
+        }
+      }
+    }
+  }
+
+  async deliverPlatform(payload: unknown): Promise<void> {
+    if (!pushConfigured(this.env)) return;
+    const event = PlatformPushRequestedSchema.parse(payload);
+    const prefix = this.env.PUBLIC_BASE_PATH === '/' ? '' : this.env.PUBLIC_BASE_PATH;
+    // Sin empresa: abrir el aviso no cambia la empresa activa.
+    const body = JSON.stringify({
+      title: event.title,
+      body: event.body,
+      tag: event.tag,
+      url: `${prefix}${event.url}`,
+      tenantId: '',
+    });
+    const topic = event.tag.replace(/[^A-Za-z0-9_-]/g, '').slice(-32);
+    for (const userId of new Set(event.userIds)) {
+      for (const subscription of await this.notifications.subscriptionsOf(userId)) {
         try {
           await this.transport.send(subscription, body, { ttl: PUSH_TTL_SECONDS, topic });
           await this.notifications.touch(subscription.endpoint, new Date());

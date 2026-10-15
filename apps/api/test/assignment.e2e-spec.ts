@@ -105,7 +105,7 @@ describe('Asignación y control de IA (e2e)', () => {
     for (const id of [owner, laura, mateo]) cookies.set(id, await devLogin(app, id));
 
     const otherTenant = await prisma.tenant.create({
-      data: { slug: `otro-${randomUUID()}`, name: 'Otro tenant' },
+      data: { approval: 'APPROVED', slug: `otro-${randomUUID()}`, name: 'Otro tenant' },
     });
     foreignMember = (
       await prisma.tenantMember.create({

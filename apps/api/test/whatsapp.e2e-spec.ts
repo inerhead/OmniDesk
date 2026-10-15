@@ -88,7 +88,7 @@ describe('WhatsApp directo e IA opcional (e2e)', () => {
   });
   beforeEach(async () => {
     const tenant = await db.tenant.create({
-      data: { name: 'WhatsApp test', slug: `wa-${randomUUID()}` },
+      data: { approval: 'APPROVED', name: 'WhatsApp test', slug: `wa-${randomUUID()}` },
     });
     tenantId = tenant.id;
     const user = await db.user.create({
@@ -184,7 +184,9 @@ describe('WhatsApp directo e IA opcional (e2e)', () => {
       .set('Origin', WEB_ORIGIN)
       .send({ aiEnabled: true })
       .expect(403);
-    const foreign = await db.tenant.create({ data: { name: 'Otra', slug: randomUUID() } });
+    const foreign = await db.tenant.create({
+      data: { approval: 'APPROVED', name: 'Otra', slug: randomUUID() },
+    });
     const foreignChannel = await db.channel.create({
       data: {
         tenantId: foreign.id,

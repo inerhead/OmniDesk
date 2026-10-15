@@ -96,8 +96,11 @@ describe('Foto de perfil (e2e)', () => {
   });
   afterAll(() => app.close());
   beforeEach(async () => {
-    tenantId = (await db.tenant.create({ data: { name: 'Fotos', slug: `fotos-${randomUUID()}` } }))
-      .id;
+    tenantId = (
+      await db.tenant.create({
+        data: { approval: 'APPROVED', name: 'Fotos', slug: `fotos-${randomUUID()}` },
+      })
+    ).id;
     owner = await addMember('OWNER', 'Owner');
     agent = await addMember('AGENT', 'Agente');
   });
@@ -297,7 +300,9 @@ describe('Foto de perfil (e2e)', () => {
       const path = `/api/v1/users/${agent.userId}/avatar`;
 
       const otherTenant = (
-        await db.tenant.create({ data: { name: 'Otra', slug: `otra-${randomUUID()}` } })
+        await db.tenant.create({
+          data: { approval: 'APPROVED', name: 'Otra', slug: `otra-${randomUUID()}` },
+        })
       ).id;
       const stranger = await addMember('OWNER', 'Ajeno', otherTenant);
       await http().get(path).set('Cookie', stranger.cookie).expect(404);

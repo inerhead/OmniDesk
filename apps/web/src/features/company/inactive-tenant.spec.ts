@@ -13,9 +13,16 @@ const me = (tenantActive: boolean): MeResponse => ({
       role: 'OWNER',
       tenantLogoUrl: null,
       tenantActive,
+      tenantState: tenantActive ? 'active' : 'inactive',
+      suspensionReason: null,
+      suspendedAt: null,
+      requestedAt: null,
     },
   ],
   activeTenantId: 't1',
+  isPlatformAdmin: false,
+  platformPendingCount: null,
+  tenantRejection: null,
 });
 
 describe('inactiveTenantRedirect', () => {

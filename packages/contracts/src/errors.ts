@@ -17,6 +17,12 @@ export const ApiErrorCodeSchema = z.enum([
   'TENANT_INACTIVE',
   'CONFIRMATION_MISMATCH',
   'DEMO_SLUG_LOCKED',
+  // SPEC 18: revisión y suspensión por la plataforma.
+  'TENANT_PENDING',
+  'TENANT_SUSPENDED',
+  'REQUEST_PENDING',
+  'NOT_PENDING',
+  'NOT_APPROVED',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCodeSchema>;
 

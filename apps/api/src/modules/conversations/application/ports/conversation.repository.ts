@@ -70,6 +70,8 @@ export interface ConversationRepository {
     tenantId: string,
     reason: string,
   ): Promise<Array<{ id: string; conversationId: string }>>;
+  /** Cambia el motivo de los salientes `FAILED` con `from` a `to` (SPEC 18). Devuelve cuántos. */
+  relabelFailedOutbound(tenantId: string, from: string, to: string): Promise<number>;
 }
 
 export const CONVERSATION_REPOSITORY = Symbol('CONVERSATION_REPOSITORY');

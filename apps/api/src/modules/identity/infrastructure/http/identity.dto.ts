@@ -22,5 +22,12 @@ export function toMeResponse(me: MeView) {
     },
     memberships: me.memberships,
     activeTenantId: me.activeTenantId,
+    isPlatformAdmin: me.isPlatformAdmin,
+    platformPendingCount: me.platformPendingCount,
+    tenantRejection: me.tenantRejection && {
+      tenantName: me.tenantRejection.tenantName,
+      reason: me.tenantRejection.reason,
+      rejectedAt: me.tenantRejection.rejectedAt.toISOString(),
+    },
   };
 }

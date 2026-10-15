@@ -19,11 +19,8 @@ export class GoogleLoginUseCase {
   ): Promise<CreatedSession & { hasMemberships: boolean }> {
     const user = await this.users.upsertFromGoogle(identity);
     const memberships = await this.memberships.listForUser(user.id);
-    const created = await this.createSession.execute({
-      userId: user.id,
-      ...(memberships[0] && { activeTenantId: memberships[0].tenantId }),
-      userAgent,
-    });
+    // Sin empresa indicada: `CreateSessionUseCase` elige la de respaldo.
+    const created = await this.createSession.execute({ userId: user.id, userAgent });
     return { ...created, hasMemberships: memberships.length > 0 };
   }
 }

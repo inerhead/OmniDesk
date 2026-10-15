@@ -42,6 +42,8 @@ El mismo job borra, en todas las empresas, lo que ya no sirve:
 | `sessions` | expirar o revocarse. |
 | `invitations` | aceptarse, revocarse o expirar. |
 
+Además borra los **rechazos de solicitudes de empresa** (`tenant_rejections`, SPEC 18) a los **20 días** de rechazarse. Al rechazar, la empresa en revisión y su membresía se borran al momento: solo queda esa fila, con el nombre, el slug, el contacto (móvil y email) y el motivo, para el aviso del solicitante y la pestaña **Rechazadas** de `/platform`. No lleva `tenant_id` ni RLS: solo la leen los caminos de sistema.
+
 ## `deletion_log`
 
 Deja constancia de cada borrado **sin datos personales**: empresa, tipo (`contact` o `retention`), quién (el miembro, o vacío en el job), cuándo y cuántas conversaciones y mensajes. No guarda nombres, teléfonos ni contenido.

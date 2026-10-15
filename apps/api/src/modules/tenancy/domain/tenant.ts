@@ -1,9 +1,13 @@
 import type { RetentionDays } from './retention';
 
+export type TenantApproval = 'PENDING' | 'APPROVED';
+
 export interface Tenant {
   id: string;
   slug: string;
   name: string;
+  /** Revisión de la plataforma (SPEC 18). */
+  approval: TenantApproval;
 }
 
 /** Empresa con logo y estado, para `/settings/company`. */
@@ -12,6 +16,9 @@ export interface TenantDetails extends Tenant, TenantLogoSource {
   deactivatedAt: Date | null;
   deactivatedBy: { id: string; displayName: string; avatarUrl: string | null } | null;
   retentionDays: RetentionDays;
+  /** Datos de contacto del alta (SPEC 18); `null` en empresas anteriores. */
+  contactPhone: string | null;
+  contactEmail: string | null;
 }
 
 /** La demo: el login de desarrollo la busca por este slug, así que no se puede cambiar. */

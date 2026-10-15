@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { tenantState, tenantStateSelect } from '../../tenancy/domain/tenant-state';
 import { PrismaDb } from '../../../shared/infrastructure/prisma/prisma-transaction-runner';
 import {
   memberRefSelect,
@@ -66,7 +67,7 @@ export class PrismaInvitationRepository implements InvitationRepository {
       select: {
         ...select,
         tenant: {
-          select: { name: true, logoKey: true, logoUpdatedAt: true, deactivatedAt: true },
+          select: { name: true, logoKey: true, logoUpdatedAt: true, ...tenantStateSelect },
         },
       },
     });
@@ -77,7 +78,8 @@ export class PrismaInvitationRepository implements InvitationRepository {
       tenantName: tenant.name,
       tenantLogoKey: tenant.logoKey,
       tenantLogoUpdatedAt: tenant.logoUpdatedAt,
-      tenantActive: tenant.deactivatedAt === null,
+      tenantActive: tenantState(tenant) === 'active',
+      tenantSuspended: tenantState(tenant) === 'suspended',
     };
   }
 

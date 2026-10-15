@@ -31,6 +31,18 @@ const csvOfHosts = z
       .filter((item) => item.length > 0),
   );
 
+/** Lista de emails separada por comas, en minúsculas y sin espacios. Vacía si no se define. */
+const csvOfEmails = z
+  .string()
+  .default('')
+  .transform((value) =>
+    value
+      .split(',')
+      .map((item) => item.trim().toLowerCase())
+      .filter((item) => item.length > 0),
+  )
+  .pipe(z.array(z.email()));
+
 const booleanString = z
   .enum(['true', 'false'])
   .default('false')
@@ -52,6 +64,8 @@ export const EnvSchema = z
     CORS_ORIGINS: csvOfUrls.default(['http://localhost:8080', 'http://localhost:5173']),
     /** Habilita el tenant demo (seed + lectura sin login). Prohibido en producción. */
     DEMO_MODE: booleanString,
+    /** Admins de plataforma (SPEC 18): aprueban, rechazan y suspenden empresas. */
+    PLATFORM_ADMIN_EMAILS: csvOfEmails,
     /** API key del canal demo; se guarda hasheada. */
     DEMO_CHANNEL_API_KEY: z.string().min(24).optional(),
     /** Probabilidad (0 a 1) de que el proveedor simulado (canales `SIMULATED`) falle un envío. */

@@ -107,7 +107,7 @@ describe('GET /api/v1/health: Outbox (SPEC 11)', () => {
   it('con un evento pendiente desde hace 2 min responde 200 con outbox: lagging', async () => {
     const db = app.get(PrismaService);
     const tenant = await db.tenant.create({
-      data: { name: 'Health', slug: `health-${Date.now()}` },
+      data: { approval: 'APPROVED', name: 'Health', slug: `health-${Date.now()}` },
     });
     await db.outboxEvent.create({
       data: {

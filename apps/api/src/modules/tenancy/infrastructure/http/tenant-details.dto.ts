@@ -17,5 +17,7 @@ export function toTenantDetailsDto(tenant: TenantDetails): TenantDetailsResponse
     deactivatedBy: tenant.deactivatedBy,
     slugLocked: tenant.slug === DEMO_TENANT_SLUG,
     retentionDays: tenant.retentionDays,
+    contactPhone: tenant.contactPhone,
+    contactEmail: tenant.contactEmail,
   };
 }

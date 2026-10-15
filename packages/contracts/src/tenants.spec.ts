@@ -43,6 +43,8 @@ describe('TenantDetailsSchema', () => {
         deactivatedBy: null,
         slugLocked: false,
         retentionDays: null,
+        contactPhone: null,
+        contactEmail: null,
       }).success,
     ).toBe(true);
   });

@@ -11,6 +11,6 @@ export function inactiveTenantRedirect(
   pathname: string,
 ): string | null {
   const membership = me?.memberships.find((item) => item.tenantId === me.activeTenantId);
-  if (!membership || membership.tenantActive) return null;
+  if (membership?.tenantState !== 'inactive') return null;
   return pathname === COMPANY_PATH ? null : COMPANY_PATH;
 }

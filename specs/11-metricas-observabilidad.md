@@ -1,9 +1,22 @@
 # SPEC 11 — Robustez II: métricas Prometheus y health extendido
 
 > **Status:** Approved
-> **Depends on:** SPEC 08, SPEC 10
+> **Depends on:** SPEC 08, SPEC 12
 > **Date:** 2026-10-12
 > **Objective:** El API expone en `/api/v1/metrics`, protegido por token y bloqueado en el gateway público, métricas Prometheus de latencia HTTP, Outbox, envíos, sockets, integraciones y rate limiting, y `/health` añade el estado del Outbox y la versión, que la página Estado muestra.
+
+## Ajustes del 2026-10-15
+
+Este spec se escribió antes de decidir que SPEC 10 va al final. Al implementarlo se acordó:
+
+- **Rate limiting sin SPEC 10:** `omnidesk_rate_limit_rejections_total` y `omnidesk_rate_limit_store_errors_total` se registran (salen en `/metrics` con valor 0) y el puerto `Metrics` ya trae `rateLimitRejected` y `rateLimitStoreError`. La instrumentación de `RateLimitGuard` y el criterio del `429` de `send-message` llegan con SPEC 10.
+- **`version` en `/health`:** ya existía y ya tomaba `APP_VERSION` cuando está definida (SPEC 08). Lo único que cambia es el valor por defecto: `"dev"` en lugar de la versión de `package.json` (`0.0.0`).
+
+Y al implementar:
+
+- **Latencia HTTP con un middleware de Express, no un interceptor.** Un interceptor no ve las peticiones que no llegan a ningún handler, y el riesgo pide etiquetarlas `route="unmatched"`. El 404 de Nest usa una ruta comodín (`/api{/*splat}`), que también cuenta como `unmatched`.
+- **Página Estado:** el mensaje "API: ok · DB: ok" ya no existe (la página se rediseñó). El Outbox es una fila más ("Al día / Atrasado / Sin datos"); atrasado deja el resumen en degradado ("Outbox: atrasado") y, si hay otro problema, se añade " · Outbox: atrasado" a su descripción. La versión ya se mostraba en el detalle del API.
+- **Intentos de envío:** el dispatcher hace 6 intentos (el primero y 5 reintentos; lo comprueba el e2e de canales), así que con `SIMULATED_PROVIDER_FAILURE_RATE=1` el contador de fallos sube en 6, no en 5.
 
 ## Por qué existe este spec
 
@@ -114,7 +127,7 @@ OUTBOX_LAG_THRESHOLD_SECONDS=60
    - Pruebas unitarias con `NoopMetrics` espía.
 5. **Integraciones, rate limiting y sockets.**
    - Contadores en `ChannelCredentialGuard` y en los controladores de integración.
-   - En `RateLimitGuard` (SPEC 10).
+   - En `RateLimitGuard` llega con SPEC 10 (aquí solo se registran los contadores).
    - Gauge de sockets en `realtime.gateway.ts` (conexión y desconexión).
 6. **Health extendido.**
    - `CheckHealth` añade `outbox` y `version`.
@@ -130,10 +143,10 @@ OUTBOX_LAG_THRESHOLD_SECONDS=60
 - [ ] Sin cabecera, responde `401`. Con `METRICS_TOKEN` vacío, `404`.
 - [ ] `https://dev.gastromesa.com/omnidesk/api/v1/metrics` responde `404`, incluso con el token correcto.
 - [ ] Tras abrir 5 conversaciones distintas en la web, `omnidesk_http_request_duration_seconds_count{route="/api/v1/conversations/:id"}` existe, y no hay series con ids concretos.
-- [ ] Con `SIMULATED_PROVIDER_FAILURE_RATE=1` y un mensaje enviado, `omnidesk_message_send_attempts_total{result="failure"}` sube en 5 y `omnidesk_messages_failed_total` en 1.
+- [ ] Con `SIMULATED_PROVIDER_FAILURE_RATE=1` y un mensaje enviado, `omnidesk_message_send_attempts_total{result="failure"}` sube en 6 (el intento inicial y 5 reintentos) y `omnidesk_messages_failed_total` en 1.
 - [ ] Con dos pestañas abiertas, `omnidesk_realtime_connected_sockets` vale 2. Al cerrar una, vale 1.
 - [ ] Una petición de integración con firma inválida incrementa `omnidesk_integration_requests_total{result="invalid_signature"}`.
-- [ ] Un `429` de `send-message` incrementa `omnidesk_rate_limit_rejections_total{policy="send-message"}`.
+- [ ] Un `429` de `send-message` incrementa `omnidesk_rate_limit_rejections_total{policy="send-message"}`. *(Se verifica con SPEC 10.)*
 - [ ] Con el dispatcher detenido (evento pendiente de más de 60 s), `/health` responde `200` con `outbox: "lagging"`, y la página Estado muestra "Outbox: atrasado".
 - [ ] `/health` incluye `version` igual a la etiqueta desplegada (`v0.x.y`) en dev y prod.
 - [ ] Ninguna serie de `/metrics` contiene un uuid, un email ni un teléfono (`grep -E '[0-9a-f]{8}-|@|\+[0-9]{8,}'` sin resultados).

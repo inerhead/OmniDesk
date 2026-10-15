@@ -4,8 +4,10 @@ import { z } from 'zod';
 export const HealthResponseSchema = z.object({
   status: z.enum(['ok', 'error']),
   checks: z.object({ database: z.enum(['up', 'down']) }),
-  /** Versión de apps/api/package.json. */
+  /** Versión desplegada (`APP_VERSION`: etiqueta o commit); `dev` sin ella. */
   version: z.string(),
+  /** Outbox (SPEC 11): `lagging` si el pendiente más antiguo supera el umbral; `unknown` si no se pudo leer. */
+  outbox: z.enum(['ok', 'lagging', 'unknown']),
   /** Fecha ISO 8601 del chequeo. */
   timestamp: z.string(),
 });

@@ -1,4 +1,5 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import { METRICS, type Metrics } from '../../../shared/application/metrics.port';
 import { OUTBOX_PORT, type OutboxPort } from '../../../shared/application/outbox.port';
 import type { IntegrationContext } from '../../../shared/application/request-context';
 import {
@@ -39,14 +40,17 @@ export class UpdateDeliveryStatusUseCase {
     @Inject(CONVERSATION_REPOSITORY) private readonly conversations: ConversationRepository,
     @Inject(EVENT_INBOX) private readonly inbox: EventInbox,
     @Inject(OUTBOX_PORT) private readonly outbox: OutboxPort,
+    @Optional() @Inject(METRICS) private readonly metrics?: Metrics,
   ) {}
 
   /** Reporte de una integración (n8n, simulador): deduplicado por `(canal, "<messageId>:<status>")`. */
-  execute(
+  async execute(
     integration: IntegrationContext,
     input: DeliveryStatusInput,
   ): Promise<DeliveryStatusResult> {
-    return this.tx.run(() => this.apply(integration, input, true));
+    const result = await this.tx.run(() => this.apply(integration, input, true));
+    if (result.kind === 'ok') this.metrics?.deliveryStatusUpdate(input.status, result.applied);
+    return result;
   }
 
   /** Cambio propio del API (el dispatcher marca `SENT` o `FAILED`): sin deduplicar. */

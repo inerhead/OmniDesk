@@ -14,6 +14,7 @@ import { io, type Socket } from 'socket.io-client';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
+import { PromMetrics } from '../src/modules/observability/infrastructure/prom-metrics';
 import { PrismaService } from '../src/shared/infrastructure/prisma/prisma.service';
 import { devLogin, sessionFor } from './support/session';
 import { E2E_DEMO_KEY, testEnv } from './support/test-env';
@@ -226,6 +227,32 @@ describe('Tiempo real: Outbox + Socket.IO (e2e)', () => {
       expect(socket.connected).toBe(false);
       return message;
     };
+
+    it('el gauge de sockets cuenta solo los aceptados y baja al desconectar (SPEC 11)', async () => {
+      const gauge = app.get(PromMetrics).realtimeConnectedSockets;
+      const value = async () => (await gauge.get()).values[0]?.value ?? 0;
+      /** El join del servidor termina después del `connect` del cliente: se espera al valor. */
+      const until = async (expected: number) => {
+        for (let attempt = 0; attempt < 40 && (await value()) !== expected; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+        expect(await value()).toBe(expected);
+      };
+      const base = await value();
+
+      const first = connect();
+      const second = connect();
+      await Promise.all([connected(first), connected(second)]);
+      await until(base + 2);
+
+      await rejected(connect(null));
+      expect(await value()).toBe(base + 2);
+
+      first.close();
+      await until(base + 1);
+      second.close();
+      await until(base);
+    });
 
     it('sin cookie rechaza la conexión', async () => {
       expect(await rejected(connect(null))).toBe('Autenticación requerida');

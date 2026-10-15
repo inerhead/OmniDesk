@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { basePath } from '@/shared/config/env';
 import { Avatar } from '@/shared/ui/avatar';
 import { Button } from '@/shared/ui/button';
@@ -96,6 +96,16 @@ export function LoginPage() {
           No hay ningún método de login configurado.
         </p>
       )}
+
+      <p className="text-muted-foreground text-center text-xs">
+        <Link to="/privacidad" className="underline">
+          Privacidad
+        </Link>
+        {' · '}
+        <Link to="/terminos" className="underline">
+          Términos
+        </Link>
+      </p>
     </AuthCard>
   );
 }

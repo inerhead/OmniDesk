@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { NoopMetrics } from '../../observability/testing/noop-metrics';
 import { FindOutboundForSendUseCase } from '../../conversations/application/find-outbound-for-send.use-case';
 import { UpdateDeliveryStatusUseCase } from '../../conversations/application/update-delivery-status.use-case';
 import {
@@ -50,10 +51,12 @@ describe('DispatchOutboundMessageUseCase', () => {
   let provider: FakeProvider;
   let useCase: DispatchOutboundMessageUseCase;
   let messageId: string;
+  let metrics: NoopMetrics;
 
   beforeEach(async () => {
     conversations = new InMemoryConversations();
     provider = new FakeProvider();
+    metrics = new NoopMetrics();
     useCase = new DispatchOutboundMessageUseCase(
       new FindOutboundForSendUseCase(conversations),
       new UpdateDeliveryStatusUseCase(
@@ -63,6 +66,8 @@ describe('DispatchOutboundMessageUseCase', () => {
         new InMemoryOutbox(),
       ),
       new FakeRegistry(provider),
+      undefined,
+      metrics,
     );
     const conversation = await conversations.createOpen({
       tenantId: 't1',
@@ -149,5 +154,46 @@ describe('DispatchOutboundMessageUseCase', () => {
     await useCase.send('t1', { messageId });
 
     expect(conversations.messages[0]).toMatchObject({ status: 'SENT', failureReason: null });
+  });
+
+  describe('métricas', () => {
+    it('cuenta un intento con éxito por envío', async () => {
+      const attempt = vi.spyOn(metrics, 'messageSendAttempt');
+
+      await useCase.send('t1', { messageId });
+
+      expect(attempt).toHaveBeenCalledExactlyOnceWith('N8N', 'success');
+    });
+
+    it('cuenta un intento fallido cuando el proveedor falla, sin marcar FAILED', async () => {
+      const attempt = vi.spyOn(metrics, 'messageSendAttempt');
+      const failed = vi.spyOn(metrics, 'messageFailed');
+      provider.error = new Error('proveedor caído');
+
+      await expect(useCase.send('t1', { messageId })).rejects.toThrow();
+
+      expect(attempt).toHaveBeenCalledExactlyOnceWith('N8N', 'failure');
+      expect(failed).not.toHaveBeenCalled();
+    });
+
+    it('cuenta el mensaje fallido una sola vez aunque fail se repita', async () => {
+      const failed = vi.spyOn(metrics, 'messageFailed');
+
+      await useCase.fail('t1', { messageId }, 'proveedor caído');
+      await useCase.fail('t1', { messageId }, 'proveedor caído');
+
+      expect(failed).toHaveBeenCalledExactlyOnceWith('N8N');
+    });
+
+    it('un canal sin configurar cuenta un intento fallido y un mensaje fallido', async () => {
+      const attempt = vi.spyOn(metrics, 'messageSendAttempt');
+      const failed = vi.spyOn(metrics, 'messageFailed');
+      provider.error = new ChannelNotConfiguredError('sin secreto');
+
+      await useCase.send('t1', { messageId });
+
+      expect(attempt).toHaveBeenCalledExactlyOnceWith('N8N', 'failure');
+      expect(failed).toHaveBeenCalledExactlyOnceWith('N8N');
+    });
   });
 });

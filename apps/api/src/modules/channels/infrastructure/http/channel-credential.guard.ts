@@ -3,11 +3,17 @@ import {
   Injectable,
   HttpStatus,
   Logger,
+  Optional,
   UnauthorizedException,
   type CanActivate,
   type ExecutionContext,
 } from '@nestjs/common';
 import { CLOCK, type Clock } from '../../../../shared/application/clock.port';
+import {
+  METRICS,
+  type IntegrationResult,
+  type Metrics,
+} from '../../../../shared/application/metrics.port';
 import {
   parseSignatureHeader,
   SIGNATURE_HEADER,
@@ -15,6 +21,7 @@ import {
 } from '../../../../shared/infrastructure/crypto/hmac-signature';
 import { sha256Hex } from '../../../../shared/infrastructure/crypto/sha256';
 import { apiError } from '../../../../shared/infrastructure/http/api-error';
+import { integrationEndpoint } from '../../../../shared/infrastructure/http/integration-endpoint';
 import type { ContextualRequest } from '../../../../shared/infrastructure/http/request-context.decorators';
 import {
   CHANNEL_SECRET_CIPHER,
@@ -38,10 +45,35 @@ export class ChannelCredentialGuard implements CanActivate {
     @Inject(CHANNEL_REPOSITORY) private readonly channels: ChannelRepository,
     @Inject(CHANNEL_SECRET_CIPHER) private readonly cipher: ChannelSecretCipher,
     @Inject(CLOCK) private readonly clock: Clock,
+    @Optional() @Inject(METRICS) private readonly metrics?: Metrics,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<ContextualRequest>();
+    try {
+      return await this.authenticate(request);
+    } catch (error) {
+      this.countRejection(request, error);
+      throw error;
+    }
+  }
+
+  /** `unauthorized` o `invalid_signature` en `omnidesk_integration_requests_total` (SPEC 11). */
+  private countRejection(request: ContextualRequest, error: unknown): void {
+    const endpoint = integrationEndpoint(request.path);
+    if (!endpoint || !this.metrics) return;
+    const code = (error as { getResponse?: () => unknown }).getResponse?.();
+    const result: IntegrationResult =
+      typeof code === 'object' &&
+      code !== null &&
+      'code' in code &&
+      code.code === 'INVALID_SIGNATURE'
+        ? 'invalid_signature'
+        : 'unauthorized';
+    this.metrics.integrationRequest(endpoint, result);
+  }
+
+  private async authenticate(request: ContextualRequest): Promise<boolean> {
     const [scheme, key] = (request.headers.authorization ?? '').split(' ');
     if (scheme !== 'Bearer' || !key) {
       throw new UnauthorizedException('Falta la credencial de integración');

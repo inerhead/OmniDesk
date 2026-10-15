@@ -6,6 +6,7 @@ export function toHealthResponse(report: HealthReport, version: string): HealthR
     status: report.status,
     checks: { database: report.checks.database },
     version,
+    outbox: report.outbox,
     timestamp: report.checkedAt.toISOString(),
   };
 }

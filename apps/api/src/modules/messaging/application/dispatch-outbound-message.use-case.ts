@@ -3,6 +3,7 @@ import { EnqueueNotificationUseCase } from '../../notifications/application/enqu
 import { FindOutboundForSendUseCase } from '../../conversations/application/find-outbound-for-send.use-case';
 import { SendRequestedPayloadSchema } from '../../conversations/application/enqueue-send-requested';
 import { UpdateDeliveryStatusUseCase } from '../../conversations/application/update-delivery-status.use-case';
+import { METRICS, type Metrics } from '../../../shared/application/metrics.port';
 import {
   ChannelNotConfiguredError,
   MESSAGING_PROVIDER_REGISTRY,
@@ -22,6 +23,7 @@ export class DispatchOutboundMessageUseCase {
     private readonly deliveryStatus: UpdateDeliveryStatusUseCase,
     @Inject(MESSAGING_PROVIDER_REGISTRY) private readonly providers: MessagingProviderRegistry,
     @Optional() private readonly notifications?: EnqueueNotificationUseCase,
+    @Optional() @Inject(METRICS) private readonly metrics?: Metrics,
   ) {}
 
   /**
@@ -42,6 +44,7 @@ export class DispatchOutboundMessageUseCase {
     const resolved = await this.providers.resolve(tenantId, message.channelId);
     if (!resolved) throw new Error(`Canal ${message.channelId} no encontrado`);
 
+    const providerName = resolved.channel.provider;
     let providerMessageId: string;
     try {
       ({ providerMessageId } = await resolved.provider.send({
@@ -61,11 +64,13 @@ export class DispatchOutboundMessageUseCase {
           : null,
       }));
     } catch (error) {
+      this.metrics?.messageSendAttempt(providerName, 'failure');
       if (!(error instanceof ChannelNotConfiguredError)) throw error;
       this.logger.warn(`Mensaje ${message.id}: ${error.message}`);
       await this.fail(tenantId, payload, error.reason);
       return;
     }
+    this.metrics?.messageSendAttempt(providerName, 'success');
     await this.deliveryStatus.applyInternal(
       { tenantId, channelId: message.channelId },
       { messageId: message.id, providerMessageId, status: 'SENT', occurredAt: new Date() },
@@ -77,7 +82,7 @@ export class DispatchOutboundMessageUseCase {
     const { messageId } = SendRequestedPayloadSchema.parse(payload);
     const outbound = await this.findOutbound.execute(tenantId, messageId);
     if (!outbound) return;
-    await this.deliveryStatus.applyInternal(
+    const result = await this.deliveryStatus.applyInternal(
       { tenantId, channelId: outbound.message.channelId },
       {
         messageId,
@@ -86,6 +91,10 @@ export class DispatchOutboundMessageUseCase {
         error: reason.slice(0, 500),
       },
     );
+    if (this.metrics && result.kind === 'ok' && result.applied) {
+      const resolved = await this.providers.resolve(tenantId, outbound.message.channelId);
+      this.metrics.messageFailed(resolved?.channel.provider ?? 'UNKNOWN');
+    }
     await this.notifications?.requested({
       tenantId,
       kind: 'send_failed',

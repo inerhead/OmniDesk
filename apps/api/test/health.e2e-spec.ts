@@ -7,6 +7,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
 import { DATABASE_HEALTH_PORT } from '../src/modules/health/application/ports/database-health.port';
+import { OutboxDispatcher } from '../src/modules/realtime/infrastructure/outbox-dispatcher';
+import { PrismaService } from '../src/shared/infrastructure/prisma/prisma.service';
 import type { Env } from '../src/shared/config/env';
 import { testEnv } from './support/test-env';
 
@@ -86,6 +88,49 @@ describe('GET /api/v1/health (base de datos real)', () => {
     expect(operation.responses['200']).toBeDefined();
     expect(operation.responses['503']).toBeDefined();
     expect(JSON.stringify(res.body)).toContain('"timestamp"');
+  });
+});
+
+describe('GET /api/v1/health: Outbox (SPEC 11)', () => {
+  let app: NestExpressApplication;
+
+  beforeAll(async () => {
+    app = await createApp();
+    // Dispatcher detenido: el evento de la prueba se queda pendiente.
+    await app.get(OutboxDispatcher).onModuleDestroy();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('con un evento pendiente desde hace 2 min responde 200 con outbox: lagging', async () => {
+    const db = app.get(PrismaService);
+    const tenant = await db.tenant.create({
+      data: { name: 'Health', slug: `health-${Date.now()}` },
+    });
+    await db.outboxEvent.create({
+      data: {
+        tenantId: tenant.id,
+        type: 'tenant.status_changed',
+        payload: {},
+        createdAt: new Date(Date.now() - 120_000),
+      },
+    });
+    try {
+      const res = await request(app.getHttpServer()).get('/api/v1/health').expect(200);
+      expect(HealthResponseSchema.parse(res.body)).toMatchObject({
+        status: 'ok',
+        outbox: 'lagging',
+      });
+    } finally {
+      await db.outboxEvent.deleteMany({ where: { tenantId: tenant.id } });
+    }
+  });
+
+  it('sin APP_VERSION la versión es dev', async () => {
+    const res = await request(app.getHttpServer()).get('/api/v1/health').expect(200);
+    expect(res.body.version).toBe(process.env.APP_VERSION || 'dev');
   });
 });
 

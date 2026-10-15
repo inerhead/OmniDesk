@@ -23,6 +23,7 @@ import {
   type ChannelRepository,
 } from '../src/modules/channels/application/ports/channel.repository';
 import { CREDENTIALS_GRACE_MS } from '../src/modules/channels/domain/channel';
+import { MetricsRegistry } from '../src/modules/observability/infrastructure/metrics-registry';
 import { signPayload, verifySignature } from '../src/shared/infrastructure/crypto/hmac-signature';
 import { sha256Hex } from '../src/shared/infrastructure/crypto/sha256';
 import { PrismaService } from '../src/shared/infrastructure/prisma/prisma.service';
@@ -134,6 +135,33 @@ describe('Canales: firma HMAC de entrada (e2e)', () => {
   it('sin firma, en un canal con secreto, responde 401 INVALID_SIGNATURE', async () => {
     const res = await postInbound(inboundBody()).expect(401);
     expect(res.body.code).toBe('INVALID_SIGNATURE');
+  });
+
+  it('las métricas cuentan la firma inválida, la credencial ausente y el ok (SPEC 11)', async () => {
+    const counter = app.get(MetricsRegistry).registry.getSingleMetric(
+      'omnidesk_integration_requests_total',
+    )!;
+    const value = async (result: string) =>
+      (await counter.get()).values.find(
+        (sample) => sample.labels.endpoint === 'inbound' && sample.labels.result === result,
+      )?.value ?? 0;
+    const before = {
+      invalid: await value('invalid_signature'),
+      unauthorized: await value('unauthorized'),
+      ok: await value('ok'),
+    };
+
+    await postInbound(inboundBody()).expect(401);
+    await request(app.getHttpServer())
+      .post('/api/v1/integrations/messages/inbound')
+      .send({})
+      .expect(401);
+    const raw = inboundBody();
+    await postInbound(raw, signPayload(secret, raw, nowSec())).expect(201);
+
+    expect(await value('invalid_signature')).toBe(before.invalid + 1);
+    expect(await value('unauthorized')).toBe(before.unauthorized + 1);
+    expect(await value('ok')).toBe(before.ok + 1);
   });
 
   it('con una firma de hace 6 min responde 401', async () => {

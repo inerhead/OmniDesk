@@ -8,7 +8,7 @@ export type RealtimeState = 'live' | 'reconnecting' | 'connecting';
 export const SLOW_LATENCY_MS = 1_000;
 
 export interface ComponentStatus {
-  id: 'network' | 'api' | 'database' | 'realtime';
+  id: 'network' | 'api' | 'database' | 'realtime' | 'outbox';
   name: string;
   description: string;
   state: ComponentState;
@@ -93,7 +93,20 @@ export function toSystemStatus({ online, check, realtime }: SystemInput): System
     realtime === 'live' ? 'En vivo' : realtime === 'reconnecting' ? 'Reconectando' : 'Conectando',
   );
 
-  const components = [network, api, database, realtimeComponent];
+  // Outbox (SPEC 11): la cola de envíos, avisos y eventos en tiempo real.
+  const outboxState = check?.health.outbox;
+  const outbox = component(
+    {
+      id: 'outbox',
+      name: 'Outbox',
+      description: 'Cola de envíos, avisos y eventos en tiempo real.',
+      state: outboxState === 'ok' ? 'up' : outboxState === 'lagging' ? 'degraded' : 'unknown',
+      detail: null,
+    },
+    outboxState === 'ok' ? 'Al día' : outboxState === 'lagging' ? 'Atrasado' : 'Sin datos',
+  );
+
+  const components = [network, api, database, realtimeComponent, outbox];
 
   if (!online) {
     return {
@@ -127,14 +140,21 @@ export function toSystemStatus({ online, check, realtime }: SystemInput): System
       components,
     };
   }
-  if (api.state === 'degraded' || realtimeComponent.state === 'degraded') {
+  const outboxLagging = outbox.state === 'degraded';
+  if (api.state === 'degraded' || realtimeComponent.state === 'degraded' || outboxLagging) {
+    const cause =
+      api.state === 'degraded'
+        ? 'El API responde más lento de lo normal.'
+        : realtimeComponent.state === 'degraded'
+          ? 'Sin tiempo real: la bandeja se actualiza cada 15 s mientras se reconecta.'
+          : null;
     return {
       overall: 'degraded',
-      title: 'Servicio degradado',
-      description:
-        api.state === 'degraded'
-          ? 'El API responde más lento de lo normal.'
-          : 'Sin tiempo real: la bandeja se actualiza cada 15 s mientras se reconecta.',
+      // Con otro problema, el atraso del Outbox se añade al mensaje (SPEC 11).
+      title: cause ? 'Servicio degradado' : 'Outbox: atrasado',
+      description: cause
+        ? `${cause}${outboxLagging ? ' · Outbox: atrasado' : ''}`
+        : 'Los mensajes y avisos salen con demora.',
       components,
     };
   }

@@ -4,6 +4,7 @@ import {
   CircleCheck,
   CircleX,
   Database,
+  ListOrdered,
   Loader2,
   RefreshCw,
   Server,
@@ -45,6 +46,7 @@ const COMPONENT_ICON: Record<ComponentStatus['id'], LucideIcon> = {
   api: Server,
   database: Database,
   realtime: Zap,
+  outbox: ListOrdered,
 };
 
 const DOT: Record<ComponentState, string> = {

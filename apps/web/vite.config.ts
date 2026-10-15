@@ -1,12 +1,45 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv, type Connect, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { parseWebEnv } from './src/shared/config/env-schema.ts';
 
 // `localhost` para Caddy; `.gastromesa.com` para el túnel con dominio fijo.
 const allowedHosts = ['localhost', '.trycloudflare.com', '.gastromesa.com'];
+
+/** Google lee el HTML sin ejecutar la SPA. Estas rutas responden el archivo de `public/`. */
+function legalPages(base: string): Plugin {
+  const root = fileURLToPath(new URL('./public', import.meta.url));
+  const pages: Record<string, string> = {
+    [`${base}privacidad`]: 'privacidad.html',
+    [`${base}privacidad/`]: 'privacidad.html',
+    [`${base}terminos`]: 'terminos.html',
+    [`${base}terminos/`]: 'terminos.html',
+  };
+  const middleware: Connect.NextHandleFunction = (req, res, next) => {
+    const file = pages[req.url?.split('?')[0] ?? ''];
+    if (!file) {
+      next();
+      return;
+    }
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    res.end(readFileSync(resolve(root, file)));
+  };
+  return {
+    name: 'omnidesk-legal-pages',
+    configureServer(server) {
+      server.middlewares.use(middleware);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware);
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => {
   // Un VITE_API_URL o BASE_PATH inválido hace fallar `vite build` y `vite dev`.
@@ -17,6 +50,7 @@ export default defineConfig(({ mode }) => {
     // La app se sirve bajo la subruta (/omnidesk/) también en local.
     base,
     plugins: [
+      legalPages(base),
       react(),
       tailwindcss(),
       VitePWA({

@@ -13,6 +13,7 @@ const health = (database: 'up' | 'down'): HealthResponse => ({
   status: database === 'up' ? 'ok' : 'error',
   checks: { database },
   version: '1.2.3',
+  outbox: 'ok',
   timestamp: '2026-10-12T10:00:00.000Z',
 });
 const ok = { health: health('up'), latencyMs: 40 };
@@ -24,7 +25,13 @@ describe('toSystemStatus', () => {
     const status = toSystemStatus({ online: true, check: ok, realtime: 'live' });
 
     expect(status.overall).toBe('operational');
-    expect(states(status)).toEqual({ network: 'up', api: 'up', database: 'up', realtime: 'up' });
+    expect(states(status)).toEqual({
+      network: 'up',
+      api: 'up',
+      database: 'up',
+      realtime: 'up',
+      outbox: 'up',
+    });
     expect(status.components.find((c) => c.id === 'api')?.detail).toBe('40 ms · v1.2.3');
   });
 
@@ -60,6 +67,43 @@ describe('toSystemStatus', () => {
     expect(reconnecting.components.find((c) => c.id === 'realtime')?.detail).toBe(
       'Respaldo cada 15 s',
     );
+  });
+
+  it('Outbox atrasado: fila Atrasado y resumen degradado', () => {
+    const status = toSystemStatus({
+      online: true,
+      check: { ...ok, health: { ...ok.health, outbox: 'lagging' } },
+      realtime: 'live',
+    });
+
+    expect(status.overall).toBe('degraded');
+    expect(status.title).toBe('Outbox: atrasado');
+    expect(status.components.find((c) => c.id === 'outbox')).toMatchObject({
+      state: 'degraded',
+      stateLabel: 'Atrasado',
+    });
+  });
+
+  it('Outbox atrasado junto a otro problema: se añade al mensaje', () => {
+    const status = toSystemStatus({
+      online: true,
+      check: { ...ok, health: { ...ok.health, outbox: 'lagging' } },
+      realtime: 'reconnecting',
+    });
+
+    expect(status.title).toBe('Servicio degradado');
+    expect(status.description).toMatch(/ · Outbox: atrasado$/);
+  });
+
+  it('Outbox sin datos no degrada el resumen', () => {
+    const status = toSystemStatus({
+      online: true,
+      check: { ...ok, health: { ...ok.health, outbox: 'unknown' } },
+      realtime: 'live',
+    });
+
+    expect(status.overall).toBe('operational');
+    expect(status.components.find((c) => c.id === 'outbox')?.stateLabel).toBe('Sin datos');
   });
 
   it('sin red tiene prioridad', () => {

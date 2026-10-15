@@ -175,7 +175,7 @@ La app vive bajo la subruta `BASE_PATH=/omnidesk` en todos los entornos. La web 
 | Datos | PostgreSQL, Prisma |
 | Autenticación | Google OAuth; invitaciones y membresías por empresa |
 | Tiempo real | Socket.IO con autorización por tenant y rooms por tenant/conversación |
-| Observabilidad base | Logs JSON con pino y `x-request-id` propagado |
+| Observabilidad | Logs JSON con pino y `x-request-id` propagado; métricas Prometheus (`prom-client`) en `/api/v1/metrics` con token, bloqueado en el gateway público, y `/health` con el estado del Outbox (SPEC 11, [observabilidad.md](observabilidad.md)) |
 | Pruebas | Vitest (unitarias e integración), supertest (e2e del API), Playwright (E2E de la PWA, incremento 7) |
 | Entorno local | Docker Compose: `postgres`, `api`, `web` y `caddy` (gateway de mismo origen); profiles `pwa` (build + preview) y `tunnel` (cloudflared, HTTPS para móvil) |
 | Integración inicial | n8n + WhatsApp Cloud API |
@@ -416,7 +416,7 @@ Cada incremento se especifica en `specs/NN-*.md` justo antes de implementarlo. S
 | 5 | SPEC 08 | Despliegue | VPS propio con Docker Compose: dos entornos aislados (`dev`, `prod`) en la subruta `/omnidesk` de `dev.gastromesa.com` y `gastromesa.com`, tras el Nginx existente, con web y API en el mismo origen. Imágenes de producción (API no root con migraciones al arrancar; gateway Caddy con la PWA, caché y CSP), backup diario con 7 copias y despliegue manual con `deploy.sh`. La conexión con n8n y WhatsApp reales pasa a SPEC 09. |
 | 6 | SPEC 05 | Atención humana | **Completa el ciclo del MVP en local.** El agente asignado responde desde la PWA: el mensaje se registra `PENDING`, el dispatcher del Outbox lo envía por el puerto `MessagingProvider` (adaptador simulado) con reintentos de 1/2/4/8/16 s y los estados `SENT`/`DELIVERED`/`READ`/`FAILED` se ven en tiempo real, con reintento manual. `POST /integrations/messages/status` (deduplicado en `EventInbox`, transiciones monótonas) recibe los estados de las respuestas de IA. El adaptador n8n/WhatsApp real llega con la integración real, sin tocar el dominio. |
 | 6b | SPEC 09 | WhatsApp e IA opcional | Settings de canales, webhook nativo Meta, envío Graph directo, IA n8n opcional y HMAC. |
-| 7 | SPEC 10–12 | Robustez | E2E con Playwright (también en viewport móvil) y rate limiting (SPEC 10), métricas (SPEC 11). **Retención y RLS implementados (SPEC 12).** Web Push quedó en SPEC 13. |
+| 7 | SPEC 10–12 | Robustez | E2E con Playwright (también en viewport móvil) y rate limiting (SPEC 10). **Métricas y health extendido (SPEC 11) y retención y RLS (SPEC 12) implementados.** Web Push quedó en SPEC 13. |
 
 ## 15. Escenario de aceptación de extremo a extremo
 

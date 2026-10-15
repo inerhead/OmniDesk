@@ -1,4 +1,12 @@
-import { Body, Controller, HttpStatus, Post, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpStatus,
+  Post,
+  Res,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiCreatedResponse,
@@ -11,12 +19,14 @@ import type { Response } from 'express';
 import type { IntegrationContext } from '../../../../shared/application/request-context';
 import { CurrentIntegration } from '../../../../shared/infrastructure/http/request-context.decorators';
 import { ChannelCredentialGuard } from '../../../channels/infrastructure/http/channel-credential.guard';
+import { IntegrationMetricsInterceptor } from './integration-metrics.interceptor';
 import { RegisterInboundMessageUseCase } from '../../../conversations/application/register-inbound-message.use-case';
 import { InboundMessageRequestDto, InboundMessageResponseDto } from './integration.dto';
 
 @ApiTags('integrations')
 @ApiBearerAuth()
 @UseGuards(ChannelCredentialGuard)
+@UseInterceptors(IntegrationMetricsInterceptor)
 @Controller({ path: 'integrations/messages', version: '1' })
 export class InboundMessagesController {
   constructor(private readonly registerInbound: RegisterInboundMessageUseCase) {}

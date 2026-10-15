@@ -3,6 +3,8 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import { cleanupOpenApiDoc } from 'nestjs-zod';
+import { httpMetricsMiddleware } from './modules/observability/infrastructure/http/http-metrics.middleware';
+import { PromMetrics } from './modules/observability/infrastructure/prom-metrics';
 import { RealtimeIoAdapter } from './modules/realtime/infrastructure/realtime-io-adapter';
 import { APP_VERSION } from './shared/config/app-version';
 import type { Env } from './shared/config/env';
@@ -13,6 +15,8 @@ export function configureApp(app: NestExpressApplication, env: Env): void {
   app.useLogger(app.get(Logger));
   // Número de proxies delante (Caddy; Nginx + Caddy en el VPS): IP real y `https` de X-Forwarded-*.
   app.set('trust proxy', env.TRUST_PROXY);
+  // Antes que las rutas: mide también las peticiones que no llegan a ningún handler (SPEC 11).
+  app.use(httpMetricsMiddleware(app.get(PromMetrics)));
   app.setGlobalPrefix('api');
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
   app.enableCors({

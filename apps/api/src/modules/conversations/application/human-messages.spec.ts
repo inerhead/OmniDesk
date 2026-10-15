@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { NoopMetrics } from '../../observability/testing/noop-metrics';
 import type { ActorContext } from '../../../shared/application/request-context';
 import {
   InMemoryConversations,
@@ -255,6 +256,20 @@ describe('UpdateDeliveryStatusUseCase', () => {
     expect(await report('SENT')).toEqual({ kind: 'ok', applied: false, status: 'SENT' });
     expect(outbox.events).toHaveLength(0);
     expect(inbox.recorded.size).toBe(1);
+  });
+
+  it('cuenta cada reporte con su estado y si se aplicó', async () => {
+    const metrics = new NoopMetrics();
+    const update = vi.spyOn(metrics, 'deliveryStatusUpdate');
+    useCase = new UpdateDeliveryStatusUseCase(noTransaction, conversations, inbox, outbox, metrics);
+
+    await report('DELIVERED');
+    await report('DELIVERED');
+
+    expect(update.mock.calls).toEqual([
+      ['DELIVERED', true],
+      ['DELIVERED', false],
+    ]);
   });
 
   it('READ y después DELIVERED deja el mensaje en READ', async () => {

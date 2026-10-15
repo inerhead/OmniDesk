@@ -1,4 +1,4 @@
-import { Logger } from '@nestjs/common';
+import { Logger, Optional } from '@nestjs/common';
 import {
   SubscribeMessage,
   WebSocketGateway,
@@ -11,10 +11,15 @@ import { ResolveActorUseCase } from '../../identity/application/resolve-actor.us
 import { ResolveSessionUseCase } from '../../identity/application/resolve-session.use-case';
 import { readSessionToken } from '../../identity/infrastructure/http/session-cookie';
 import { PresenceRegistry } from '../../notifications/application/presence-registry';
+import { PromMetrics } from '../../observability/infrastructure/prom-metrics';
 import type { SocketIoServer, SocketIoSocket } from './socket-io.types';
 import { SocketIoRealtimePublisher, tenantRoom } from './socket-io-realtime-publisher';
 
-type PresenceSocket = SocketIoSocket & { id: string; data: { memberId?: string } };
+type PresenceSocket = SocketIoSocket & {
+  id: string;
+  /** `counted`: sumado a `omnidesk_realtime_connected_sockets` (SPEC 11). */
+  data: { memberId?: string; counted?: boolean };
+};
 
 /**
  * El handshake reutiliza la cookie de sesión de la web: sin sesión válida o sin empresa activa, la
@@ -30,6 +35,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
     private readonly resolveActor: ResolveActorUseCase,
     private readonly publisher: SocketIoRealtimePublisher,
     private readonly presence: PresenceRegistry,
+    @Optional() private readonly metrics?: PromMetrics,
   ) {}
 
   afterInit(server: SocketIoServer): void {
@@ -51,6 +57,11 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       }
       (client as PresenceSocket).data.memberId = resolution.actor.memberId;
       await client.join(tenantRoom(resolution.actor.tenantId));
+      // Solo los sockets aceptados; si se desconectó mientras se resolvía la sesión, no cuenta.
+      if (client.connected) {
+        (client as PresenceSocket).data.counted = true;
+        this.metrics?.realtimeConnectedSockets.inc();
+      }
     } catch (error) {
       this.logger.error(`No se pudo unir el socket ${client.id}: ${String(error)}`);
       this.reject(client, 'No se pudo establecer la conexión');
@@ -58,7 +69,12 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   }
 
   handleDisconnect(client: SocketIoSocket): void {
-    this.presence.remove((client as PresenceSocket).id);
+    const socket = client as PresenceSocket;
+    this.presence.remove(socket.id);
+    if (socket.data.counted) {
+      socket.data.counted = false;
+      this.metrics?.realtimeConnectedSockets.dec();
+    }
   }
 
   @SubscribeMessage('presence')

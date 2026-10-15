@@ -1,6 +1,6 @@
 import { DynamicModule, Global, Module } from '@nestjs/common';
 import { CLOCK, type Clock } from '../application/clock.port';
-import { APP_VERSION, readAppVersion } from './app-version';
+import { APP_VERSION, DEV_VERSION } from './app-version';
 import { ENV, type Env } from './env';
 
 const systemClock: Clock = { now: () => new Date() };
@@ -13,7 +13,7 @@ export class ConfigModule {
       module: ConfigModule,
       providers: [
         { provide: ENV, useValue: env },
-        { provide: APP_VERSION, useValue: env.APP_VERSION ?? readAppVersion() },
+        { provide: APP_VERSION, useValue: env.APP_VERSION ?? DEV_VERSION },
         { provide: CLOCK, useValue: systemClock },
       ],
       exports: [ENV, APP_VERSION, CLOCK],

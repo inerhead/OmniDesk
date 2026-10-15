@@ -33,6 +33,14 @@ describe('parseEnv', () => {
     expect(() => parseEnv({ DATABASE_URL: valid.DATABASE_URL })).toThrowError(/DATABASE_APP_URL/);
   });
 
+  it('METRICS_TOKEN vacío es ausente y uno corto se rechaza', () => {
+    expect(parseEnv({ ...valid, METRICS_TOKEN: '' }).METRICS_TOKEN).toBeUndefined();
+    expect(() => parseEnv({ ...valid, METRICS_TOKEN: 'corto' })).toThrowError(/METRICS_TOKEN/);
+    expect(parseEnv({ ...valid, METRICS_TOKEN: 'x'.repeat(32) }).METRICS_TOKEN).toBe(
+      'x'.repeat(32),
+    );
+  });
+
   it('falla nombrando CORS_ORIGINS cuando contiene algo que no es URL', () => {
     expect(() => parseEnv({ ...valid, CORS_ORIGINS: 'no-es-url' })).toThrowError(/CORS_ORIGINS/);
   });

@@ -10,6 +10,7 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { MembersModule } from './modules/members/members.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { ObservabilityModule } from './modules/observability/observability.module';
 import { ProfileModule } from './modules/profile/profile.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
 import { RetentionModule } from './modules/retention/retention.module';
@@ -28,6 +29,7 @@ export class AppModule {
       imports: [
         ConfigModule.forRoot(env),
         LoggingModule,
+        ObservabilityModule.forRoot(env),
         PrismaModule,
         HealthModule,
         IdentityModule,

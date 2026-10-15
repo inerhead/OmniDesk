@@ -1,4 +1,12 @@
-import { Body, Controller, HttpCode, NotFoundException, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  NotFoundException,
+  Post,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiNotFoundResponse,
@@ -10,12 +18,14 @@ import type { DeliveryStatusResponse } from '@omnidesk/contracts';
 import type { IntegrationContext } from '../../../../shared/application/request-context';
 import { CurrentIntegration } from '../../../../shared/infrastructure/http/request-context.decorators';
 import { ChannelCredentialGuard } from '../../../channels/infrastructure/http/channel-credential.guard';
+import { IntegrationMetricsInterceptor } from './integration-metrics.interceptor';
 import { UpdateDeliveryStatusUseCase } from '../../../conversations/application/update-delivery-status.use-case';
 import { DeliveryStatusRequestDto, DeliveryStatusResponseDto } from './integration.dto';
 
 @ApiTags('integrations')
 @ApiBearerAuth()
 @UseGuards(ChannelCredentialGuard)
+@UseInterceptors(IntegrationMetricsInterceptor)
 @Controller({ path: 'integrations/messages', version: '1' })
 export class MessageStatusController {
   constructor(private readonly updateDeliveryStatus: UpdateDeliveryStatusUseCase) {}

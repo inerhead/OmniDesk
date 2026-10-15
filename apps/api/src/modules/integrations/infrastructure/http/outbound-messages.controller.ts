@@ -6,6 +6,7 @@ import {
   Post,
   Res,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -20,6 +21,7 @@ import type { Response } from 'express';
 import type { IntegrationContext } from '../../../../shared/application/request-context';
 import { CurrentIntegration } from '../../../../shared/infrastructure/http/request-context.decorators';
 import { ChannelCredentialGuard } from '../../../channels/infrastructure/http/channel-credential.guard';
+import { IntegrationMetricsInterceptor } from './integration-metrics.interceptor';
 import { RegisterAiReplyUseCase } from '../../../conversations/application/register-ai-reply.use-case';
 import {
   OutboundAiMessageRejectedDto,
@@ -30,6 +32,7 @@ import {
 @ApiTags('integrations')
 @ApiBearerAuth()
 @UseGuards(ChannelCredentialGuard)
+@UseInterceptors(IntegrationMetricsInterceptor)
 @Controller({ path: 'integrations/messages', version: '1' })
 export class OutboundMessagesController {
   constructor(private readonly registerAiReply: RegisterAiReplyUseCase) {}

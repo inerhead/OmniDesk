@@ -21,7 +21,11 @@ if (hasAppShell) {
   const escaped = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   registerRoute(
     new NavigationRoute(createHandlerBoundToURL(indexUrl), {
-      denylist: [new RegExp(`^${escaped}api/`)],
+      denylist: [
+        new RegExp(`^${escaped}api/`),
+        new RegExp(`^${escaped}privacidad`),
+        new RegExp(`^${escaped}terminos`),
+      ],
     }),
   );
 }

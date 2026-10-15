@@ -10,6 +10,7 @@ import { InvitePage } from '@/features/team/ui/invite-page';
 import { MembersPage } from '@/features/team/ui/members-page';
 import { ConversationPage, ConversationPlaceholder } from '@/pages/conversation-page';
 import { ConversationsPage } from '@/pages/conversations-page';
+import { PrivacyPage, TermsPage } from '@/pages/legal-page';
 import { NotFoundPage } from '@/pages/not-found-page';
 import { StatusPage } from '@/pages/status-page';
 import { basePath } from '@/shared/config/env';
@@ -19,6 +20,8 @@ export const router = createBrowserRouter(
   [
     // Públicas.
     { path: '/login', element: <LoginPage /> },
+    { path: '/privacidad', element: <PrivacyPage /> },
+    { path: '/terminos', element: <TermsPage /> },
     { path: '/invite/:token', element: <InvitePage /> },
     // Con sesión (`GET /me`); un 401 redirige a /login?next=.
     {

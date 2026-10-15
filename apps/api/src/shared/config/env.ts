@@ -93,6 +93,13 @@ export const EnvSchema = z
       .positive()
       .default(25 * 1024 * 1024),
     /** Claves Web Push. Las tres juntas habilitan el módulo; si faltan, no se encolan avisos. */
+    /**
+     * Token de `GET /api/v1/metrics` (SPEC 11), al menos 32 caracteres. Vacío = el endpoint no
+     * existe (404).
+     */
+    METRICS_TOKEN: z.preprocess((value) => value || undefined, z.string().min(32).optional()),
+    /** Con un evento del Outbox pendiente desde hace más de esto, `/health` dice `lagging`. */
+    OUTBOX_LAG_THRESHOLD_SECONDS: z.coerce.number().int().positive().default(60),
     VAPID_PUBLIC_KEY: z.preprocess((value) => value || undefined, z.string().min(1).optional()),
     VAPID_PRIVATE_KEY: z.preprocess((value) => value || undefined, z.string().min(1).optional()),
     VAPID_SUBJECT: z.preprocess(

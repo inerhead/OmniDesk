@@ -12,6 +12,7 @@ import {
   PayloadTooLargeException,
   Post,
   Put,
+  Query,
   UnsupportedMediaTypeException,
   UploadedFile,
   UseFilters,
@@ -31,7 +32,10 @@ import {
 } from '@nestjs/swagger';
 import {
   DeactivateTenantRequestSchema,
+  RetentionPreviewQuerySchema,
+  RetentionPreviewResponseSchema,
   UpdateTenantRequestSchema,
+  type RetentionPreviewResponse,
   type TenantDetails,
 } from '@omnidesk/contracts';
 import { createZodDto } from 'nestjs-zod';
@@ -49,6 +53,7 @@ import {
 } from '../../../identity/infrastructure/http/session.guard';
 import {
   GetCurrentTenantUseCase,
+  GetRetentionPreviewUseCase,
   UpdateCurrentTenantUseCase,
   type UpdateTenantResult,
 } from '../../application/manage-tenant.use-cases';
@@ -66,6 +71,8 @@ import { TenantDetailsDto, toTenantDetailsDto } from './tenant-details.dto';
 
 class UpdateTenantRequestDto extends createZodDto(UpdateTenantRequestSchema) {}
 class DeactivateTenantRequestDto extends createZodDto(DeactivateTenantRequestSchema) {}
+class RetentionPreviewQueryDto extends createZodDto(RetentionPreviewQuerySchema) {}
+class RetentionPreviewResponseDto extends createZodDto(RetentionPreviewResponseSchema) {}
 
 /** Traduce los resultados comunes de los casos de uso de la empresa a HTTP. */
 export function tenantResponse(
@@ -114,6 +121,7 @@ export class CurrentTenantController {
     private readonly removeLogo: RemoveTenantLogoUseCase,
     private readonly deactivateTenant: DeactivateTenantUseCase,
     private readonly reactivateTenant: ReactivateTenantUseCase,
+    private readonly retentionPreview: GetRetentionPreviewUseCase,
   ) {}
 
   @Get()
@@ -132,6 +140,20 @@ export class CurrentTenantController {
     @Body() body: UpdateTenantRequestDto,
   ): Promise<TenantDetails> {
     return tenantResponse(await this.updateCurrent.execute(actor, body));
+  }
+
+  /** Cuántas conversaciones cerradas borraría la próxima ejecución de la retención (SPEC 12). */
+  @Get('retention-preview')
+  @ApiOkResponse({ type: RetentionPreviewResponseDto.Output })
+  @ApiBadRequestResponse({ description: '`days` no es 90, 180 ni 365.' })
+  async preview(
+    @Actor() actor: ActorContext,
+    @Query() query: RetentionPreviewQueryDto,
+  ): Promise<RetentionPreviewResponse> {
+    const result = await this.retentionPreview.execute(actor, query.days);
+    if (result.kind === 'forbidden')
+      throw new ForbiddenException('Solo un Owner gestiona la empresa');
+    return { conversations: result.conversations };
   }
 
   /** El recorte ya reducido en la web (512×512, WebP o JPEG). */

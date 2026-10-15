@@ -3,6 +3,7 @@ import { rethrowUniqueConflict } from '../../../shared/infrastructure/prisma/pri
 import { PrismaDb } from '../../../shared/infrastructure/prisma/prisma-transaction-runner';
 import { memberRefSelect, toMemberRefOrNull } from '../../identity/infrastructure/member-ref';
 import type { TenantRepository } from '../application/ports/tenant.repository';
+import { toRetentionDays, type RetentionDays } from '../domain/retention';
 import type { Tenant, TenantDetails } from '../domain/tenant';
 
 const select = { id: true, slug: true, name: true } as const;
@@ -37,9 +38,16 @@ export class PrismaTenantRepository implements TenantRepository {
         logoUpdatedAt: true,
         deactivatedAt: true,
         deactivatedBy: { select: memberRefSelect },
+        retentionDays: true,
       },
     });
-    return row && { ...row, deactivatedBy: toMemberRefOrNull(row.deactivatedBy) };
+    return (
+      row && {
+        ...row,
+        deactivatedBy: toMemberRefOrNull(row.deactivatedBy),
+        retentionDays: toRetentionDays(row.retentionDays),
+      }
+    );
   }
 
   async findLogo(tenantId: string): Promise<{ logoKey: string | null; active: boolean } | null> {
@@ -50,10 +58,19 @@ export class PrismaTenantRepository implements TenantRepository {
     return row && { logoKey: row.logoKey, active: row.deactivatedAt === null };
   }
 
-  async update(tenantId: string, data: { name?: string; slug?: string }): Promise<void> {
+  async update(
+    tenantId: string,
+    data: { name?: string; slug?: string; retentionDays?: RetentionDays },
+  ): Promise<void> {
     await this.db.client.tenant
       .update({ where: { id: tenantId }, data, select: { id: true } })
       .catch(rethrowUniqueConflict);
+  }
+
+  countClosedConversationsBefore(tenantId: string, cutoff: Date): Promise<number> {
+    return this.db.client.conversation.count({
+      where: { tenantId, status: 'CLOSED', lastMessageAt: { lt: cutoff } },
+    });
   }
 
   async replaceLogo(

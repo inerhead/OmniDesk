@@ -7,6 +7,7 @@ import { MembersModule } from '../members/members.module';
 import { CreateTenantUseCase } from './application/create-tenant.use-case';
 import {
   GetCurrentTenantUseCase,
+  GetRetentionPreviewUseCase,
   UpdateCurrentTenantUseCase,
 } from './application/manage-tenant.use-cases';
 import {
@@ -33,6 +34,7 @@ import { PrismaTenantRepository } from './infrastructure/prisma-tenant.repositor
     CreateTenantUseCase,
     GetCurrentTenantUseCase,
     UpdateCurrentTenantUseCase,
+    GetRetentionPreviewUseCase,
     UploadTenantLogoUseCase,
     RemoveTenantLogoUseCase,
     GetTenantLogoUseCase,

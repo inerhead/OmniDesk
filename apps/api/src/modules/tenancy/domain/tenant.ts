@@ -1,3 +1,5 @@
+import type { RetentionDays } from './retention';
+
 export interface Tenant {
   id: string;
   slug: string;
@@ -9,6 +11,7 @@ export interface TenantDetails extends Tenant, TenantLogoSource {
   /** `null` = activa. */
   deactivatedAt: Date | null;
   deactivatedBy: { id: string; displayName: string; avatarUrl: string | null } | null;
+  retentionDays: RetentionDays;
 }
 
 /** La demo: el login de desarrollo la busca por este slug, así que no se puede cambiar. */

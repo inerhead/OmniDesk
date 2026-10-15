@@ -1,9 +1,17 @@
 # SPEC 12 — Robustez III: retención de datos y Row Level Security
 
 > **Status:** Approved
-> **Depends on:** SPEC 07, SPEC 09, SPEC 10
+> **Depends on:** SPEC 07, SPEC 09, SPEC 14, SPEC 16
 > **Date:** 2026-10-12
 > **Objective:** Cada empresa configura (como OWNER) cuántos días se conservan sus conversaciones cerradas y puede borrar un contacto a petición, un job diario aplica esa retención y purga las tablas técnicas, y PostgreSQL aísla por tenant todas las tablas con `tenant_id` mediante Row Level Security, con un rol de aplicación sin `BYPASSRLS`.
+
+## Ajustes del 2026-10-14
+
+Este spec se escribió antes de SPEC 16 y de decidir que SPEC 10 va al final. Al implementarlo se acordó:
+
+- **La retención vive en `/settings/company` (SPEC 16)**, como una sección más, no en una pantalla `/settings/workspace` aparte. Los endpoints son los de la empresa activa: `retentionDays` va en `GET`/`PATCH /api/v1/tenants/current` y la vista previa es `GET /api/v1/tenants/current/retention-preview`. La entrada "Empresa" del menú (OWNER) ya existe.
+- **Sin dependencias de SPEC 10:** la purga de `rate_limit_buckets` la añade SPEC 10, y la verificación de RLS usa los e2e del API más una pasada manual por la app (`pnpm e2e` llega con SPEC 10).
+- **Sin dependencias de SPEC 11:** no se mide la latencia con su histograma.
 
 ## Por qué existe este spec
 
@@ -19,14 +27,14 @@ Dos pendientes de la arquitectura (§12, §17) se cierran aquí:
 **Retención**
 
 - **Configuración** en `Tenant.retentionDays`: `null` (indefinido, por defecto), `90`, `180` o `365`.
-- **Pantalla `/settings/workspace`** (solo OWNER):
+- **Sección "Retención de datos" en `/settings/company`** (solo OWNER, SPEC 16):
   - Selector "Conservar conversaciones cerradas: Indefinidamente / 90 / 180 / 365 días".
   - Antes de guardar, una vista previa: "Se borrarán N conversaciones en la próxima ejecución (03:30)".
   - Confirmación cuando N > 0.
 - **API:**
-  - `GET /api/v1/workspace` devuelve `{ name, slug, retentionDays }`.
-  - `PATCH /api/v1/workspace { retentionDays }` (OWNER).
-  - `GET /api/v1/workspace/retention-preview?days=90` devuelve `{ conversations }` (OWNER).
+  - `GET /api/v1/tenants/current` añade `retentionDays`.
+  - `PATCH /api/v1/tenants/current { retentionDays }` (OWNER), solo o junto al nombre y el slug.
+  - `GET /api/v1/tenants/current/retention-preview?days=90` devuelve `{ conversations }` (OWNER).
 - **Job de retención diario** a las 03:30, hora del servidor (después del backup de las 03:00 de SPEC 08):
   - Se ejecuta con `pg_try_advisory_lock`, una sola vez aunque haya reinicios.
   - Para cada empresa con `retentionDays`:
@@ -40,7 +48,7 @@ Dos pendientes de la arquitectura (§12, §17) se cierran aquí:
   - `event_inbox` de hace más de 30 días.
   - `sessions` expiradas o revocadas hace más de 30 días.
   - `invitations` aceptadas, revocadas o expiradas hace más de 30 días.
-  - Los `rate_limit_buckets` ya tienen su purga horaria (SPEC 10).
+  - Los `rate_limit_buckets` no existen todavía: su purga la añade SPEC 10.
 - **Borrado de un contacto a petición:**
   - `DELETE /api/v1/contacts/:id` (OWNER). Borra el contacto, sus identidades, todas sus conversaciones (abiertas o cerradas), sus mensajes y sus eventos.
   - Se registra en `DeletionLog`, sin datos personales: quién, cuándo, cuántas conversaciones y mensajes.
@@ -123,12 +131,13 @@ model DeletionLog {
 - Para cada tabla de la lista: `ENABLE` + `FORCE ROW LEVEL SECURITY` + `CREATE POLICY tenant_isolation … TO omnidesk_app`.
 - `ALTER DEFAULT PRIVILEGES` para las tablas futuras.
 
-**Contratos** (`packages/contracts/src/workspace.ts`):
+**Contratos** (`packages/contracts/src/tenants.ts`):
 
 ```ts
 RetentionDaysSchema = z.union([z.null(), z.literal(90), z.literal(180), z.literal(365)])
-WorkspaceSchema = { name: z.string(), slug: z.string(), retentionDays: RetentionDaysSchema }
-UpdateWorkspaceRequestSchema = { retentionDays: RetentionDaysSchema }
+TenantDetailsSchema += { retentionDays: RetentionDaysSchema }
+UpdateTenantRequestSchema += { retentionDays?: RetentionDaysSchema }
+RetentionPreviewQuerySchema = { days: 90 | 180 | 365 }
 RetentionPreviewResponseSchema = { conversations: z.int().min(0) }
 RealtimeReasonSchema += 'deleted'
 ```
@@ -145,7 +154,7 @@ technicalPurgeCutoff(now: Date): Date            // now − 30 días
 1. **Retención: modelo.**
    - `retention_days`, `deletion_log` y las cascadas.
    - Contratos.
-   - `GET`/`PATCH /workspace` y `retention-preview`, con permisos.
+   - `retentionDays` en `GET`/`PATCH /tenants/current` y `retention-preview`, con permisos.
    - e2e.
 2. **Job de retención y purga.**
    - `RetentionJob` con advisory lock, lotes de 500 y purga técnica.
@@ -155,10 +164,9 @@ technicalPurgeCutoff(now: Date): Date            // now − 30 días
    - El dispatcher tolera mensajes inexistentes.
    - e2e.
 4. **Web.**
-   - `/settings/workspace` con la vista previa y la confirmación.
+   - Sección de retención en `/settings/company` con la vista previa y la confirmación.
    - Acción "Borrar contacto y su historial" en el panel, con confirmación por teléfono.
    - Manejo de `reason: 'deleted'` (quitar de la lista y aviso en el chat).
-   - Entrada "Empresa" en el menú (OWNER).
 5. **RLS: roles y contexto, sin activar políticas.**
    - Rol `omnidesk_app` y `DATABASE_APP_URL`.
    - `TenantPrisma.run` y el `TransactionRunner` actualizado.
@@ -167,7 +175,7 @@ technicalPurgeCutoff(now: Date): Date            // now − 30 días
 6. **RLS: políticas.**
    - Migración con `ENABLE`/`FORCE` y las políticas.
    - Prueba de integración: con `app.tenant_id = A`, `SELECT` sobre `conversations` no devuelve filas de B; sin `app.tenant_id`, devuelve 0 filas; un `INSERT` con `tenant_id = B` falla.
-   - Todos los e2e del API y `pnpm e2e` pasan.
+   - Todos los e2e del API pasan, y una pasada manual por la app confirma el flujo (`pnpm e2e` llega con SPEC 10).
 7. **Despliegue.**
    - `DATABASE_APP_URL` y `DATABASE_APP_PASSWORD` en las plantillas de `infra/deploy` y en `.env.example`.
    - Script de arranque del API que asegura la contraseña del rol.
@@ -181,7 +189,7 @@ technicalPurgeCutoff(now: Date): Date            // now − 30 días
 **Retención**
 
 - [ ] Como OWNER, elegir "90 días" con 3 conversaciones cerradas de hace 100 días muestra "Se borrarán 3 conversaciones…" y pide confirmación.
-- [ ] Un ADMIN o AGENT no ve "Empresa" en el menú, y `PATCH /workspace` le responde `403`.
+- [ ] Un ADMIN o AGENT no ve "Empresa" en el menú, y `PATCH /tenants/current` le responde `403`.
 - [ ] Tras ejecutar el job (forzado en la prueba), esas 3 conversaciones, sus mensajes y sus eventos ya no existen. Las conversaciones abiertas de cualquier antigüedad y las cerradas de hace 10 días siguen intactas.
 - [ ] Los contactos que se quedaron sin conversaciones se borran, y los que aún tienen alguna se conservan.
 - [ ] Con `retentionDays = null`, el job no borra ninguna conversación de esa empresa.
@@ -201,7 +209,7 @@ technicalPurgeCutoff(now: Date): Date            // now − 30 días
 - [ ] Conectado como `omnidesk_app_login` sin `app.tenant_id`, `SELECT count(*) FROM conversations` devuelve 0.
 - [ ] Con `app.tenant_id` del tenant A, no se ve ninguna fila del tenant B en ninguna de las 12 tablas.
 - [ ] Un caso de uso modificado a propósito para no filtrar por `tenantId` (prueba de integración) sigue sin devolver filas de otro tenant.
-- [ ] Todo el flujo de la app (login, bandejas, asignar, enviar, ticks, integraciones, simulador) funciona igual con RLS activo: e2e del API y `pnpm e2e` pasan.
+- [ ] Todo el flujo de la app (login, bandejas, asignar, enviar, ticks, integraciones, simulador) funciona igual con RLS activo: los e2e del API pasan y una pasada manual por la app lo confirma.
 - [ ] `omnidesk_app` no tiene `BYPASSRLS` ni es dueño de ninguna tabla (`\du` y `\dt+`).
 
 **Calidad**
@@ -213,7 +221,7 @@ technicalPurgeCutoff(now: Date): Date            // now − 30 días
 - **Sí:** retención configurable por empresa, indefinida por defecto. Lo decidió el equipo. Nadie pierde datos sin haberlo elegido.
 - **Sí:** solo se borran conversaciones **cerradas**. Una conversación abierta antigua sigue siendo trabajo pendiente.
 - **Sí:** valores cerrados (90/180/365) en lugar de un número libre. Es más fácil de explicar, y evita configuraciones como "1 día" por error.
-- **Sí:** la configura el OWNER en `/settings/workspace`, con vista previa. Lo decidió el equipo; borrar datos es una decisión del dueño.
+- **Sí:** la configura el OWNER en `/settings/company`, con vista previa. Lo decidió el equipo; borrar datos es una decisión del dueño.
 - **Sí:** borrado de contacto a petición, con confirmación escribiendo el teléfono. Es el derecho de supresión del cliente, y la confirmación evita borrados accidentales.
 - **Sí:** `DeletionLog` sin datos personales. Deja constancia de que se borró sin conservar lo borrado.
 - **Sí:** el job corre a las 03:30, después del backup de las 03:00. Lo borrado sigue recuperable durante 7 días desde el backup.
@@ -227,7 +235,7 @@ technicalPurgeCutoff(now: Date): Date            // now − 30 días
 
 | Riesgo | Mitigación |
 | --- | --- |
-| Una transacción por petición aumenta la latencia | Las escrituras ya eran transaccionales. Las lecturas añaden un `set_config`. Se mide con el histograma de SPEC 11 antes y después del paso 6. |
+| Una transacción por petición aumenta la latencia | Las escrituras ya eran transaccionales. Las lecturas añaden un `set_config`. |
 | Un camino olvidado sigue usando el cliente dueño y salta RLS | Los clientes `SystemPrisma` y `TenantPrisma` son tipos distintos, y el dueño solo se inyecta en los módulos de la lista. Revisión de `grep` en el paso 5. |
 | El job borra de más por un error de fechas | `retentionCutoff` es una función pura probada, el job es posterior al backup diario y el `DeletionLog` deja los conteos para detectar anomalías. |
 | Borrado masivo que bloquea tablas | Lotes de 500 por transacción a las 03:30 (baja actividad). |

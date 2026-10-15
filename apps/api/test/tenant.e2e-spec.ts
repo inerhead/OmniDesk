@@ -6,6 +6,7 @@ import {
   AuthProvidersResponseSchema,
   InvitationPreviewSchema,
   MeResponseSchema,
+  RetentionPreviewResponseSchema,
   TenantDetailsSchema,
 } from '@omnidesk/contracts';
 import request from 'supertest';
@@ -30,6 +31,7 @@ const webp = Buffer.concat([
 ]);
 const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64, 4)]);
 const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
 
 describe('Empresa: editar, logo, inactivar y reactivar (e2e)', () => {
   let app: NestExpressApplication;
@@ -240,6 +242,79 @@ describe('Empresa: editar, logo, inactivar y reactivar (e2e)', () => {
       await as(owner.cookie).delete(`/api/v1/invitations/${invite.body.id}`).expect(204);
       await http().get(preview.tenantLogoUrl!).expect(404);
       await http().get(`/api/v1/invitations/desconocido/logo`).expect(404);
+    });
+  });
+
+  describe('retención', () => {
+    /** Conversación creada directamente en la base, con el último mensaje hace `daysAgo` días. */
+    const conversationAged = async (status: 'OPEN' | 'CLOSED', daysAgo: number) => {
+      const channel = await db.channel.findFirstOrThrow({ where: { tenantId } });
+      const contact = await db.contact.create({ data: { tenantId, displayName: 'Cliente' } });
+      await db.conversation.create({
+        data: {
+          tenantId,
+          channelId: channel.id,
+          contactId: contact.id,
+          status,
+          lastMessageAt: new Date(Date.now() - daysAgo * DAY),
+          lastMessagePreview: 'Hola',
+        },
+      });
+    };
+    const preview = (cookie: string, days: number | string) =>
+      as(cookie).get(`/api/v1/tenants/current/retention-preview?days=${days}`);
+
+    it('por defecto es indefinida; el Owner la cambia y la vuelve a quitar', async () => {
+      const initial = TenantDetailsSchema.parse(
+        (await as(owner.cookie).get('/api/v1/tenants/current').expect(200)).body,
+      );
+      expect(initial.retentionDays).toBeNull();
+
+      const updated = await as(owner.cookie)
+        .patch('/api/v1/tenants/current', { retentionDays: 90 })
+        .expect(200);
+      expect(TenantDetailsSchema.parse(updated.body)).toMatchObject({
+        name: tenantName,
+        retentionDays: 90,
+      });
+
+      const cleared = await as(owner.cookie)
+        .patch('/api/v1/tenants/current', { retentionDays: null })
+        .expect(200);
+      expect(cleared.body.retentionDays).toBeNull();
+    });
+
+    it('rechaza días fuera de 90, 180 y 365 (400) y a quien no es Owner (403)', async () => {
+      await as(owner.cookie).patch('/api/v1/tenants/current', { retentionDays: 30 }).expect(400);
+      await as(admin.cookie).patch('/api/v1/tenants/current', { retentionDays: 90 }).expect(403);
+      await as(agent.cookie).patch('/api/v1/tenants/current', { retentionDays: 90 }).expect(403);
+      expect(
+        (await db.tenant.findUniqueOrThrow({ where: { id: tenantId } })).retentionDays,
+      ).toBeNull();
+    });
+
+    it('la vista previa cuenta solo las cerradas más antiguas que los días elegidos', async () => {
+      await conversationAged('CLOSED', 100);
+      await conversationAged('CLOSED', 100);
+      await conversationAged('CLOSED', 100);
+      await conversationAged('CLOSED', 200);
+      await conversationAged('CLOSED', 10);
+      await conversationAged('OPEN', 400);
+
+      const count = async (days: number) =>
+        RetentionPreviewResponseSchema.parse((await preview(owner.cookie, days).expect(200)).body)
+          .conversations;
+      expect(await count(90)).toBe(4);
+      expect(await count(180)).toBe(1);
+      expect(await count(365)).toBe(0);
+    });
+
+    it('la vista previa exige días válidos (400) y ser Owner (403)', async () => {
+      await preview(owner.cookie, 30).expect(400);
+      await preview(owner.cookie, 'abc').expect(400);
+      await as(owner.cookie).get('/api/v1/tenants/current/retention-preview').expect(400);
+      await preview(admin.cookie, 90).expect(403);
+      await preview(agent.cookie, 90).expect(403);
     });
   });
 

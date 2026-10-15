@@ -1,3 +1,4 @@
+import type { RetentionDays } from '../../domain/retention';
 import type { Tenant, TenantDetails } from '../../domain/tenant';
 
 export interface TenantRepository {
@@ -9,7 +10,12 @@ export interface TenantRepository {
   /** Clave del logo y estado; `null` si la empresa no existe. */
   findLogo(tenantId: string): Promise<{ logoKey: string | null; active: boolean } | null>;
   /** Lanza `UniqueConflictError` si el slug ya existe. */
-  update(tenantId: string, data: { name?: string; slug?: string }): Promise<void>;
+  update(
+    tenantId: string,
+    data: { name?: string; slug?: string; retentionDays?: RetentionDays },
+  ): Promise<void>;
+  /** Conversaciones `CLOSED` con el último mensaje antes de `cutoff` (vista previa de la retención). */
+  countClosedConversationsBefore(tenantId: string, cutoff: Date): Promise<number>;
   /**
    * Cambia (o, con `null`, quita) el logo y devuelve la clave anterior para borrarla. La fila se
    * bloquea: dos subidas a la vez no pierden la clave vieja.

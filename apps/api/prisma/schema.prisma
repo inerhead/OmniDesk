@@ -90,6 +90,8 @@ model Tenant {
   /// null = activa (SPEC 16).
   deactivatedAt         DateTime? @map("deactivated_at") @db.Timestamptz(3)
   deactivatedByMemberId String?   @map("deactivated_by_member_id") @db.Uuid
+  /// Días que se conservan las conversaciones cerradas (SPEC 12): null = indefinidamente; si no, 90 | 180 | 365.
+  retentionDays         Int?      @map("retention_days")
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
   deactivatedBy TenantMember? @relation("TenantDeactivatedBy", fields: [deactivatedByMemberId], references: [id], onDelete: Restrict)
@@ -181,7 +183,7 @@ model ContactIdentity {
   externalId String @map("external_id")
 
   tenant  Tenant  @relation(fields: [tenantId], references: [id])
-  contact Contact @relation(fields: [contactId], references: [id])
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
   channel Channel @relation(fields: [channelId], references: [id])
 
   @@unique([channelId, externalId])
@@ -241,7 +243,7 @@ model Message {
 
   tenant       Tenant             @relation(fields: [tenantId], references: [id])
   channel      Channel            @relation(fields: [channelId], references: [id])
-  conversation Conversation       @relation(fields: [conversationId], references: [id])
+  conversation Conversation       @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       TenantMember?      @relation(fields: [senderMemberId], references: [id], onDelete: Restrict)
   attachment   MessageAttachment?
 
@@ -378,7 +380,7 @@ model ConversationEvent {
   createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
 
   tenant       Tenant        @relation(fields: [tenantId], references: [id])
-  conversation Conversation  @relation(fields: [conversationId], references: [id])
+  conversation Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   actor        TenantMember? @relation("EventActor", fields: [actorMemberId], references: [id], onDelete: Restrict)
   target       TenantMember? @relation("EventTarget", fields: [targetMemberId], references: [id], onDelete: Restrict)
 
@@ -441,4 +443,20 @@ model MessageAttachment {
 
   @@index([tenantId])
   @@map("message_attachments")
+}
+
+/// Constancia de un borrado (SPEC 12), sin datos personales: quién, cuándo y cuánto.
+model DeletionLog {
+  id                   String   @id @default(uuid(7)) @db.Uuid
+  tenantId             String   @map("tenant_id") @db.Uuid
+  /// "contact" (a petición) | "retention" (job).
+  kind                 String
+  /// null en el job.
+  actorMemberId        String?  @map("actor_member_id") @db.Uuid
+  conversationsDeleted Int      @map("conversations_deleted")
+  messagesDeleted      Int      @map("messages_deleted")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([tenantId, createdAt])
+  @@map("deletion_log")
 }

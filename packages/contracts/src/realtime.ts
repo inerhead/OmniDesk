@@ -9,8 +9,11 @@ export const CONVERSATION_CHANGED_EVENT = 'conversation.changed';
 export const RealtimeEventSchema = z.object({
   type: z.literal('conversation.changed'),
   conversationId: z.uuid(),
-  /** 'message' (SPEC 03), 'assignment' (SPEC 04) y 'delivery' (SPEC 05). */
-  reason: z.enum(['message', 'assignment', 'delivery']),
+  /**
+   * 'message' (SPEC 03), 'assignment' (SPEC 04), 'delivery' (SPEC 05) y 'deleted' (SPEC 12: se borró
+   * el contacto y su historial; la web la quita de la lista).
+   */
+  reason: z.enum(['message', 'assignment', 'delivery', 'deleted']),
   occurredAt: z.iso.datetime(),
 });
 export type RealtimeEvent = z.infer<typeof RealtimeEventSchema>;

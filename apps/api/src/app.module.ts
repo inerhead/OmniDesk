@@ -12,6 +12,7 @@ import { MessagingModule } from './modules/messaging/messaging.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ProfileModule } from './modules/profile/profile.module';
 import { RealtimeModule } from './modules/realtime/realtime.module';
+import { RetentionModule } from './modules/retention/retention.module';
 import { TeamModule } from './modules/team/team.module';
 import { TenancyModule } from './modules/tenancy/tenancy.module';
 import { ConfigModule } from './shared/config/config.module';
@@ -41,6 +42,7 @@ export class AppModule {
         MessagingModule,
         NotificationsModule,
         RealtimeModule,
+        RetentionModule,
       ],
       // Valida con zod todo cuerpo y query tipados con DTOs de nestjs-zod (400 si no cumplen).
       providers: [{ provide: APP_PIPE, useClass: ZodValidationPipe }],

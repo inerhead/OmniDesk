@@ -17,13 +17,28 @@ export type CreateTenantRequest = z.infer<typeof CreateTenantRequestSchema>;
 export const TenantSchema = z.object({ id: z.uuid(), name: z.string(), slug: z.string() });
 export type Tenant = z.infer<typeof TenantSchema>;
 
-/** `PATCH /api/v1/tenants/current` (solo OWNER): al menos uno de los dos. */
+/** Días que se conservan las conversaciones cerradas (SPEC 12); `null` = indefinidamente. */
+export const RetentionDaysSchema = z.union([
+  z.null(),
+  z.literal(90),
+  z.literal(180),
+  z.literal(365),
+]);
+export type RetentionDays = z.infer<typeof RetentionDaysSchema>;
+
+/** `PATCH /api/v1/tenants/current` (solo OWNER): al menos un campo. */
 export const UpdateTenantRequestSchema = z
-  .object({ name: z.string().trim().min(2).max(80), slug: TenantSlugSchema })
+  .object({
+    name: z.string().trim().min(2).max(80),
+    slug: TenantSlugSchema,
+    retentionDays: RetentionDaysSchema,
+  })
   .partial()
-  .refine((value) => value.name !== undefined || value.slug !== undefined, {
-    message: 'Indica el nombre o el slug',
-  });
+  .refine(
+    (value) =>
+      value.name !== undefined || value.slug !== undefined || value.retentionDays !== undefined,
+    { message: 'Indica el nombre, el slug o la retención' },
+  );
 export type UpdateTenantRequest = z.infer<typeof UpdateTenantRequestSchema>;
 
 /** `GET /api/v1/tenants/current` (solo OWNER). */
@@ -37,8 +52,19 @@ export const TenantDetailsSchema = z.object({
   deactivatedBy: MemberRefSchema.nullable(),
   /** La demo no cambia de slug: el login de desarrollo la busca por `demo`. */
   slugLocked: z.boolean(),
+  retentionDays: RetentionDaysSchema,
 });
 export type TenantDetails = z.infer<typeof TenantDetailsSchema>;
+
+/** `GET /api/v1/tenants/current/retention-preview?days=90` (solo OWNER). */
+export const RetentionPreviewQuerySchema = z.object({
+  days: z.coerce.number().pipe(z.union([z.literal(90), z.literal(180), z.literal(365)])),
+});
+export type RetentionPreviewQuery = z.infer<typeof RetentionPreviewQuerySchema>;
+
+/** Conversaciones cerradas que la próxima ejecución del job borraría con esos días. */
+export const RetentionPreviewResponseSchema = z.object({ conversations: z.int().min(0) });
+export type RetentionPreviewResponse = z.infer<typeof RetentionPreviewResponseSchema>;
 
 /** `POST /api/v1/tenants/current/deactivate`: el nombre exacto de la empresa, como confirmación. */
 export const DeactivateTenantRequestSchema = z.object({ confirmName: z.string() });

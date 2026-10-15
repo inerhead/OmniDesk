@@ -94,17 +94,38 @@ export function bindKeyboardInset(): () => void {
     }, 250);
   };
 
+  const clearKeyboard = () => {
+    root.style.setProperty('--vv-top', '0px');
+    root.style.setProperty('--vv-height', '100%');
+    root.style.setProperty('--keyboard-overlap', '0px');
+    root.removeAttribute('data-keyboard');
+    root.removeAttribute('data-keyboard-shift');
+  };
+
+  const onVisibility = () => {
+    // Al minimizar, iOS cierra el teclado sin soltar el foco. Si el translate queda
+    // puesto, al volver toda la app está fuera de la pantalla y se ve blanca.
+    if (document.visibilityState === 'hidden') {
+      clearKeyboard();
+      return;
+    }
+    baseline = Math.max(baseline, window.innerHeight, viewport.height);
+    sync();
+  };
+
   sync();
   viewport.addEventListener('resize', sync);
   viewport.addEventListener('scroll', sync);
   document.addEventListener('focusin', sync);
   document.addEventListener('focusout', sync);
+  document.addEventListener('visibilitychange', onVisibility);
   window.addEventListener('orientationchange', onOrientation);
   return () => {
     viewport.removeEventListener('resize', sync);
     viewport.removeEventListener('scroll', sync);
     document.removeEventListener('focusin', sync);
     document.removeEventListener('focusout', sync);
+    document.removeEventListener('visibilitychange', onVisibility);
     window.removeEventListener('orientationchange', onOrientation);
     root.style.removeProperty('--vv-top');
     root.style.removeProperty('--vv-height');

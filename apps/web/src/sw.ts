@@ -34,10 +34,8 @@ interface PushData {
   tenantId?: string;
 }
 
-self.addEventListener('install', () => {
-  void self.skipWaiting();
-});
-
+// La activación inmediata la pide el aviso de actualización (SKIP_WAITING).
+// Si el worker nuevo tomara solo una página congelada en el iPhone, al volver queda en blanco.
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
 });

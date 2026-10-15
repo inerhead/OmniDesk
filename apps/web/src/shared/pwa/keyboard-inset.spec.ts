@@ -34,18 +34,18 @@ describe('keyboardFrame', () => {
   it('sigue el viewport si el teclado desplaza la página y esconde la cabecera', () => {
     expect(keyboardFrame(844, 844, 390, 180, true)).toEqual({
       top: 180,
-      height: 390,
+      height: null,
       open: true,
-      overlap: 0,
+      overlap: 454,
     });
   });
 
   it('sigue abierto aunque el desplazamiento se coma el alto del teclado', () => {
     expect(keyboardFrame(844, 844, 400, 400, true)).toEqual({
       top: 400,
-      height: 400,
+      height: null,
       open: true,
-      overlap: 0,
+      overlap: 444,
     });
   });
 });

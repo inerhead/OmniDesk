@@ -28,22 +28,19 @@ export function keyboardFrame(
   if (covered <= KEYBOARD_MIN_PX) return CLOSED;
 
   const layoutShrunk = innerHeight < baseline - 80;
-  // El navegador ya encogió la página: mover #root otra vez se ve como una recarga.
+  // El navegador ya encogió la página: un hueco extra dejaría la caja flotando.
   if (layoutShrunk && viewportOffsetTop < 24) {
     return { top: 0, height: null, open: true, overlap: 0 };
   }
 
-  // Desplazó el viewport y la cabecera se iría. Ahí sí hay que seguir el rectángulo visible.
-  if (viewportOffsetTop >= 24) {
-    return {
-      top: Math.round(viewportOffsetTop),
-      height: Math.round(viewportHeight),
-      open: true,
-      overlap: 0,
-    };
-  }
-
-  return { top: 0, height: null, open: true, overlap: covered };
+  // Nunca se cambia el alto de #root: eso reflowea la conversación y parece una recarga.
+  // Si el iPhone desplazó el viewport, un translateY devuelve la cabecera sin reflow.
+  return {
+    top: Math.max(0, Math.round(viewportOffsetTop)),
+    height: null,
+    open: true,
+    overlap: covered,
+  };
 }
 
 function editingText(): boolean {
@@ -87,7 +84,7 @@ export function bindKeyboardInset(): () => void {
     root.style.setProperty('--vv-height', height === null ? '100%' : `${height}px`);
     root.style.setProperty('--keyboard-overlap', `${overlap}px`);
     root.toggleAttribute('data-keyboard', open);
-    root.toggleAttribute('data-keyboard-frame', height !== null);
+    root.toggleAttribute('data-keyboard-shift', top > 0);
   };
 
   const onOrientation = () => {
@@ -113,6 +110,6 @@ export function bindKeyboardInset(): () => void {
     root.style.removeProperty('--vv-height');
     root.style.removeProperty('--keyboard-overlap');
     root.removeAttribute('data-keyboard');
-    root.removeAttribute('data-keyboard-frame');
+    root.removeAttribute('data-keyboard-shift');
   };
 }

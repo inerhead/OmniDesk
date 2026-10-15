@@ -161,11 +161,8 @@ html[data-keyboard] {
     overflow: hidden;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
   }
-  /* Solo si el iPhone desplazó la página. `top` en un fixed no sigue al teclado; translateY sí. */
-  html[data-keyboard-frame] #root {
-    top: 0;
-    bottom: auto;
-    height: var(--vv-height);
+  /* Solo un desplazamiento. Cambiar el alto de #root reflowea el chat y parece una recarga. */
+  html[data-keyboard-shift] #root {
     transform: translateY(var(--vv-top));
   }
 }

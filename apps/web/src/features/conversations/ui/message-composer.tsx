@@ -122,6 +122,7 @@ export function MessageComposer({
   const [elapsed, setElapsed] = useState(0);
   const [levels, setLevels] = useState<number[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const captureRef = useRef<VoiceCapture | null>(null);
@@ -161,6 +162,70 @@ export function MessageComposer({
     return () => {
       field.removeEventListener('touchstart', onTouchStart);
       field.removeEventListener('touchend', onTouchEnd);
+    };
+  }, []);
+
+  useEffect(() => {
+    const form = formRef.current;
+    if (!form) return;
+    // Con el teclado abierto iOS gasta el primer toque en cerrarlo y, al encogerse
+    // la caja, el botón ya no está bajo el dedo. El toque se guarda al bajar y se
+    // ejecuta al soltar. preventDefault en touchstart cancela el gesto del selector
+    // de archivos y del micrófono, así que solo se cancela el click fantasma.
+    let pressed: { button: HTMLButtonElement; x: number; y: number } | null = null;
+    let touchAt = 0;
+
+    const buttonFrom = (event: TouchEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return null;
+      const button = target.closest('button');
+      if (!(button instanceof HTMLButtonElement) || button.disabled) return null;
+      return button;
+    };
+
+    const onTouchStart = (event: TouchEvent) => {
+      const button = buttonFrom(event);
+      const touch = event.changedTouches[0];
+      pressed = button && touch ? { button, x: touch.clientX, y: touch.clientY } : null;
+    };
+
+    const onTouchEnd = (event: TouchEvent) => {
+      const start = pressed;
+      pressed = null;
+      if (!start) return;
+      const touch = event.changedTouches[0];
+      if (!touch) return;
+      const dx = touch.clientX - start.x;
+      const dy = touch.clientY - start.y;
+      if (dx * dx + dy * dy > 144) return;
+      if (start.button.disabled || !start.button.isConnected) return;
+      event.preventDefault();
+      touchAt = event.timeStamp;
+      start.button.click();
+    };
+
+    const onTouchCancel = () => {
+      pressed = null;
+    };
+
+    const onClickCapture = (event: MouseEvent) => {
+      if (!event.isTrusted || touchAt === 0) return;
+      if (Math.abs(event.timeStamp - touchAt) > 700) return;
+      const target = event.target;
+      if (!(target instanceof Element) || !target.closest('button')) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    form.addEventListener('touchstart', onTouchStart);
+    form.addEventListener('touchend', onTouchEnd);
+    form.addEventListener('touchcancel', onTouchCancel);
+    form.addEventListener('click', onClickCapture, true);
+    return () => {
+      form.removeEventListener('touchstart', onTouchStart);
+      form.removeEventListener('touchend', onTouchEnd);
+      form.removeEventListener('touchcancel', onTouchCancel);
+      form.removeEventListener('click', onClickCapture, true);
     };
   }, []);
 
@@ -293,6 +358,7 @@ export function MessageComposer({
 
   return (
     <form
+      ref={formRef}
       className="shrink-0 px-2 py-1.5 md:px-4"
       onSubmit={(event) => {
         event.preventDefault();

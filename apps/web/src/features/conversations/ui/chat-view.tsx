@@ -78,6 +78,8 @@ export function ChatView({ conversationId }: { conversationId: string }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
+  const pinning = useRef(false);
+  const userMoved = useRef(false);
   const [atBottom, setAtBottom] = useState(true);
   const [farFromBottom, setFarFromBottom] = useState(false);
   const items = timeline.data
@@ -93,17 +95,26 @@ export function ChatView({ conversationId }: { conversationId: string }) {
     (item) => item.kind === 'message' && item.sequence > seenSequence,
   ).length;
 
-  // Al abrir el chat se muestra el último mensaje. Si el usuario subió a leer
-  // el historial, un mensaje nuevo no lo arrastra hacia abajo.
-  useLayoutEffect(() => {
-    stickToBottom.current = true;
+  const scrollToEnd = () => {
     const element = scrollRef.current;
-    if (element) element.scrollTop = element.scrollHeight;
+    if (!element) return;
+    pinning.current = true;
+    element.scrollTop = element.scrollHeight;
+    requestAnimationFrame(() => {
+      pinning.current = false;
+    });
+  };
+
+  // Al abrir el chat se muestra el último mensaje, antes del primer pintado.
+  // Si el usuario subió a leer el historial, un mensaje nuevo no lo arrastra.
+  useLayoutEffect(() => {
+    userMoved.current = false;
+    stickToBottom.current = true;
+    scrollToEnd();
   }, [conversationId]);
 
   useLayoutEffect(() => {
-    const element = scrollRef.current;
-    if (element && stickToBottom.current) element.scrollTop = element.scrollHeight;
+    if (stickToBottom.current) scrollToEnd();
   }, [newest?.id]);
 
   // Una foto, un audio o el compositor al crecer dejarían el último mensaje cortado.
@@ -117,7 +128,13 @@ export function ChatView({ conversationId }: { conversationId: string }) {
       frame.style.setProperty('--chat-header', `${header.offsetHeight}px`);
       frame.style.setProperty('--chat-dock', `${dock.offsetHeight}px`);
       const element = scrollRef.current;
-      if (element && stickToBottom.current) element.scrollTop = element.scrollHeight;
+      if (element && stickToBottom.current) {
+        pinning.current = true;
+        element.scrollTop = element.scrollHeight;
+        requestAnimationFrame(() => {
+          pinning.current = false;
+        });
+      }
     };
     pin();
     const observer = new ResizeObserver(pin);
@@ -128,9 +145,23 @@ export function ChatView({ conversationId }: { conversationId: string }) {
   }, [conversationId]);
 
   const onScroll = () => {
+    if (pinning.current) return;
     const element = scrollRef.current;
     if (!element) return;
     const distance = element.scrollHeight - element.scrollTop - element.clientHeight;
+    // Al entrar, el historial crece y el scroll salta solo. Eso no es el usuario subiendo.
+    if (!userMoved.current) {
+      stickToBottom.current = true;
+      setAtBottom(true);
+      setFarFromBottom(false);
+      const next = element.scrollHeight;
+      if (distance >= STICK_THRESHOLD_PX && element.scrollTop !== next) {
+        pinning.current = true;
+        element.scrollTop = next;
+        pinning.current = false;
+      }
+      return;
+    }
     stickToBottom.current = distance < STICK_THRESHOLD_PX;
     setAtBottom(distance < STICK_THRESHOLD_PX);
     setFarFromBottom(distance > JUMP_THRESHOLD_PX);
@@ -254,7 +285,16 @@ export function ChatView({ conversationId }: { conversationId: string }) {
         <div
           ref={scrollRef}
           onScroll={onScroll}
-          className="absolute inset-0 overflow-y-auto px-3 pt-[var(--chat-header)] pb-[calc(var(--chat-dock)+1rem)] md:px-6"
+          onWheel={() => {
+            userMoved.current = true;
+          }}
+          onTouchStart={() => {
+            userMoved.current = true;
+          }}
+          onPointerDown={() => {
+            userMoved.current = true;
+          }}
+          className="absolute inset-0 overflow-y-auto px-3 pt-[var(--chat-header)] pb-[calc(var(--chat-dock)+1rem)] [overflow-anchor:none] md:px-6"
         >
             <div ref={contentRef} className="mx-auto w-full max-w-3xl">
               {timeline.isPending && (

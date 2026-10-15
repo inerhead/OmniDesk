@@ -177,6 +177,7 @@ function ListBody({
         icon={EMPTY_INBOX_ICON[inbox]}
         title={EMPTY_INBOX_MESSAGE[inbox]}
         description={
+          import.meta.env.DEV &&
           inbox === 'ai' && (
             <>
               Ejecuta <code className="bg-muted rounded px-1 py-0.5">pnpm simulate</code>.

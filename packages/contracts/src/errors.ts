@@ -13,6 +13,10 @@ export const ApiErrorCodeSchema = z.enum([
   'INVALID_SIGNATURE',
   'INVALID_WEBHOOK_URL',
   'CHANNEL_EXTERNAL_ID_TAKEN',
+  // SPEC 16: empresa inactiva, confirmación al inactivar y slug fijo de la demo.
+  'TENANT_INACTIVE',
+  'CONFIRMATION_MISMATCH',
+  'DEMO_SLUG_LOCKED',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCodeSchema>;
 

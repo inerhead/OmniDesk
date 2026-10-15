@@ -1,10 +1,12 @@
 import { Module } from '@nestjs/common';
+import { AttachmentsModule } from '../attachments/attachments.module';
 import { ConversationsModule } from '../conversations/conversations.module';
 import { IdentityModule } from '../identity/identity.module';
 import { MembersModule } from '../members/members.module';
 import {
   AcceptInvitationUseCase,
   CreateInvitationUseCase,
+  GetInvitationLogoUseCase,
   ListInvitationsUseCase,
   PreviewInvitationUseCase,
   RevokeInvitationUseCase,
@@ -17,7 +19,7 @@ import { PrismaInvitationRepository } from './infrastructure/prisma-invitation.r
 
 /** Gestión de la empresa (SPEC 07): invitaciones por enlace, cambio de rol y baja de miembros. */
 @Module({
-  imports: [IdentityModule, MembersModule, ConversationsModule],
+  imports: [AttachmentsModule, IdentityModule, MembersModule, ConversationsModule],
   controllers: [InvitationsController, TeamMembersController],
   providers: [
     { provide: INVITATION_REPOSITORY, useClass: PrismaInvitationRepository },
@@ -26,6 +28,7 @@ import { PrismaInvitationRepository } from './infrastructure/prisma-invitation.r
     RevokeInvitationUseCase,
     PreviewInvitationUseCase,
     AcceptInvitationUseCase,
+    GetInvitationLogoUseCase,
     UpdateMemberRoleUseCase,
     RemoveMemberUseCase,
   ],

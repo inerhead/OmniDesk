@@ -14,3 +14,14 @@ export const RealtimeEventSchema = z.object({
   occurredAt: z.iso.datetime(),
 });
 export type RealtimeEvent = z.infer<typeof RealtimeEventSchema>;
+
+/** Una empresa se inactivó o se reactivó (SPEC 16): la web vuelve a pedir `/me`. */
+export const TENANT_STATUS_CHANGED_EVENT = 'tenant.status_changed';
+
+export const TenantStatusChangedEventSchema = z.object({
+  type: z.literal('tenant.status_changed'),
+  tenantId: z.uuid(),
+  active: z.boolean(),
+  occurredAt: z.iso.datetime(),
+});
+export type TenantStatusChangedEvent = z.infer<typeof TenantStatusChangedEventSchema>;

@@ -11,6 +11,10 @@ export interface Invitation extends InvitationLifecycle {
 
 export interface InvitationWithTenant extends Invitation {
   tenantName: string;
+  tenantLogoKey: string | null;
+  tenantLogoUpdatedAt: Date | null;
+  /** `false` si la empresa está inactiva (SPEC 16). */
+  tenantActive: boolean;
 }
 
 export interface InvitationRepository {

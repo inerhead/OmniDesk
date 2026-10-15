@@ -5,6 +5,8 @@ import { MEMBERSHIP_REPOSITORY, type MembershipRepository } from './ports/member
 
 export type ActorResolution =
   | { kind: 'ok'; actor: ActorContext }
+  /** La empresa activa está inactiva (SPEC 16): solo sus OWNER entran, y solo a reactivarla. */
+  | { kind: 'inactive'; actor: ActorContext }
   /** La sesión no tiene empresa activa o ya no es miembro activo de ella. */
   | { kind: 'no-active-tenant' };
 
@@ -17,14 +19,12 @@ export class ResolveActorUseCase {
     if (!session.activeTenantId) return { kind: 'no-active-tenant' };
     const membership = await this.memberships.findForUser(session.userId, session.activeTenantId);
     if (!membership) return { kind: 'no-active-tenant' };
-    return {
-      kind: 'ok',
-      actor: {
-        userId: session.userId,
-        tenantId: membership.tenantId,
-        memberId: membership.memberId,
-        role: membership.role,
-      },
+    const actor: ActorContext = {
+      userId: session.userId,
+      tenantId: membership.tenantId,
+      memberId: membership.memberId,
+      role: membership.role,
     };
+    return { kind: membership.tenantActive ? 'ok' : 'inactive', actor };
   }
 }

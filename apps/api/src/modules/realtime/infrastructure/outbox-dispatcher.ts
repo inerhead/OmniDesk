@@ -7,7 +7,11 @@ import {
   type OnModuleDestroy,
 } from '@nestjs/common';
 import { AiReplyWorker } from '../../whatsapp/ai-reply-worker';
-import { RealtimeEventSchema } from '@omnidesk/contracts';
+import {
+  RealtimeEventSchema,
+  TENANT_INACTIVE_REASON,
+  TenantStatusChangedEventSchema,
+} from '@omnidesk/contracts';
 import { ATTACHMENT_DOWNLOAD_REQUESTED } from '../../attachments/application/enqueue-attachment-download';
 import { PermanentDownloadError } from '../../attachments/domain/attachment-errors';
 import { MESSAGE_SEND_REQUESTED } from '../../conversations/application/enqueue-send-requested';
@@ -19,6 +23,10 @@ import {
   TRANSACTION_RUNNER,
   type TransactionRunner,
 } from '../../../shared/application/transaction-runner.port';
+import {
+  TENANT_STATUS,
+  type TenantStatusReader,
+} from '../../../shared/application/tenant-status.port';
 import {
   OUTBOX_EVENT_STORE,
   type OutboxEventStore,
@@ -63,6 +71,7 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
     @Optional() private readonly ai?: AiReplyWorker,
     @Optional() @Inject(ATTACHMENT_DOWNLOADER) private readonly downloads?: AttachmentDownloader,
     @Optional() @Inject(PUSH_SENDER) private readonly pushes?: PushSender,
+    @Optional() @Inject(TENANT_STATUS) private readonly tenantStatus?: TenantStatusReader,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -131,10 +140,35 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
     }
   }
 
+  /**
+   * Empresa inactiva (SPEC 16): no sale nada. Los envíos pasan a `FAILED` con `TENANT_INACTIVE` sin
+   * llamar al proveedor (también los que ya estaban en cola); la IA y el push se dan por publicados.
+   * Devuelve `true` si el evento queda resuelto así.
+   */
+  private async cutForInactiveTenant(event: PendingOutboxEvent): Promise<boolean> {
+    const outgoing =
+      event.type === MESSAGE_SEND_REQUESTED ||
+      event.type === 'ai.reply_requested' ||
+      event.type === 'notification.requested';
+    if (!outgoing || !this.tenantStatus) return false;
+    if (await this.tenantStatus.isActive(event.tenantId)) return false;
+    if (event.type === MESSAGE_SEND_REQUESTED) {
+      await this.sender.fail(event.tenantId, event.payload, TENANT_INACTIVE_REASON);
+    }
+    return true;
+  }
+
   private async handle(event: PendingOutboxEvent): Promise<void> {
+    if (await this.cutForInactiveTenant(event)) return;
     switch (event.type) {
       case 'conversation.changed':
         this.publisher.publish(event.tenantId, RealtimeEventSchema.parse(event.payload));
+        return;
+      case 'tenant.status_changed':
+        this.publisher.publishTenantStatus(
+          event.tenantId,
+          TenantStatusChangedEventSchema.parse(event.payload),
+        );
         return;
       case 'ai.reply_requested':
         if (!this.ai) throw new Error('Worker IA no disponible');

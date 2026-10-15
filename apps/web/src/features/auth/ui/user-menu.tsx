@@ -91,7 +91,10 @@ export function UserMenu({ variant }: { variant: 'rail' | 'bar' }) {
         {membership && isManagerRole(membership.role) && (
           <>
             <DropdownMenuSeparator />
-            <SettingsMenuItems tenantName={membership.tenantName} />
+            <SettingsMenuItems
+              tenantName={membership.tenantName}
+              isOwner={membership.role === 'OWNER'}
+            />
           </>
         )}
         <DropdownMenuSeparator />

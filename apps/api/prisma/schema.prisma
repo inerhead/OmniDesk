@@ -80,10 +80,19 @@ enum AttachmentStatus {
 }
 
 model Tenant {
-  id        String   @id @default(uuid(7)) @db.Uuid
-  slug      String   @unique
-  name      String
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  id                    String    @id @default(uuid(7)) @db.Uuid
+  slug                  String    @unique
+  name                  String
+  /// Clave del logo en el bucket (SPEC 16); null sin logo.
+  logoKey               String?   @map("logo_key")
+  /// Versiona la URL del logo para la caché.
+  logoUpdatedAt         DateTime? @map("logo_updated_at") @db.Timestamptz(3)
+  /// null = activa (SPEC 16).
+  deactivatedAt         DateTime? @map("deactivated_at") @db.Timestamptz(3)
+  deactivatedByMemberId String?   @map("deactivated_by_member_id") @db.Uuid
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  deactivatedBy TenantMember? @relation("TenantDeactivatedBy", fields: [deactivatedByMemberId], references: [id], onDelete: Restrict)
 
   channels      Channel[]
   credentials   IntegrationCredential[]
@@ -343,6 +352,7 @@ model TenantMember {
 
   tenant                Tenant              @relation(fields: [tenantId], references: [id])
   user                  User?               @relation(fields: [userId], references: [id])
+  deactivatedTenants    Tenant[]            @relation("TenantDeactivatedBy")
   assignedConversations Conversation[]
   actedEvents           ConversationEvent[] @relation("EventActor")
   targetedEvents        ConversationEvent[] @relation("EventTarget")

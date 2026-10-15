@@ -11,6 +11,10 @@ export const MembershipSchema = z.object({
   tenantName: z.string(),
   tenantSlug: z.string(),
   role: MemberRoleSchema,
+  /** Logo de la empresa (SPEC 16); `null` = iniciales. */
+  tenantLogoUrl: z.string().nullable().default(null),
+  /** `false` solo lo ven los OWNER: la empresa está inactiva y solo se puede reactivar. */
+  tenantActive: z.boolean().default(true),
 });
 export type Membership = z.infer<typeof MembershipSchema>;
 

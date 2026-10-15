@@ -8,6 +8,7 @@ import { GoogleButton } from '@/features/auth/ui/google-button';
 import { ApiCodeError, isStatus } from '@/shared/api/api-error';
 import { Button } from '@/shared/ui/button';
 import { Skeleton } from '@/shared/ui/skeleton';
+import { TenantMark } from '@/shared/ui/tenant-mark';
 import { fetchInvitationPreview, postAcceptInvitation } from '../api/team-api';
 
 function acceptErrorMessage(error: unknown, emailMasked: string): string {
@@ -17,6 +18,7 @@ function acceptErrorMessage(error: unknown, emailMasked: string): string {
     }
     if (error.code === 'ALREADY_MEMBER') return 'Ya eres miembro de esta empresa.';
     if (error.code === 'INVITATION_EXPIRED') return 'La invitación ya no es válida.';
+    if (error.code === 'TENANT_INACTIVE') return 'Esta empresa está inactiva.';
   }
   return 'No se pudo aceptar la invitación. Inténtalo de nuevo.';
 }
@@ -75,7 +77,8 @@ export function InvitePage() {
     );
   }
 
-  const { tenantName, role, emailMasked } = preview.data;
+  const { tenantName, role, emailMasked, tenantLogoUrl } = preview.data;
+  const mark = <TenantMark id={token} name={tenantName} logoUrl={tenantLogoUrl} size="md" />;
   const description = (
     <>
       Te invitaron a <strong className="text-foreground">{tenantName}</strong> como{' '}
@@ -85,7 +88,7 @@ export function InvitePage() {
 
   if (!me.data) {
     return (
-      <AuthCard title={`Únete a ${tenantName}`} description={description}>
+      <AuthCard title={`Únete a ${tenantName}`} description={description} mark={mark}>
         {providers.data?.google ? (
           <GoogleButton next={next} label={`Entrar con Google para unirte a ${tenantName}`} />
         ) : (
@@ -98,7 +101,7 @@ export function InvitePage() {
   }
 
   return (
-    <AuthCard title={`Únete a ${tenantName}`} description={description}>
+    <AuthCard title={`Únete a ${tenantName}`} description={description} mark={mark}>
       <p className="text-muted-foreground text-center text-sm">
         Entraste como <span className="text-foreground">{me.data.user.email}</span>
       </p>

@@ -6,11 +6,11 @@ import {
   ATTACHMENT_STORAGE,
   type AttachmentStorage,
 } from '../../attachments/application/ports/attachment-storage';
-import { detectAvatarMimeType, type AvatarMimeType } from '../domain/avatar-image';
+import { detectImageMimeType, type ImageMimeType } from '../../../shared/kernel/image-type';
 import { AVATAR_REPOSITORY, type AvatarRepository } from './ports/avatar.repository';
 
 export type GetAvatarResult =
-  | { kind: 'ok'; bytes: Buffer; mimeType: AvatarMimeType }
+  | { kind: 'ok'; bytes: Buffer; mimeType: ImageMimeType }
   | { kind: 'unauthenticated' }
   | { kind: 'not-found' };
 
@@ -40,7 +40,7 @@ export class GetAvatarUseCase {
 
     // Una foto pesa ≤ 1 MB: se lee entera para fijar Content-Length y el tipo por sus bytes.
     const bytes = await buffer((await this.storage.get(owner.avatarKey)).body);
-    const mimeType = detectAvatarMimeType(bytes);
+    const mimeType = detectImageMimeType(bytes);
     return mimeType ? { kind: 'ok', bytes, mimeType } : { kind: 'not-found' };
   }
 }

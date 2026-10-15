@@ -50,7 +50,8 @@ export type OutboundAiMessageResponse = z.infer<typeof OutboundAiMessageResponse
 /** Cuerpo del `409`: la IA no debe enviar el mensaje. */
 export const OutboundAiMessageRejectedSchema = z.object({
   sendAllowed: z.literal(false),
-  reason: z.enum(['CONTROL_CHANGED', 'CONVERSATION_CLOSED', 'WINDOW_CLOSED']),
+  /** `TENANT_INACTIVE`: la empresa está inactiva (SPEC 16). */
+  reason: z.enum(['CONTROL_CHANGED', 'CONVERSATION_CLOSED', 'WINDOW_CLOSED', 'TENANT_INACTIVE']),
 });
 export type OutboundAiMessageRejected = z.infer<typeof OutboundAiMessageRejectedSchema>;
 

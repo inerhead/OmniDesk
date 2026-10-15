@@ -1,5 +1,6 @@
-import { Outlet, useMatch } from 'react-router';
+import { Navigate, Outlet, useLocation, useMatch } from 'react-router';
 import { useMe } from '@/features/auth/api/use-me';
+import { inactiveTenantRedirect } from '@/features/company/inactive-tenant';
 import { PresenceReporter, PushOpenListener } from '@/features/notifications/push-runtime';
 import { OfflineBanner } from '@/shared/pwa/offline-banner';
 import { UpdatePrompt } from '@/shared/pwa/update-prompt';
@@ -15,6 +16,7 @@ import { RealtimeProvider } from './realtime-provider';
 export function AppLayout() {
   const inChat = useMatch('/conversations/:conversationId') !== null;
   const { data: me } = useMe();
+  const redirect = inactiveTenantRedirect(me, useLocation().pathname);
 
   return (
     // `key`: al cambiar de empresa activa, el socket se cierra y se abre con el room nuevo.
@@ -25,7 +27,7 @@ export function AppLayout() {
           <OfflineBanner />
           {/* Cada página controla su propio scroll: la bandeja usa paneles con scroll independiente. */}
           <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <Outlet />
+            {redirect ? <Navigate to={redirect} replace /> : <Outlet />}
           </main>
           {!inChat && <BottomNav />}
         </div>

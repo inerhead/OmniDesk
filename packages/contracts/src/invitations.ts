@@ -42,5 +42,7 @@ export const InvitationPreviewSchema = z.object({
   emailMasked: z.string(),
   /** Vencida, ya usada o revocada. */
   expired: z.boolean(),
+  /** Logo de la empresa, servido por el token (SPEC 16); `null` = iniciales. */
+  tenantLogoUrl: z.string().nullable().default(null),
 });
 export type InvitationPreview = z.infer<typeof InvitationPreviewSchema>;

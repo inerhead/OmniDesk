@@ -41,6 +41,20 @@ export interface Membership {
   tenantName: string;
   tenantSlug: string;
   role: MemberRole;
+  /** Logo de la empresa (SPEC 16); `null` = iniciales. */
+  tenantLogoUrl: string | null;
+  /** `false`: inactiva; solo sus OWNER la ven, para reactivarla. */
+  tenantActive: boolean;
+}
+
+/** Una empresa inactiva solo la ven sus OWNER, para reactivarla (SPEC 16). */
+export function canSeeMembership(membership: Pick<Membership, 'role' | 'tenantActive'>): boolean {
+  return membership.tenantActive || membership.role === 'OWNER';
+}
+
+/** Empresa de respaldo de una sesión: la primera activa; sin ninguna, `null` (va a `/onboarding`). */
+export function fallbackTenantId(memberships: Membership[]): string | null {
+  return memberships.find((membership) => membership.tenantActive)?.tenantId ?? null;
 }
 
 export function normalizeEmail(email: string): string {

@@ -4,20 +4,24 @@ import Cropper from 'react-easy-crop';
 import 'react-easy-crop/react-easy-crop.css';
 import { Button } from '@/shared/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/shared/ui/dialog';
-import { cropToBlob, loadImage, type CropArea } from './crop-to-blob';
+import { cropToBlob, loadImage, type CropArea } from '@/shared/lib/crop-to-blob';
 
 /**
- * Recorte circular de la foto. Se carga en diferido desde "Mi perfil" (`import()`): react-easy-crop
- * no entra en el bundle inicial.
+ * Recorte cuadrado de una imagen: circular para la foto de perfil, rectangular para el logo. Se carga
+ * en diferido (`import()`) desde la página que lo usa: react-easy-crop no entra en el bundle inicial.
  */
-export default function AvatarCropDialog({
+export default function ImageCropDialog({
   source,
+  shape,
+  title,
   saving,
   onCancel,
   onSave,
 }: {
   /** URL `data:` de la imagen elegida; `null` = cerrado. */
   source: string | null;
+  shape: 'round' | 'rect';
+  title: string;
   saving: boolean;
   onCancel: () => void;
   onSave: (image: Blob) => void;
@@ -33,7 +37,7 @@ export default function AvatarCropDialog({
     try {
       onSave(await cropToBlob(await loadImage(source), area));
     } catch {
-      setError('No se pudo preparar la foto. Prueba con otra imagen.');
+      setError('No se pudo preparar la imagen. Prueba con otra.');
     }
   }
 
@@ -45,7 +49,7 @@ export default function AvatarCropDialog({
       }}
     >
       <DialogContent className="gap-3">
-        <DialogTitle className="pr-6">Encuadra tu foto</DialogTitle>
+        <DialogTitle className="pr-6">{title}</DialogTitle>
         <DialogDescription>Arrastra para moverla y usa el zoom para acercarla.</DialogDescription>
         <div className="bg-muted relative aspect-square w-full overflow-hidden rounded-lg">
           {source && (
@@ -54,7 +58,7 @@ export default function AvatarCropDialog({
               crop={crop}
               zoom={zoom}
               aspect={1}
-              cropShape="round"
+              cropShape={shape}
               showGrid={false}
               disableAutomaticStylesInjection
               onCropChange={setCrop}

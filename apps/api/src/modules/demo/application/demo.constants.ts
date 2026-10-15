@@ -1,7 +1,8 @@
 import type { NewChannel } from '../../channels/domain/channel';
 import type { NewMember } from '../../members/domain/member';
+import { DEMO_TENANT_SLUG } from '../../tenancy/domain/tenant';
 
-export const DEMO_TENANT = { slug: 'demo', name: 'Empresa Demo' } as const;
+export const DEMO_TENANT = { slug: DEMO_TENANT_SLUG, name: 'Empresa Demo' } as const;
 
 export const DEMO_CHANNEL: NewChannel = {
   name: 'WhatsApp Demo',

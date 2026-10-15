@@ -11,6 +11,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -32,6 +33,7 @@ import {
   type InvitationPreview,
   type ListInvitationsResponse,
 } from '@omnidesk/contracts';
+import type { Response } from 'express';
 import { createZodDto } from 'nestjs-zod';
 import type { ActorContext, SessionContext } from '../../../../shared/application/request-context';
 import { ENV, type Env } from '../../../../shared/config/env';
@@ -46,9 +48,11 @@ import {
   SessionGuard,
   UserSessionGuard,
 } from '../../../identity/infrastructure/http/session.guard';
+import { sendLogo } from '../../../tenancy/infrastructure/http/tenant-logo.controller';
 import {
   AcceptInvitationUseCase,
   CreateInvitationUseCase,
+  GetInvitationLogoUseCase,
   ListInvitationsUseCase,
   PreviewInvitationUseCase,
   RevokeInvitationUseCase,
@@ -71,6 +75,7 @@ export class InvitationsController {
     private readonly revokeInvitation: RevokeInvitationUseCase,
     private readonly previewInvitation: PreviewInvitationUseCase,
     private readonly acceptInvitation: AcceptInvitationUseCase,
+    private readonly invitationLogo: GetInvitationLogoUseCase,
   ) {}
 
   @Post()
@@ -139,13 +144,24 @@ export class InvitationsController {
     return preview;
   }
 
+  /** Pública: el logo de la empresa en `/invite/:token`, solo con una invitación vigente. */
+  @Get(':token/logo')
+  @ApiOkResponse({ description: 'El logo (JPEG o WebP).' })
+  @ApiNotFoundResponse({
+    description: 'Sin logo, o enlace desconocido, vencido, usado o revocado.',
+  })
+  async logo(@Param('token') token: string, @Res() res: Response): Promise<void> {
+    sendLogo(res, await this.invitationLogo.execute(token));
+  }
+
   @Post('by-token/:token/accept')
   @UseGuards(UserSessionGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNoContentResponse({ description: 'Ahora es miembro y la empresa es la activa.' })
   @ApiGoneResponse({ description: 'Vencida, ya usada o revocada (`INVITATION_EXPIRED`).' })
   @ApiConflictResponse({
-    description: 'Otro email (`INVITATION_EMAIL_MISMATCH`) o ya es miembro (`ALREADY_MEMBER`).',
+    description:
+      'Otro email (`INVITATION_EMAIL_MISMATCH`), ya es miembro (`ALREADY_MEMBER`) o la empresa está inactiva (`TENANT_INACTIVE`).',
   })
   async accept(
     @CurrentSession() session: SessionContext,
@@ -167,6 +183,8 @@ export class InvitationsController {
         );
       case 'already-member':
         throw apiError(HttpStatus.CONFLICT, 'ALREADY_MEMBER', 'Ya eres miembro de esta empresa');
+      case 'tenant-inactive':
+        throw apiError(HttpStatus.CONFLICT, 'TENANT_INACTIVE', 'La empresa está inactiva');
     }
   }
 }

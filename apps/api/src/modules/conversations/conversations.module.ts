@@ -19,6 +19,7 @@ import { RegisterAiReplyUseCase } from './application/register-ai-reply.use-case
 import { RegisterInboundMessageUseCase } from './application/register-inbound-message.use-case';
 import { ReleaseConversationUseCase } from './application/release-conversation.use-case';
 import { ReopenConversationUseCase } from './application/reopen-conversation.use-case';
+import { RequeueTenantInactiveUseCase } from './application/requeue-tenant-inactive.use-case';
 import { RetryFailedMessageUseCase } from './application/retry-failed-message.use-case';
 import { SendAgentMessageUseCase } from './application/send-agent-message.use-case';
 import { UpdateDeliveryStatusUseCase } from './application/update-delivery-status.use-case';
@@ -50,6 +51,7 @@ import { PrismaConversationRepository } from './infrastructure/prisma-conversati
     RetryFailedMessageUseCase,
     UpdateDeliveryStatusUseCase,
     FindOutboundForSendUseCase,
+    RequeueTenantInactiveUseCase,
   ],
   exports: [
     CONVERSATION_REPOSITORY,
@@ -60,6 +62,7 @@ import { PrismaConversationRepository } from './infrastructure/prisma-conversati
     UpdateDeliveryStatusUseCase,
     FindOutboundForSendUseCase,
     SendAgentMessageUseCase,
+    RequeueTenantInactiveUseCase,
   ],
 })
 export class ConversationsModule {}

@@ -17,6 +17,8 @@ export class DevLoginUseCase {
   async execute(memberId: string, userAgent: string | null): Promise<CreatedSession | null> {
     const membership = await this.memberships.findByMemberId(memberId);
     if (!membership?.userId || membership.tenantSlug !== DEMO_TENANT.slug) return null;
+    // Con la demo inactiva (SPEC 16) no hay login de desarrollo.
+    if (!membership.tenantActive) return null;
     return this.createSession.execute({
       userId: membership.userId,
       activeTenantId: membership.tenantId,

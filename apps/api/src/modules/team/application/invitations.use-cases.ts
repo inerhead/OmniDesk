@@ -14,6 +14,12 @@ import {
   type UserRepository,
 } from '../../identity/application/ports/user.repository';
 import { hashToken, newOpaqueToken } from '../../identity/application/session-token';
+import { invitationLogoUrl } from '../../tenancy/domain/tenant';
+import { readLogo, type LogoContent } from '../../tenancy/application/tenant-logo.use-cases';
+import {
+  ATTACHMENT_STORAGE,
+  type AttachmentStorage,
+} from '../../attachments/application/ports/attachment-storage';
 import {
   MEMBER_REPOSITORY,
   type MemberRepository,
@@ -105,6 +111,7 @@ export interface InvitationPreview {
   role: InvitableRole;
   emailMasked: string;
   expired: boolean;
+  tenantLogoUrl: string | null;
 }
 
 /** Vista previa pública del enlace; `null` si el token no existe. */
@@ -123,6 +130,10 @@ export class PreviewInvitationUseCase {
       role: invitation.role,
       emailMasked: maskEmail(invitation.email),
       expired: !isInvitationPending(invitation, this.clock.now()),
+      tenantLogoUrl: invitationLogoUrl(token, {
+        logoKey: invitation.tenantLogoKey,
+        logoUpdatedAt: invitation.tenantLogoUpdatedAt,
+      }),
     };
   }
 }
@@ -133,7 +144,9 @@ export type AcceptInvitationResult =
   /** Vencida, ya usada o revocada. */
   | { kind: 'expired' }
   | { kind: 'email-mismatch' }
-  | { kind: 'already-member' };
+  | { kind: 'already-member' }
+  /** La empresa está inactiva (SPEC 16): sus invitaciones se revocaron al inactivarla. */
+  | { kind: 'tenant-inactive' };
 
 /**
  * Acepta la invitación con la sesión de un usuario del mismo email: crea su membresía (o reactiva la
@@ -154,6 +167,7 @@ export class AcceptInvitationUseCase {
     const now = this.clock.now();
     const invitation = await this.invitations.findByTokenHash(hashToken(token));
     if (!invitation) return { kind: 'not-found' };
+    if (!invitation.tenantActive) return { kind: 'tenant-inactive' };
     if (!isInvitationPending(invitation, now)) return { kind: 'expired' };
 
     const user = await this.users.findById(session.userId);
@@ -175,5 +189,22 @@ export class AcceptInvitationUseCase {
       await this.sessions.setActiveTenant(session.sessionId, invitation.tenantId);
       return { kind: 'ok', tenantId: invitation.tenantId } as const;
     });
+  }
+}
+
+/** Logo de la empresa visto desde una invitación vigente (sin sesión); `null` = 404. */
+@Injectable()
+export class GetInvitationLogoUseCase {
+  constructor(
+    @Inject(INVITATION_REPOSITORY) private readonly invitations: InvitationRepository,
+    @Inject(ATTACHMENT_STORAGE) private readonly storage: AttachmentStorage,
+    @Inject(CLOCK) private readonly clock: Clock,
+  ) {}
+
+  async execute(token: string): Promise<LogoContent | null> {
+    const invitation = await this.invitations.findByTokenHash(hashToken(token));
+    if (!invitation?.tenantLogoKey) return null;
+    if (!isInvitationPending(invitation, this.clock.now())) return null;
+    return readLogo(this.storage, invitation.tenantLogoKey);
   }
 }

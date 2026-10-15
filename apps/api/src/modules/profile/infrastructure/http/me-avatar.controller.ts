@@ -1,9 +1,7 @@
 import {
   BadRequestException,
-  Catch,
   Controller,
   Delete,
-  type ExceptionFilter,
   HttpStatus,
   PayloadTooLargeException,
   Put,
@@ -12,9 +10,7 @@ import {
   UseFilters,
   UseGuards,
   UseInterceptors,
-  type ArgumentsHost,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBadRequestResponse,
   ApiConsumes,
@@ -24,12 +20,14 @@ import {
   ApiUnauthorizedResponse,
   ApiUnsupportedMediaTypeResponse,
 } from '@nestjs/swagger';
-import { AVATAR_UPLOAD_MAX_BYTES, MeResponseSchema, type MeResponse } from '@omnidesk/contracts';
-import type { Response } from 'express';
-import { memoryStorage, MulterError } from 'multer';
+import { MeResponseSchema, type MeResponse } from '@omnidesk/contracts';
 import { createZodDto } from 'nestjs-zod';
 import type { SessionContext } from '../../../../shared/application/request-context';
 import { apiError } from '../../../../shared/infrastructure/http/api-error';
+import {
+  ImageUploadExceptionFilter,
+  ImageUploadInterceptor,
+} from '../../../../shared/infrastructure/http/image-upload';
 import { OriginGuard } from '../../../../shared/infrastructure/http/origin.guard';
 import { CurrentSession } from '../../../../shared/infrastructure/http/request-context.decorators';
 import type { User } from '../../../identity/domain/user';
@@ -38,19 +36,6 @@ import { RemoveAvatarUseCase } from '../../application/remove-avatar.use-case';
 import { UploadAvatarUseCase } from '../../application/upload-avatar.use-case';
 
 class MeUserDto extends createZodDto(MeResponseSchema.shape.user) {}
-
-/** Multer responde 500 al superar el límite; el contrato de este endpoint es 413. */
-@Catch(MulterError)
-class AvatarUploadExceptionFilter implements ExceptionFilter {
-  catch(error: MulterError, host: ArgumentsHost): void {
-    const response = host.switchToHttp().getResponse<Response>();
-    if (error.code === 'LIMIT_FILE_SIZE') {
-      response.status(HttpStatus.PAYLOAD_TOO_LARGE).json({ message: 'La foto supera 1 MB' });
-      return;
-    }
-    response.status(HttpStatus.BAD_REQUEST).json({ message: error.message });
-  }
-}
 
 const unauthenticated = () =>
   apiError(HttpStatus.UNAUTHORIZED, 'UNAUTHENTICATED', 'Inicia sesión para continuar');
@@ -76,14 +61,8 @@ export class MeAvatarController {
 
   /** El recorte ya reducido en la web (512×512, WebP o JPEG). */
   @Put()
-  @UseFilters(AvatarUploadExceptionFilter)
-  @UseInterceptors(
-    FileInterceptor('file', {
-      // Sin esto multer escribe a disco y `file.buffer` llega vacío.
-      storage: memoryStorage(),
-      limits: { fileSize: AVATAR_UPLOAD_MAX_BYTES, files: 1, fields: 0 },
-    }),
-  )
+  @UseFilters(ImageUploadExceptionFilter)
+  @UseInterceptors(ImageUploadInterceptor)
   @ApiConsumes('multipart/form-data')
   @ApiOkResponse({ type: MeUserDto.Output, description: 'Usuario con la foto nueva.' })
   @ApiBadRequestResponse({ description: 'Falta el archivo.' })

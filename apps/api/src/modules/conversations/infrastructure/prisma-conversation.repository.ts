@@ -262,6 +262,17 @@ export class PrismaConversationRepository implements ConversationRepository {
     );
   }
 
+  listFailedOutboundByReason(
+    tenantId: string,
+    reason: string,
+  ): Promise<Array<{ id: string; conversationId: string }>> {
+    return this.db.client.message.findMany({
+      where: { tenantId, direction: 'OUTBOUND', status: 'FAILED', failureReason: reason },
+      orderBy: [{ conversationId: 'asc' }, { sequence: 'asc' }],
+      select: { id: true, conversationId: true },
+    });
+  }
+
   async findMessageByIdempotencyKey(
     conversationId: string,
     idempotencyKey: string,

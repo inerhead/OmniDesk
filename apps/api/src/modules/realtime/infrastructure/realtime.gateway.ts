@@ -44,7 +44,11 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       if (!resolved) return this.reject(client, 'Autenticación requerida');
 
       const resolution = await this.resolveActor.execute(resolved.session);
-      if (resolution.kind !== 'ok') return this.reject(client, 'Sin empresa activa');
+      if (resolution.kind === 'no-active-tenant') return this.reject(client, 'Sin empresa activa');
+      // Empresa inactiva (SPEC 16): solo sus OWNER siguen en la sala, para ver la reactivación.
+      if (resolution.kind === 'inactive' && resolution.actor.role !== 'OWNER') {
+        return this.reject(client, 'Empresa inactiva');
+      }
       (client as PresenceSocket).data.memberId = resolution.actor.memberId;
       await client.join(tenantRoom(resolution.actor.tenantId));
     } catch (error) {

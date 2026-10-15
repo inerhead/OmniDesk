@@ -1,7 +1,11 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { IntegrationContext } from '../../../shared/application/request-context';
 import { OUTBOX_PORT, type OutboxPort } from '../../../shared/application/outbox.port';
 import { retryOnConflict } from '../../../shared/application/retry-on-conflict';
+import {
+  TENANT_STATUS,
+  type TenantStatusReader,
+} from '../../../shared/application/tenant-status.port';
 import {
   TRANSACTION_RUNNER,
   type TransactionRunner,
@@ -23,7 +27,10 @@ export interface AiReplyInput {
 
 export type AiReplyResult =
   | { kind: 'accepted'; messageId: string }
-  | { kind: 'rejected'; reason: 'CONTROL_CHANGED' | 'CONVERSATION_CLOSED' | 'WINDOW_CLOSED' }
+  | {
+      kind: 'rejected';
+      reason: 'CONTROL_CHANGED' | 'CONVERSATION_CLOSED' | 'WINDOW_CLOSED' | 'TENANT_INACTIVE';
+    }
   | { kind: 'not-found' };
 
 /** Registra la respuesta de IA como PENDING antes de que la integración la envíe (arquitectura §9). */
@@ -33,6 +40,7 @@ export class RegisterAiReplyUseCase {
     @Inject(TRANSACTION_RUNNER) private readonly tx: TransactionRunner,
     @Inject(CONVERSATION_REPOSITORY) private readonly conversations: ConversationRepository,
     @Inject(OUTBOX_PORT) private readonly outbox: OutboxPort,
+    @Optional() @Inject(TENANT_STATUS) private readonly tenantStatus?: TenantStatusReader,
   ) {}
 
   execute(integration: IntegrationContext, input: AiReplyInput): Promise<AiReplyResult> {
@@ -56,6 +64,10 @@ export class RegisterAiReplyUseCase {
       input.idempotencyKey,
     );
     if (existing) return { kind: 'accepted', messageId: existing.id };
+    // Empresa inactiva (SPEC 16): no se acepta nada nuevo para enviar.
+    if (this.tenantStatus && !(await this.tenantStatus.isActive(integration.tenantId))) {
+      return { kind: 'rejected', reason: 'TENANT_INACTIVE' };
+    }
 
     const now = new Date();
     const decision = decideAiReply(conversation, input.controlVersion, now);

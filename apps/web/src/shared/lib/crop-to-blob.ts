@@ -1,7 +1,7 @@
 import {
-  AVATAR_SIZE_PX,
-  AVATAR_SOURCE_MAX_BYTES,
-  AVATAR_SOURCE_MIME_TYPES,
+  IMAGE_SIZE_PX,
+  IMAGE_SOURCE_MAX_BYTES,
+  IMAGE_SOURCE_MIME_TYPES,
 } from '@omnidesk/contracts';
 
 /** Área recortada en píxeles de la imagen original (`onCropComplete` de react-easy-crop). */
@@ -12,12 +12,12 @@ export interface CropArea {
   height: number;
 }
 
-export type AvatarSourceCheck = 'ok' | 'unsupported' | 'too-large';
+export type ImageSourceCheck = 'ok' | 'unsupported' | 'too-large';
 
 /** Antes de abrir el recorte: JPEG, PNG o WebP de hasta 10 MB. */
-export function checkAvatarSource(file: { type: string; size: number }): AvatarSourceCheck {
-  if (!(AVATAR_SOURCE_MIME_TYPES as readonly string[]).includes(file.type)) return 'unsupported';
-  if (file.size > AVATAR_SOURCE_MAX_BYTES) return 'too-large';
+export function checkImageSource(file: { type: string; size: number }): ImageSourceCheck {
+  if (!(IMAGE_SOURCE_MIME_TYPES as readonly string[]).includes(file.type)) return 'unsupported';
+  if (file.size > IMAGE_SOURCE_MAX_BYTES) return 'too-large';
   return 'ok';
 }
 
@@ -26,19 +26,19 @@ const QUALITY = 0.85;
 type ToBlob = (type: string, quality: number) => Promise<Blob | null>;
 
 /** WebP si el navegador lo exporta; si no (Safari devuelve PNG), JPEG. */
-export async function encodeAvatar(toBlob: ToBlob): Promise<Blob> {
+export async function encodeImage(toBlob: ToBlob): Promise<Blob> {
   const webp = await toBlob('image/webp', QUALITY);
   if (webp?.type === 'image/webp') return webp;
   const jpeg = await toBlob('image/jpeg', QUALITY);
-  if (!jpeg) throw new Error('No se pudo exportar la foto');
+  if (!jpeg) throw new Error('No se pudo exportar la imagen');
   return jpeg;
 }
 
 /** Dibuja el área recortada en un lienzo de 512×512 y lo exporta. */
 export async function cropToBlob(image: HTMLImageElement, area: CropArea): Promise<Blob> {
   const canvas = document.createElement('canvas');
-  canvas.width = AVATAR_SIZE_PX;
-  canvas.height = AVATAR_SIZE_PX;
+  canvas.width = IMAGE_SIZE_PX;
+  canvas.height = IMAGE_SIZE_PX;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Canvas no disponible');
   context.imageSmoothingQuality = 'high';
@@ -50,10 +50,10 @@ export async function cropToBlob(image: HTMLImageElement, area: CropArea): Promi
     area.height,
     0,
     0,
-    AVATAR_SIZE_PX,
-    AVATAR_SIZE_PX,
+    IMAGE_SIZE_PX,
+    IMAGE_SIZE_PX,
   );
-  return encodeAvatar(
+  return encodeImage(
     (type, quality) => new Promise((resolve) => canvas.toBlob(resolve, type, quality)),
   );
 }

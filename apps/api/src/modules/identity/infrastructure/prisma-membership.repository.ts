@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaDb } from '../../../shared/infrastructure/prisma/prisma-transaction-runner';
 import type { MembershipRepository } from '../application/ports/membership.repository';
+import { tenantLogoUrl } from '../../tenancy/domain/tenant';
 import type { Membership } from '../domain/user';
 import { avatarSourceSelect, memberAvatarUrl } from './member-ref';
 
@@ -9,7 +10,9 @@ const select = {
   tenantId: true,
   role: true,
   userId: true,
-  tenant: { select: { name: true, slug: true } },
+  tenant: {
+    select: { name: true, slug: true, logoKey: true, logoUpdatedAt: true, deactivatedAt: true },
+  },
 } as const;
 
 type Row = {
@@ -17,7 +20,13 @@ type Row = {
   tenantId: string;
   role: Membership['role'];
   userId: string | null;
-  tenant: { name: string; slug: string };
+  tenant: {
+    name: string;
+    slug: string;
+    logoKey: string | null;
+    logoUpdatedAt: Date | null;
+    deactivatedAt: Date | null;
+  };
 };
 
 const toMembership = (row: Row): Membership => ({
@@ -26,6 +35,8 @@ const toMembership = (row: Row): Membership => ({
   tenantName: row.tenant.name,
   tenantSlug: row.tenant.slug,
   role: row.role,
+  tenantLogoUrl: tenantLogoUrl({ id: row.tenantId, ...row.tenant }),
+  tenantActive: row.tenant.deactivatedAt === null,
 });
 
 @Injectable()
@@ -59,7 +70,12 @@ export class PrismaMembershipRepository implements MembershipRepository {
 
   async listLoginMembersOfTenant(tenantSlug: string) {
     const rows = await this.db.client.tenantMember.findMany({
-      where: { tenant: { slug: tenantSlug }, removedAt: null, userId: { not: null } },
+      // Una empresa inactiva (SPEC 16) no ofrece login de desarrollo.
+      where: {
+        tenant: { slug: tenantSlug, deactivatedAt: null },
+        removedAt: null,
+        userId: { not: null },
+      },
       orderBy: [{ role: 'asc' }, { displayName: 'asc' }],
       select: { id: true, displayName: true, role: true, user: { select: avatarSourceSelect } },
     });

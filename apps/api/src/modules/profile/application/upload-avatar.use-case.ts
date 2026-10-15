@@ -11,7 +11,8 @@ import {
   type UserRepository,
 } from '../../identity/application/ports/user.repository';
 import type { User } from '../../identity/domain/user';
-import { avatarStorageKey, detectAvatarMimeType } from '../domain/avatar-image';
+import { detectImageMimeType } from '../../../shared/kernel/image-type';
+import { avatarStorageKey } from '../domain/avatar-image';
 import { AVATAR_REPOSITORY, type AvatarRepository } from './ports/avatar.repository';
 
 export type UploadAvatarResult =
@@ -34,7 +35,7 @@ export class UploadAvatarUseCase {
 
   async execute(userId: string, bytes: Buffer): Promise<UploadAvatarResult> {
     if (bytes.length > AVATAR_UPLOAD_MAX_BYTES) return { kind: 'too-large' };
-    const mimeType = detectAvatarMimeType(bytes);
+    const mimeType = detectImageMimeType(bytes);
     if (!mimeType) return { kind: 'unsupported-type' };
     if (!(await this.avatars.findOwner(userId))) return { kind: 'user-not-found' };
 

@@ -1,4 +1,5 @@
 import { ChannelsPage } from '@/features/channels/channels-page';
+import { CompanyPage } from '@/features/company/company-page';
 import { NotificationsPage } from '@/features/notifications/notifications-page';
 import { ProfilePage } from '@/features/profile/profile-page';
 import { createBrowserRouter, Navigate } from 'react-router';
@@ -44,6 +45,7 @@ export const router = createBrowserRouter(
             { path: 'status', element: <StatusPage /> },
             { path: 'settings/members', element: <MembersPage /> },
             { path: 'settings/channels', element: <ChannelsPage /> },
+            { path: 'settings/company', element: <CompanyPage /> },
             { path: 'settings/notifications', element: <NotificationsPage /> },
             { path: 'settings/profile', element: <ProfilePage /> },
             { path: '*', element: <NotFoundPage /> },

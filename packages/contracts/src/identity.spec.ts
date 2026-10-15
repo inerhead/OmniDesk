@@ -38,7 +38,15 @@ describe('MeResponseSchema', () => {
   };
 
   it('acepta un usuario con membresías y empresa activa', () => {
-    expect(MeResponseSchema.parse(me)).toEqual(me);
+    // Sin `tenantLogoUrl` ni `tenantActive` (respuestas previas a SPEC 16): activa y sin logo.
+    expect(MeResponseSchema.parse(me)).toEqual({
+      ...me,
+      memberships: me.memberships.map((membership) => ({
+        ...membership,
+        tenantLogoUrl: null,
+        tenantActive: true,
+      })),
+    });
   });
 
   it('acepta un usuario sin membresías ni empresa activa', () => {

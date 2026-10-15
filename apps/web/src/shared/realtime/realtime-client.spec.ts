@@ -27,19 +27,37 @@ const validEvent = {
 
 describe('bindSocket', () => {
   let socket: FakeSocket;
-  const handlers = { onEvent: vi.fn(), onResync: vi.fn() };
+  const handlers = { onEvent: vi.fn(), onResync: vi.fn(), onTenantStatus: vi.fn() };
 
   beforeEach(() => {
     vi.useFakeTimers();
     socket = new FakeSocket();
     handlers.onEvent.mockClear();
     handlers.onResync.mockClear();
+    handlers.onTenantStatus.mockClear();
     setConnectionStatus('connecting');
     bindSocket(socket, handlers);
   });
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('entrega el cambio de estado de la empresa (SPEC 16) y descarta uno inválido', () => {
+    const status = {
+      type: 'tenant.status_changed',
+      tenantId: '0199c0de-0000-7000-8000-0000000000e1',
+      active: false,
+      occurredAt: '2026-10-14T10:00:00.000Z',
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    socket.emit('tenant.status_changed', status);
+    socket.emit('tenant.status_changed', { ...status, active: 'no' });
+
+    expect(handlers.onTenantStatus).toHaveBeenCalledTimes(1);
+    expect(handlers.onTenantStatus).toHaveBeenCalledWith(status);
+    warn.mockRestore();
   });
 
   it('pasa a live y pide un resync al conectar', () => {

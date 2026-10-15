@@ -1,4 +1,11 @@
-import { RealtimeEventSchema, type PresenceEvent, type RealtimeEvent } from '@omnidesk/contracts';
+import {
+  RealtimeEventSchema,
+  TENANT_STATUS_CHANGED_EVENT,
+  TenantStatusChangedEventSchema,
+  type PresenceEvent,
+  type RealtimeEvent,
+  type TenantStatusChangedEvent,
+} from '@omnidesk/contracts';
 import { io } from 'socket.io-client';
 import { setConnectionStatus } from './connection-status';
 
@@ -6,6 +13,8 @@ export interface RealtimeHandlers {
   onEvent: (event: RealtimeEvent) => void;
   /** Cada vez que el socket se conecta: hay que volver a pedir todo por si se perdió algo. */
   onResync: () => void;
+  /** La empresa se inactivó o se reactivó (SPEC 16): hay que volver a pedir `/me`. */
+  onTenantStatus?: (event: TenantStatusChangedEvent) => void;
 }
 
 /** Lo que `bindSocket` necesita del socket (lo cumple el `Socket` de socket.io-client). */
@@ -52,6 +61,12 @@ export function bindSocket(socket: SocketLike, handlers: RealtimeHandlers): void
     const event = RealtimeEventSchema.safeParse(payload);
     if (event.success) handlers.onEvent(event.data);
     else console.warn('Evento en tiempo real inválido', event.error);
+  });
+
+  socket.on(TENANT_STATUS_CHANGED_EVENT, (payload: unknown) => {
+    const event = TenantStatusChangedEventSchema.safeParse(payload);
+    if (event.success) handlers.onTenantStatus?.(event.data);
+    else console.warn('Evento de empresa inválido', event.error);
   });
 }
 

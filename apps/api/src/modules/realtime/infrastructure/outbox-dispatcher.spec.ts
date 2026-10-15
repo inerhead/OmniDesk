@@ -1,4 +1,4 @@
-import type { RealtimeEvent } from '@omnidesk/contracts';
+import type { RealtimeEvent, TenantStatusChangedEvent } from '@omnidesk/contracts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { PermanentDownloadError } from '../../attachments/domain/attachment-errors';
 import type { TransactionRunner } from '../../../shared/application/transaction-runner.port';
@@ -7,7 +7,12 @@ import type { OutboxEventStore, PendingOutboxEvent } from '../application/ports/
 import type { OutboundMessageSender } from '../application/ports/outbound-message-sender';
 import type { RealtimePublisher } from '../application/ports/realtime-publisher';
 import type { PushSender } from '../../notifications/application/deliver-push.use-case';
-import { BATCH_SIZE, OutboxDispatcher, PUSH_MAX_ATTEMPTS, SEND_MAX_RETRIES } from './outbox-dispatcher';
+import {
+  BATCH_SIZE,
+  OutboxDispatcher,
+  PUSH_MAX_ATTEMPTS,
+  SEND_MAX_RETRIES,
+} from './outbox-dispatcher';
 
 const noTransaction: TransactionRunner = {
   run: (work) => work(),
@@ -85,9 +90,16 @@ class FakePublisher implements RealtimePublisher {
   readonly published: { tenantId: string; event: RealtimeEvent }[] = [];
   failWith: Error | null = null;
 
+  readonly statuses: { tenantId: string; event: TenantStatusChangedEvent }[] = [];
+
   publish(tenantId: string, event: RealtimeEvent): void {
     if (this.failWith) throw this.failWith;
     this.published.push({ tenantId, event });
+  }
+
+  publishTenantStatus(tenantId: string, event: TenantStatusChangedEvent): void {
+    if (this.failWith) throw this.failWith;
+    this.statuses.push({ tenantId, event });
   }
 }
 
@@ -334,7 +346,14 @@ describe('OutboxDispatcher', () => {
 
     beforeEach(() => {
       downloader = new FakeDownloader();
-      dispatcher = new OutboxDispatcher(noTransaction, store, publisher, sender, undefined, downloader);
+      dispatcher = new OutboxDispatcher(
+        noTransaction,
+        store,
+        publisher,
+        sender,
+        undefined,
+        downloader,
+      );
     });
 
     it('descarga y cierra el evento', async () => {
@@ -408,5 +427,70 @@ describe('OutboxDispatcher', () => {
       expect(event.publishedAt).toEqual(now);
       expect(event.lastError).toBe('push caído');
     });
+  });
+});
+
+describe('OutboxDispatcher con la empresa inactiva (SPEC 16)', () => {
+  let store: InMemoryStore;
+  let publisher: FakePublisher;
+  let sender: FakeSender;
+  let push: FakePush;
+  let dispatcher: OutboxDispatcher;
+  const inactive = { isActive: async () => false };
+
+  beforeEach(() => {
+    store = new InMemoryStore();
+    publisher = new FakePublisher();
+    sender = new FakeSender();
+    push = new FakePush();
+    push.error = null;
+    dispatcher = new OutboxDispatcher(
+      noTransaction,
+      store,
+      publisher,
+      sender,
+      undefined,
+      undefined,
+      push,
+      inactive,
+    );
+  });
+
+  it('un envío en cola pasa a FAILED con TENANT_INACTIVE sin llamar al proveedor', async () => {
+    const payload = { messageId: '0199c0de-0000-7000-8000-0000000000a1' };
+    const event = store.add({ type: 'message.send_requested', payload });
+
+    await dispatcher.tick(T0);
+
+    expect(sender.calls).toBe(0);
+    expect(sender.failed).toEqual([{ payload, reason: 'TENANT_INACTIVE' }]);
+    expect(event.publishedAt).toEqual(T0);
+  });
+
+  it('las notificaciones se publican sin enviarse', async () => {
+    const event = store.add({ type: 'notification.requested', payload: { kind: 'assigned' } });
+
+    await dispatcher.tick(T0);
+
+    expect(push.calls).toBe(0);
+    expect(event.publishedAt).toEqual(T0);
+  });
+
+  it('el aviso de estado y los cambios de conversación sí se publican', async () => {
+    store.add();
+    const status = store.add({
+      type: 'tenant.status_changed',
+      payload: {
+        type: 'tenant.status_changed',
+        tenantId: '0199c0de-0000-7000-8000-0000000000e1',
+        active: false,
+        occurredAt: T0.toISOString(),
+      },
+    });
+
+    expect(await dispatcher.tick(T0)).toBe(2);
+
+    expect(publisher.published).toHaveLength(1);
+    expect(publisher.statuses).toEqual([{ tenantId: 't1', event: status.payload }]);
   });
 });

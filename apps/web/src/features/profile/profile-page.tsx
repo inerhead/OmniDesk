@@ -9,11 +9,11 @@ import { Button } from '@/shared/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/card';
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog';
 import { Skeleton } from '@/shared/ui/skeleton';
-import { checkAvatarSource, readAsDataUrl } from './crop-to-blob';
+import { checkImageSource, readAsDataUrl } from '@/shared/lib/crop-to-blob';
 import { deleteAvatar, putAvatar } from './profile-api';
 
-const loadCropDialog = () => import('./avatar-crop-dialog');
-const AvatarCropDialog = lazy(loadCropDialog);
+const loadCropDialog = () => import('@/shared/ui/image-crop-dialog');
+const ImageCropDialog = lazy(loadCropDialog);
 
 const SOURCE_NOTICE = {
   unsupported: 'Elige una imagen JPEG, PNG o WebP.',
@@ -75,7 +75,7 @@ export function ProfilePage() {
     // Permite volver a elegir el mismo archivo.
     event.target.value = '';
     if (!file) return;
-    const check = checkAvatarSource(file);
+    const check = checkImageSource(file);
     if (check !== 'ok') {
       setNotice(SOURCE_NOTICE[check]);
       return;
@@ -161,9 +161,11 @@ export function ProfilePage() {
 
       {source !== null && (
         <Suspense fallback={null}>
-          <AvatarCropDialog
+          <ImageCropDialog
             key={source}
             source={source}
+            shape="round"
+            title="Encuadra tu foto"
             saving={upload.isPending}
             onCancel={() => setSource(null)}
             onSave={(image) => upload.mutate(image)}

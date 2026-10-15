@@ -208,6 +208,19 @@ export class InMemoryConversations implements ConversationRepository {
       ) ?? null
     );
   }
+
+  async listFailedOutboundByReason(tenantId: string, reason: string) {
+    const ids = new Set(this.conversations.filter((c) => c.tenantId === tenantId).map((c) => c.id));
+    return this.messages
+      .filter(
+        (m) =>
+          ids.has(m.conversationId) &&
+          m.direction === 'OUTBOUND' &&
+          m.status === 'FAILED' &&
+          m.failureReason === reason,
+      )
+      .map(({ id, conversationId }) => ({ id, conversationId }));
+  }
 }
 
 export class InMemoryMembers implements MemberRepository {

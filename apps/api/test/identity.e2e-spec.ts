@@ -432,6 +432,7 @@ describe('Identidad y tenancy (e2e)', () => {
         role: 'AGENT',
         emailMasked: 'la***@e2e.local',
         expired: false,
+        tenantLogoUrl: null,
       });
 
       await client.delete(`/api/v1/invitations/${invite.body.id}`).expect(204);

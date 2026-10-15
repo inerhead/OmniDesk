@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { CONVERSATION_CHANGED_EVENT, type RealtimeEvent } from '@omnidesk/contracts';
+import {
+  CONVERSATION_CHANGED_EVENT,
+  TENANT_STATUS_CHANGED_EVENT,
+  type RealtimeEvent,
+  type TenantStatusChangedEvent,
+} from '@omnidesk/contracts';
 import type { RealtimePublisher } from '../application/ports/realtime-publisher';
 import type { SocketIoServer } from './socket-io.types';
 
@@ -17,5 +22,10 @@ export class SocketIoRealtimePublisher implements RealtimePublisher {
   publish(tenantId: string, event: RealtimeEvent): void {
     if (!this.server) throw new Error('El servidor de Socket.IO todavía no está listo');
     this.server.to(tenantRoom(tenantId)).emit(CONVERSATION_CHANGED_EVENT, event);
+  }
+
+  publishTenantStatus(tenantId: string, event: TenantStatusChangedEvent): void {
+    if (!this.server) throw new Error('El servidor de Socket.IO todavía no está listo');
+    this.server.to(tenantRoom(tenantId)).emit(TENANT_STATUS_CHANGED_EVENT, event);
   }
 }

@@ -65,6 +65,11 @@ export interface ConversationRepository {
     conversationId: string,
     idempotencyKey: string,
   ): Promise<Message | null>;
+  /** Salientes `FAILED` de la empresa con ese motivo (SPEC 16: los cortados por inactivarla). */
+  listFailedOutboundByReason(
+    tenantId: string,
+    reason: string,
+  ): Promise<Array<{ id: string; conversationId: string }>>;
 }
 
 export const CONVERSATION_REPOSITORY = Symbol('CONVERSATION_REPOSITORY');

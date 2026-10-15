@@ -177,24 +177,24 @@ tenantLogoUrl: z.string().nullable().default(null),
 
 - [ ] Un Owner ve "Empresa" en "Ajustes de <empresa>". Admin y Agent no lo ven y `GET /tenants/current` les responde `403`.
 - [ ] Cambiar el nombre se refleja en el selector y en el rail sin recargar.
-- [ ] Cambiar el slug a uno libre responde `200`; a uno ocupado, `409 SLUG_TAKEN`; el de la demo, `409 DEMO_SLUG_LOCKED`.
+- [x] Cambiar el slug a uno libre responde `200`; a uno ocupado, `409 SLUG_TAKEN`; el de la demo, `409 DEMO_SLUG_LOCKED`.
 - [ ] Subir un logo lo muestra en el selector, en el rail y en `/settings/company`. Cambiarlo o quitarlo borra el objeto anterior del bucket.
 - [ ] Sin logo, el rail y el selector muestran las iniciales con el color de hoy.
 - [ ] `/invite/:token` muestra el logo con una invitación vigente. `GET /invitations/:token/logo` responde `404` con un token vencido, revocado o desconocido.
-- [ ] `GET /tenants/:id/logo` responde `404` a quien no es miembro activo de esa empresa (salvo sus Owner si está inactiva).
-- [ ] Inactivar con un nombre distinto responde `400 CONFIRMATION_MISMATCH` y no cambia nada.
-- [ ] Tras inactivar, las invitaciones pendientes quedan revocadas.
+- [x] `GET /tenants/:id/logo` responde `404` a quien no es miembro activo de esa empresa (salvo sus Owner si está inactiva).
+- [x] Inactivar con un nombre distinto responde `400 CONFIRMATION_MISMATCH` y no cambia nada.
+- [x] Tras inactivar, las invitaciones pendientes quedan revocadas.
 - [ ] Tras inactivar, un Agent con la app abierta sale de la empresa en menos de 5 s sin recargar. Su siguiente `/me` no incluye esa empresa.
 - [ ] Un Agent cuya única empresa se inactiva termina en `/onboarding`.
 - [ ] Un Owner ve la empresa como "Inactiva" en el selector. Al elegirla, cualquier ruta lo lleva a `/settings/company` con "Reactivar". El resto del API le responde `403 TENANT_INACTIVE`.
-- [ ] Un mensaje de WhatsApp que llega con la empresa inactiva queda guardado, sin `ai.reply_requested` ni `notification.requested`.
-- [ ] Un `message.send_requested` en cola al inactivar termina `FAILED` con `TENANT_INACTIVE` sin llamar al proveedor.
-- [ ] La respuesta de la IA a una empresa inactiva recibe `409 { sendAllowed: false, reason: 'TENANT_INACTIVE' }`.
-- [ ] Aceptar una invitación de una empresa inactiva responde `409 TENANT_INACTIVE`.
-- [ ] Con la demo inactiva, `/auth/providers` no lista sus miembros y `dev-login` responde `404`.
-- [ ] Reactivar devuelve el acceso a Admin y Agent y reencola los `TENANT_INACTIVE` con la ventana de 18 h abierta. Los que tienen la ventana cerrada siguen `FAILED`.
-- [ ] Inactivar o reactivar dos veces seguidas responde `200` y no duplica eventos ni reencolados.
-- [ ] Lint, typecheck, test, build y e2e pasan.
+- [x] Un mensaje de WhatsApp que llega con la empresa inactiva queda guardado, sin `ai.reply_requested` ni `notification.requested`.
+- [x] Un `message.send_requested` en cola al inactivar termina `FAILED` con `TENANT_INACTIVE` sin llamar al proveedor.
+- [x] La respuesta de la IA a una empresa inactiva recibe `409 { sendAllowed: false, reason: 'TENANT_INACTIVE' }`.
+- [x] Aceptar una invitación de una empresa inactiva responde `409 TENANT_INACTIVE`.
+- [x] Con la demo inactiva, `/auth/providers` no lista sus miembros y `dev-login` responde `404`.
+- [x] Reactivar devuelve el acceso a Admin y Agent y reencola los `TENANT_INACTIVE` con la ventana de 18 h abierta. Los que tienen la ventana cerrada siguen `FAILED`.
+- [x] Inactivar o reactivar dos veces seguidas responde `200` y no duplica eventos ni reencolados.
+- [x] Lint, typecheck, test, build y e2e pasan.
 
 ## Decisiones tomadas y descartadas
 
@@ -240,3 +240,44 @@ tenantLogoUrl: z.string().nullable().default(null),
 - **Icono animado de Conversaciones, rediseño de `/settings/members` y de `/settings/channels`:** van en SPEC 17.
 
 Cada uno de esos, si llega, va en su propio spec.
+
+## Verificación de implementación
+
+2026-10-14, rama `spec-16-editar-inactivar-empresa`.
+
+Automatizado, en verde:
+
+- `pnpm lint`, `pnpm typecheck`, `pnpm test` y `pnpm build` en todo el monorepo: 347 unitarias del API, 144 de la web y 103 de contratos. El único aviso de lint (`main.tsx`) ya estaba en `main`.
+- `pnpm --filter @omnidesk/api test:e2e` desde el host contra el Postgres local (`_e2e`): 186 pasaron y 1 se saltó (el de MinIO). `test/tenant.e2e-spec.ts` aporta 12 pruebas, y la de preview de `identity.e2e-spec.ts` se actualizó con `tenantLogoUrl`.
+- En el build de la web, el recorte sigue en su chunk aparte (`image-crop-dialog-*.js` y `.css`).
+
+Los criterios marcados arriba los cubren esas pruebas:
+
+- **Datos:** el slug (`200`, `SLUG_TAKEN`, `DEMO_SLUG_LOCKED`).
+- **Logo:** el acceso por id, también con la empresa inactiva (Owner `200`, Admin `404`).
+- **Inactivar:** la confirmación por nombre, la revocación de invitaciones, el corte del entrante (sin IA ni avisos) y del envío en cola (`FAILED`/`TENANT_INACTIVE` sin llamar al proveedor), el `409` de la IA y de las invitaciones, y la demo inactiva.
+- **Reactivar:** el reencolado con la ventana abierta y cerrada, y la idempotencia (un solo `tenant.status_changed` por cambio).
+- **Unitarias:** el corte del dispatcher, el reencolado, la política de la empresa, la redirección de la web con la empresa inactiva y el evento `tenant.status_changed` en el cliente de Socket.IO.
+
+Detalles de implementación que el spec no fijaba:
+
+- **Estado de la empresa:** un puerto global `TENANT_STATUS` (`shared/application/tenant-status.port.ts`). Lo consultan el registro de entrantes, la respuesta de la IA y el dispatcher.
+- **Rutas permitidas con la empresa inactiva:** el decorador `@AllowInactiveTenant()` en `CurrentTenantController` marca las rutas que el `SessionGuard` deja pasar a un Owner. `GET /tenants/:id/logo` usa `UserSessionGuard` y decide en el caso de uso.
+- **Entrantes sin IA:** el corte de la IA se aplica en `RegisterInboundMessageUseCase` devolviendo `aiAllowed: false`. Así cubre el webhook de WhatsApp y la entrada de n8n.
+- **Código compartido:**
+  - La detección del tipo de imagen pasó a `shared/kernel/image-type.ts`.
+  - Los límites de imagen pasaron a `@omnidesk/contracts` (`images.ts`), y `AVATAR_*` quedan como alias.
+  - El filtro y el interceptor de subida pasaron a `shared/infrastructure/http/image-upload.ts`, que ahora usan la foto y el logo.
+  - El mensaje del `413` de la foto pasó de "La foto supera 1 MB" a "La imagen supera 1 MB".
+- **Logo en la invitación:** `TenantMark` usa el token como semilla del color de las iniciales, porque el preview no expone el id de la empresa.
+- **Respaldo del `403`:** la web no tiene un manejador global para `TENANT_INACTIVE`. Si una app no recibe el evento de Socket.IO, sale de la empresa la próxima vez que React Query vuelva a pedir `/me` (al enfocar la ventana o pasados 60 s).
+
+Sin probar en navegador:
+
+- La entrada "Empresa" solo para Owner y la edición con su reflejo en el selector y el rail.
+- El recorte rectangular del logo y el logo en el selector, en el rail y en `/invite/:token`.
+- La salida en vivo de un Agent en menos de 5 s.
+- El paso a `/onboarding`.
+- La pantalla "Inactiva" con "Reactivar".
+
+Tampoco hay una e2e del rechazo del socket de un Agent con la empresa inactiva (`realtime.gateway.ts`).

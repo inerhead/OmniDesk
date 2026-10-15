@@ -5,6 +5,7 @@ export * from './conversation-policy';
 export * from './conversations';
 export * from './errors';
 export * from './health';
+export * from './images';
 export * from './integrations';
 export * from './invitations';
 export * from './members';

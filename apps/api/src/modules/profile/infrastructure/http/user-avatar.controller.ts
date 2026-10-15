@@ -17,6 +17,7 @@ import {
 import type { Request, Response } from 'express';
 import type { SessionContext } from '../../../../shared/application/request-context';
 import { apiError } from '../../../../shared/infrastructure/http/api-error';
+import { IMAGE_RESPONSE_HEADERS } from '../../../../shared/infrastructure/http/image-upload';
 import { ResolveSessionUseCase } from '../../../identity/application/resolve-session.use-case';
 import { readRequestSessionToken } from '../../../identity/infrastructure/http/session-cookie';
 import { GetAvatarUseCase } from '../../application/get-avatar.use-case';
@@ -52,9 +53,7 @@ export class UserAvatarController {
       .set({
         'Content-Type': result.mimeType,
         'Content-Length': String(result.bytes.length),
-        'Cache-Control': 'private, max-age=31536000, immutable',
-        'X-Content-Type-Options': 'nosniff',
-        'Content-Security-Policy': "sandbox; default-src 'none'",
+        ...IMAGE_RESPONSE_HEADERS,
       })
       .end(result.bytes);
   }

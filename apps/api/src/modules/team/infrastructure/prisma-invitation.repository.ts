@@ -63,11 +63,22 @@ export class PrismaInvitationRepository implements InvitationRepository {
   async findByTokenHash(tokenHash: string): Promise<InvitationWithTenant | null> {
     const row = await this.db.client.invitation.findUnique({
       where: { tokenHash },
-      select: { ...select, tenant: { select: { name: true } } },
+      select: {
+        ...select,
+        tenant: {
+          select: { name: true, logoKey: true, logoUpdatedAt: true, deactivatedAt: true },
+        },
+      },
     });
     if (!row) return null;
     const { tenant, ...invitation } = row;
-    return { ...toInvitation(invitation), tenantName: tenant.name };
+    return {
+      ...toInvitation(invitation),
+      tenantName: tenant.name,
+      tenantLogoKey: tenant.logoKey,
+      tenantLogoUpdatedAt: tenant.logoUpdatedAt,
+      tenantActive: tenant.deactivatedAt === null,
+    };
   }
 
   async markAccepted(id: string, at: Date): Promise<boolean> {

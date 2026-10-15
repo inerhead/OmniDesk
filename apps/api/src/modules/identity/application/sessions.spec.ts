@@ -60,6 +60,8 @@ const acme: Membership = {
   tenantName: 'Acme',
   tenantSlug: 'acme',
   role: 'ADMIN',
+  tenantLogoUrl: null,
+  tenantActive: true,
 };
 
 function memberships(list: Membership[]): MembershipRepository {

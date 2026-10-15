@@ -4,6 +4,10 @@ import type { IntegrationContext } from '../../../shared/application/request-con
 import { OUTBOX_PORT, type OutboxPort } from '../../../shared/application/outbox.port';
 import { retryOnConflict } from '../../../shared/application/retry-on-conflict';
 import {
+  TENANT_STATUS,
+  type TenantStatusReader,
+} from '../../../shared/application/tenant-status.port';
+import {
   TRANSACTION_RUNNER,
   type TransactionRunner,
 } from '../../../shared/application/transaction-runner.port';
@@ -44,6 +48,7 @@ export interface InboundMessageResult {
   messageId: string;
   /** Adjunto que hay que descargar; null sin adjunto. */
   attachmentId: string | null;
+  /** `false` también con la empresa inactiva (SPEC 16): el mensaje se guarda, pero sin IA. */
   aiAllowed: boolean;
   controlVersion: number;
   duplicate: boolean;
@@ -57,6 +62,7 @@ export class RegisterInboundMessageUseCase {
     @Inject(CONTACT_REPOSITORY) private readonly contacts: ContactRepository,
     @Inject(OUTBOX_PORT) private readonly outbox: OutboxPort,
     @Optional() private readonly notifications?: EnqueueNotificationUseCase,
+    @Optional() @Inject(TENANT_STATUS) private readonly tenantStatus?: TenantStatusReader,
   ) {}
 
   execute(
@@ -77,6 +83,8 @@ export class RegisterInboundMessageUseCase {
     integration: IntegrationContext,
     input: InboundMessageInput,
   ): Promise<InboundMessageResult> {
+    // Empresa inactiva (SPEC 16): el mensaje se guarda igual, sin IA ni notificaciones.
+    const tenantActive = (await this.tenantStatus?.isActive(integration.tenantId)) ?? true;
     const existing = await this.conversations.findMessageByExternalId(
       integration.channelId,
       input.externalMessageId,
@@ -87,7 +95,13 @@ export class RegisterInboundMessageUseCase {
         existing.conversationId,
       );
       if (!conversation) throw new Error(`Conversación ${existing.conversationId} no encontrada`);
-      return toResult(conversation, existing.id, existing.attachment?.id ?? null, true);
+      return toResult(
+        conversation,
+        existing.id,
+        existing.attachment?.id ?? null,
+        true,
+        tenantActive,
+      );
     }
 
     const contact = await this.contacts.findOrCreateByIdentity(
@@ -116,7 +130,8 @@ export class RegisterInboundMessageUseCase {
       'message',
       now,
     );
-    if (created) {
+    // Sin avisos con la empresa inactiva: nadie la atiende.
+    if (tenantActive && created) {
       await this.notifications?.requested({
         tenantId: integration.tenantId,
         kind: 'new_ai_conversation',
@@ -126,7 +141,7 @@ export class RegisterInboundMessageUseCase {
         senderMemberId: null,
         messageId: message.id,
       });
-    } else if (conversation.assignedAgentId) {
+    } else if (tenantActive && conversation.assignedAgentId) {
       await this.notifications?.requested({
         tenantId: integration.tenantId,
         kind: 'customer_message',
@@ -137,7 +152,7 @@ export class RegisterInboundMessageUseCase {
         messageId: message.id,
       });
     }
-    return toResult(conversation, message.id, message.attachment?.id ?? null, false);
+    return toResult(conversation, message.id, message.attachment?.id ?? null, false, tenantActive);
   }
 
   /** La conversación abierta del contacto; si estaba cerrada la reabre, y si no existe crea una. */
@@ -189,12 +204,13 @@ function toResult(
   messageId: string,
   attachmentId: string | null,
   duplicate: boolean,
+  tenantActive: boolean,
 ): InboundMessageResult {
   return {
     conversationId: conversation.id,
     messageId,
     attachmentId,
-    aiAllowed: isAiActive(conversation),
+    aiAllowed: tenantActive && isAiActive(conversation),
     controlVersion: conversation.controlVersion,
     duplicate,
   };

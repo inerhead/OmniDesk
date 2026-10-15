@@ -14,6 +14,9 @@ x-postgres-env: &postgres-env
 
 services:
   postgres:
+    # Sin esto Compose añade el índice de réplica (-1). El nombre sigue al proyecto
+    # (-p), así dev y prod pueden usar este archivo en el mismo host.
+    container_name: ${COMPOSE_PROJECT_NAME}-postgres
     image: postgres:18
     restart: unless-stopped
     environment: *postgres-env
@@ -27,6 +30,7 @@ services:
       retries: 10
 
   api:
+    container_name: ${COMPOSE_PROJECT_NAME}-api
     build:
       context: ../..
       dockerfile: apps/api/Dockerfile
@@ -89,6 +93,7 @@ services:
       start_period: 60s
 
   gateway:
+    container_name: ${COMPOSE_PROJECT_NAME}-gateway
     build:
       context: ../..
       dockerfile: infra/gateway/Dockerfile
@@ -111,6 +116,7 @@ services:
 
   # Comparte la red del gateway: en Cloudflare el servicio sigue siendo http://localhost:80.
   cloudflared:
+    container_name: ${COMPOSE_PROJECT_NAME}-cloudflared
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
     network_mode: service:gateway
@@ -121,6 +127,7 @@ services:
 
   # Adjuntos (SPEC 14). Sin consola; S3 solo en 127.0.0.1 (administración por túnel SSH).
   minio:
+    container_name: ${COMPOSE_PROJECT_NAME}-minio
     image: minio/minio:RELEASE.2025-09-07T16-13-09Z
     restart: unless-stopped
     command: server /data
@@ -140,6 +147,7 @@ services:
   # pg_dump -Fc diario a las 03:00 (hora del servidor), conserva los 7 más recientes.
   # Backup inmediato: docker compose ... run --rm backup now
   backup:
+    container_name: ${COMPOSE_PROJECT_NAME}-backup
     image: postgres:18
     restart: unless-stopped
     entrypoint: ['sh', '/usr/local/bin/omnidesk-backup.sh']

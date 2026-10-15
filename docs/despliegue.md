@@ -186,6 +186,11 @@ DUMP=omnidesk-dev-20261012.dump
 # 1. Para el API y el gateway (nadie escribe durante la restauración)
 $C stop gateway api
 
+# 1b. Solo en un servidor nuevo: los roles de SPEC 12 son del clúster y el dump no los trae.
+#     Sin ellos, pg_restore no puede crear las políticas de RLS ni los permisos. El API fija la
+#     contraseña de omnidesk_app_login al arrancar (paso 3).
+$C exec postgres sh -c "psql -U \$POSTGRES_USER -d \$POSTGRES_DB -c \"DO \\\$\\\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='omnidesk_app') THEN CREATE ROLE omnidesk_app NOLOGIN; END IF; IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='omnidesk_app_login') THEN CREATE ROLE omnidesk_app_login LOGIN IN ROLE omnidesk_app; END IF; END \\\$\\\$\""
+
 # 2. Restaura sobre la base (el contenedor backup ve el dump en /backups)
 $C run --rm --entrypoint sh backup -c \
   "pg_restore -U \$POSTGRES_USER -d \$POSTGRES_DB --clean --if-exists --no-owner /backups/$DUMP"
@@ -285,3 +290,26 @@ $C up -d
 ```
 
 El envío de adjuntos no tiene rate limit: SPEC 10 no está en el repositorio. Cuando exista, debe cubrir `POST /api/v1/conversations/:id/messages/attachments`.
+
+## Retención y Row Level Security (SPEC 12)
+
+**Antes de desplegar SPEC 12 por primera vez en un entorno:**
+
+1. Añade al `.env` del entorno `DATABASE_APP_PASSWORD` (`openssl rand -hex 24`: va dentro de una URL, solo letras y números). Compose arma con ella `DATABASE_APP_URL`. Sin esa variable, Compose no levanta el API.
+2. Haz un **backup manual** (§5). La migración de RLS no toca datos, pero cambia quién puede leerlos.
+3. Despliega primero en **dev** y recorre la app (login, bandejas, asignar, responder, ticks, un mensaje de WhatsApp). Después, prod.
+
+Al arrancar, el API aplica las migraciones `…_retention`, `…_app_role` y `…_rls`, y después `scripts/ensure-app-role.mjs` fija la contraseña de `omnidesk_app_login` con `DATABASE_APP_PASSWORD`. Si cambias la variable, basta con reiniciar el API.
+
+**Dos roles de base de datos:**
+
+| Rol | Variable | Para qué |
+| --- | --- | --- |
+| `omnidesk` (`POSTGRES_USER`, superusuario) | `DATABASE_URL` | Migraciones y caminos de sistema: resolver sesión y credencial, dispatcher del Outbox, job de retención, semilla demo, alta de empresa e invitaciones. Salta RLS. |
+| `omnidesk_app_login` (hereda de `omnidesk_app`) | `DATABASE_APP_URL` | Todo lo que se atiende en nombre de una empresa: peticiones con sesión, integraciones y el webhook de WhatsApp. Sin `BYPASSRLS` y sin tablas propias. |
+
+La migración de RLS falla a propósito si el rol que migra no es superusuario ni tiene `BYPASSRLS`: con `FORCE ROW LEVEL SECURITY`, el dueño se quedaría sin acceso.
+
+**Job de retención.** Corre a las 03:30, hora del servidor (después del backup de las 03:00), con un advisory lock: aunque haya varias instancias, se ejecuta una sola vez. Lo que borra sigue en los backups durante 7 días. Qué se borra y qué no: [datos.md](datos.md).
+
+**Restaurar en un servidor nuevo:** crea antes los roles (paso 1b de §5, *Restaurar un backup*).

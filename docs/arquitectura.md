@@ -387,12 +387,12 @@ Prefijo común: `/api/v1`. Los esquemas de cada contrato viven en `@omnidesk/con
 
 ## 12. Seguridad, consistencia y fallos
 
-- **Aislamiento.** Los datos se aíslan por tenant y la autorización se hace por rol, tanto en el API como en los eventos Socket.IO. Los repositorios aplican el `TenantContext` de forma obligatoria. Row-Level Security en PostgreSQL se evalúa en el incremento 7.
+- **Aislamiento.** Los datos se aíslan por tenant y la autorización se hace por rol, tanto en el API como en los eventos Socket.IO. Los repositorios aplican el `TenantContext` de forma obligatoria. Además, PostgreSQL aísla por tenant con Row Level Security (SPEC 12): las 12 tablas con `tenant_id` tienen RLS habilitado y forzado, y todo lo que se atiende en nombre de una empresa (peticiones con sesión, integraciones, webhook de WhatsApp) usa el rol `omnidesk_app`, sin `BYPASSRLS`, con `app.tenant_id` fijado por transacción. Sin la variable no se ve ninguna fila. El rol dueño queda para una lista cerrada de caminos de sistema (sesión y credencial, Outbox, jobs, semilla demo, alta de empresa e invitaciones).
 - **Deduplicación.** Webhooks y mensajes se deduplican con IDs externos (Inbox) e idempotency keys.
 - **Control de IA.** Rige el protocolo de §9: registrar antes de enviar, validar `controlVersion` y fallar cerrado.
 - **Mensajes humanos.** Se registran como `PENDING` y se envían vía Outbox con reintentos y backoff. Se actualizan con la confirmación real del proveedor.
 - **Trazabilidad.** `x-request-id` viaja en logs, eventos y llamadas a proveedores. No se pierde ningún mensaje ante caídas temporales.
-- **Privacidad.** Se consideran retención, exportación y protección de datos personales. La política concreta se define en el incremento 7.
+- **Privacidad.** Cada empresa elige cuánto conserva sus conversaciones cerradas (indefinidamente por defecto, o 90/180/365 días) y un job diario las borra; el OWNER puede borrar un contacto y todo su historial a petición, y queda constancia sin datos personales en `deletion_log` (SPEC 12, detalle en [datos.md](datos.md)). La exportación de datos queda para un spec futuro.
 
 ## 13. Proveedores e IA opcional
 
@@ -416,7 +416,7 @@ Cada incremento se especifica en `specs/NN-*.md` justo antes de implementarlo. S
 | 5 | SPEC 08 | Despliegue | VPS propio con Docker Compose: dos entornos aislados (`dev`, `prod`) en la subruta `/omnidesk` de `dev.gastromesa.com` y `gastromesa.com`, tras el Nginx existente, con web y API en el mismo origen. Imágenes de producción (API no root con migraciones al arrancar; gateway Caddy con la PWA, caché y CSP), backup diario con 7 copias y despliegue manual con `deploy.sh`. La conexión con n8n y WhatsApp reales pasa a SPEC 09. |
 | 6 | SPEC 05 | Atención humana | **Completa el ciclo del MVP en local.** El agente asignado responde desde la PWA: el mensaje se registra `PENDING`, el dispatcher del Outbox lo envía por el puerto `MessagingProvider` (adaptador simulado) con reintentos de 1/2/4/8/16 s y los estados `SENT`/`DELIVERED`/`READ`/`FAILED` se ven en tiempo real, con reintento manual. `POST /integrations/messages/status` (deduplicado en `EventInbox`, transiciones monótonas) recibe los estados de las respuestas de IA. El adaptador n8n/WhatsApp real llega con la integración real, sin tocar el dominio. |
 | 6b | SPEC 09 | WhatsApp e IA opcional | Settings de canales, webhook nativo Meta, envío Graph directo, IA n8n opcional y HMAC. |
-| 7 | — | Robustez | E2E con Playwright (también en viewport móvil), rate limiting, evaluación de RLS, métricas y política de retención. Web Push quedó en SPEC 13. |
+| 7 | SPEC 10–12 | Robustez | E2E con Playwright (también en viewport móvil) y rate limiting (SPEC 10), métricas (SPEC 11). **Retención y RLS implementados (SPEC 12).** Web Push quedó en SPEC 13. |
 
 ## 15. Escenario de aceptación de extremo a extremo
 
@@ -460,5 +460,5 @@ La arquitectura sí admite estas ampliaciones.
 **Pendientes reales:**
 
 - Validar el login de Google dentro de la PWA instalada en iOS (incremento 1). En modo `standalone`, iOS guarda cookies separadas de Safari, y el flujo de redirección debe completarse dentro de la PWA.
-- Política de retención, exportación y eliminación de datos (incremento 7).
+- ~~Política de retención, exportación y eliminación de datos (incremento 7).~~ Cerrado en SPEC 12: retención configurable por empresa, borrado de contacto a petición y RLS. La exportación (portabilidad) queda para un spec futuro.
 - ~~Momento exacto del despliegue respecto a la integración con n8n en la nube (incremento 5).~~ Cerrado en SPEC 08: el despliegue en el VPS va primero y n8n + WhatsApp reales llegan con SPEC 09.

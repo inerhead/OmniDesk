@@ -1,6 +1,6 @@
 # SPEC 12 — Robustez III: retención de datos y Row Level Security
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:** SPEC 07, SPEC 09, SPEC 14, SPEC 16
 > **Date:** 2026-10-12
 > **Objective:** Cada empresa configura (como OWNER) cuántos días se conservan sus conversaciones cerradas y puede borrar un contacto a petición, un job diario aplica esa retención y purga las tablas técnicas, y PostgreSQL aísla por tenant todas las tablas con `tenant_id` mediante Row Level Security, con un rol de aplicación sin `BYPASSRLS`.
@@ -12,6 +12,14 @@ Este spec se escribió antes de SPEC 16 y de decidir que SPEC 10 va al final. Al
 - **La retención vive en `/settings/company` (SPEC 16)**, como una sección más, no en una pantalla `/settings/workspace` aparte. Los endpoints son los de la empresa activa: `retentionDays` va en `GET`/`PATCH /api/v1/tenants/current` y la vista previa es `GET /api/v1/tenants/current/retention-preview`. La entrada "Empresa" del menú (OWNER) ya existe.
 - **Sin dependencias de SPEC 10:** la purga de `rate_limit_buckets` la añade SPEC 10, y la verificación de RLS usa los e2e del API más una pasada manual por la app (`pnpm e2e` llega con SPEC 10).
 - **Sin dependencias de SPEC 11:** no se mide la latencia con su histograma.
+
+Y al implementar RLS (paso 5):
+
+- **Contexto de tenant por `AsyncLocalStorage`, no por tipos distintos.** Un interceptor global (`TenantScopeInterceptor`) atiende en nombre de la empresa toda petición con `request.tenant` (sesión con empresa activa) o `request.integration` (credencial); el webhook de WhatsApp entra con `TenantPrisma.run` tras resolver el canal. Dentro, `PrismaDb` y el `TransactionRunner` usan el rol de aplicación; fuera (guards, dispatcher, jobs, semilla, alta de empresa, invitaciones), el dueño. Los repositorios son los mismos en los dos caminos, así que separar `SystemPrisma`/`TenantPrisma` por tipo habría obligado a duplicarlos.
+- **Sin una transacción por petición.** Las transacciones explícitas fijan `app.tenant_id` al empezar; cada consulta suelta va en una transacción corta con su `set_config` (extensión de Prisma). Una transacción por petición rompía los reintentos ante conflictos de unicidad (un error la deja abortada) y retenía una conexión durante las subidas a MinIO. Las garantías son las mismas: sin la variable, ninguna fila.
+- **`NULLIF(current_setting('app.tenant_id', true), '')::uuid`** en las políticas: en una conexión del pool que ya la tuvo, la variable queda en `''`.
+- **Roles:** `omnidesk_app` (NOLOGIN, con los permisos) y `omnidesk_app_login` (LOGIN, hereda). La migración de RLS falla si el rol que migra no es superusuario ni tiene `BYPASSRLS`.
+- **Los archivos del bucket también se borran** al borrar un contacto, como en el job: si no, el derecho de supresión dejaría las fotos y documentos del cliente en MinIO.
 
 ## Por qué existe este spec
 

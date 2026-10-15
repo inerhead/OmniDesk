@@ -1,0 +1,61 @@
+# Datos: qué se guarda, qué se borra y cuándo
+
+> SPEC 12. Para la operación en el VPS (variables, roles, restauración), ver [despliegue.md](despliegue.md#retención-y-row-level-security-spec-12).
+
+## Retención de conversaciones
+
+Cada empresa decide, como OWNER, en **Ajustes → Empresa → Retención de datos**, cuánto tiempo se conservan sus conversaciones **cerradas**:
+
+| Opción | Efecto |
+| --- | --- |
+| Indefinidamente (por defecto) | No se borra nada por antigüedad. |
+| 90, 180 o 365 días | Se borran las conversaciones cerradas cuyo último mensaje es más antiguo que el plazo. |
+
+Antes de guardar, la pantalla muestra cuántas conversaciones borraría la próxima ejecución y, si son más de cero, pide confirmación.
+
+**El job** corre cada día a las **03:30, hora del servidor**, después del backup de las 03:00. Por cada empresa con plazo:
+
+1. Borra del bucket (MinIO) los archivos adjuntos de esas conversaciones.
+2. Borra las conversaciones, con sus mensajes, eventos del historial y adjuntos (en lotes de 500).
+3. Borra los contactos que se quedaron sin ninguna conversación, con sus teléfonos.
+4. Deja una fila en `deletion_log` (`kind = retention`) con cuántas conversaciones y mensajes borró.
+
+**No se borran nunca por antigüedad:** las conversaciones abiertas (son trabajo pendiente), los contactos que aún tienen alguna conversación, los miembros ni las empresas.
+
+## Borrar un contacto a petición
+
+Derecho de supresión: el OWNER, desde el panel de contacto, usa **Borrar contacto y su historial** y confirma escribiendo el teléfono exacto. Se borran de inmediato:
+
+- El contacto y sus identidades (teléfonos).
+- Todas sus conversaciones, abiertas o cerradas, con sus mensajes, eventos y archivos (también en el bucket).
+
+Las pestañas abiertas quitan esas conversaciones de la lista al momento; un chat abierto muestra "Esta conversación fue eliminada". Un envío que estuviera en cola se descarta sin error. Si el cliente vuelve a escribir, empieza un contacto y una conversación nuevos, sin historial.
+
+## Purga técnica
+
+El mismo job borra, en todas las empresas, lo que ya no sirve:
+
+| Tabla | Se borra a los 30 días de… |
+| --- | --- |
+| `outbox_events` | publicarse (el dispatcher, además, ya limpia cada hora los publicados hace más de 24 h). |
+| `event_inbox` | recibirse. |
+| `sessions` | expirar o revocarse. |
+| `invitations` | aceptarse, revocarse o expirar. |
+
+## `deletion_log`
+
+Deja constancia de cada borrado **sin datos personales**: empresa, tipo (`contact` o `retention`), quién (el miembro, o vacío en el job), cuándo y cuántas conversaciones y mensajes. No guarda nombres, teléfonos ni contenido.
+
+## Lo que no se borra
+
+- **Backups:** el `pg_dump` diario y el archivo de MinIO conservan lo borrado hasta que rotan, **7 días** después. Un borrado no se propaga a los backups ya hechos.
+- **Logs** del API y de Nginx: este job no los toca; rotan según la configuración del servidor.
+- **Copias fuera de OmniDesk:** lo que ya recibieron WhatsApp (Meta) o el flujo de IA en n8n sigue sus propias políticas.
+
+## Aislamiento entre empresas
+
+Además de los filtros por `tenant_id` del código, PostgreSQL aplica Row Level Security en las 12 tablas con `tenant_id`. El API atiende cada petición de una empresa con un rol sin `BYPASSRLS` y con la empresa fijada en la transacción: aunque una consulta olvide el filtro, la base no devuelve filas de otra empresa.
+
+## Fuera de alcance por ahora
+
+Exportación de datos (portabilidad), retención de conversaciones abiertas o por canal, baja completa de una empresa, anonimización en lugar de borrado y cifrado de columnas.

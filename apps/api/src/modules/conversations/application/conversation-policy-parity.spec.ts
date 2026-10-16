@@ -5,7 +5,6 @@ import * as domain from '../domain/conversation-policy';
 const roles: domain.MemberRole[] = ['OWNER', 'ADMIN', 'AGENT'];
 const actions: domain.PolicyAction[] = ['view', 'assign', 'release', 'close', 'reopen'];
 const commands: domain.ConversationCommandName[] = ['assign', 'release', 'close', 'reopen'];
-const inboxes: domain.Inbox[] = ['ai', 'mine', 'all', 'closed'];
 const assigned = [null, 'laura', 'mateo'];
 const statuses = ['OPEN', 'CLOSED'] as const;
 const targets = [undefined, 'laura', 'mateo'];
@@ -15,12 +14,9 @@ const targets = [undefined, 'laura', 'mateo'];
  * con la del dominio. Esta prueba recorre todas las combinaciones para que no se separen.
  */
 describe('paridad de la política entre el dominio y contracts', () => {
-  it('can, commandApplies y canViewInbox dan lo mismo en todas las combinaciones', () => {
+  it('can y commandApplies dan lo mismo en todas las combinaciones', () => {
     for (const role of roles) {
       const actor = { memberId: 'laura', role };
-      for (const inbox of inboxes) {
-        expect(shared.canViewInbox(actor, inbox)).toBe(domain.canViewInbox(actor, inbox));
-      }
       for (const status of statuses) {
         for (const assignedAgentId of assigned) {
           const conversation = { status, assignedAgentId };

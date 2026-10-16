@@ -27,11 +27,11 @@ describe('CountInboxesUseCase', () => {
     expect(counts).toEqual({ ai: 3, mine: 2, all: 7 });
   });
 
-  it('AGENT: sin `all`, como en la lista', async () => {
+  it('AGENT: también recibe `all` (SPEC 21)', async () => {
     const { readModel, filters } = fakeReadModel();
     const counts = await new CountInboxesUseCase(readModel).execute(laura);
-    expect(counts).toEqual({ ai: 3, mine: 2 });
-    expect(filters).toHaveLength(2);
+    expect(counts).toEqual({ ai: 3, mine: 2, all: 7 });
+    expect(filters).toHaveLength(3);
   });
 
   it('el canal se aplica a cada bandeja', async () => {
@@ -40,6 +40,7 @@ describe('CountInboxesUseCase', () => {
     expect(filters).toEqual([
       { status: 'OPEN', assignedAgentId: null, channelId: 'canal-1' },
       { status: 'OPEN', assignedAgentId: 'laura', channelId: 'canal-1' },
+      { status: 'OPEN', channelId: 'canal-1' },
     ]);
   });
 });

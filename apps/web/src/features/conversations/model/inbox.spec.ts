@@ -2,13 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { formatInboxCount, parseInbox, visibleInboxes } from './inbox';
 
 describe('visibleInboxes', () => {
-  it('OWNER y ADMIN ven las 4 pestañas', () => {
-    expect(visibleInboxes('OWNER')).toEqual(['ai', 'mine', 'all', 'closed']);
-    expect(visibleInboxes('ADMIN')).toEqual(['ai', 'mine', 'all', 'closed']);
-  });
-
-  it('un AGENT ve 3 pestañas, sin "Todas"', () => {
-    expect(visibleInboxes('AGENT')).toEqual(['ai', 'mine', 'closed']);
+  it.each(['OWNER', 'ADMIN', 'AGENT'] as const)('%s ve las 4 pestañas (SPEC 21)', (role) => {
+    expect(visibleInboxes(role)).toEqual(['ai', 'mine', 'all', 'closed']);
   });
 });
 
@@ -16,12 +11,12 @@ describe('parseInbox', () => {
   it('acepta una bandeja válida del rol', () => {
     expect(parseInbox('mine', 'AGENT')).toBe('mine');
     expect(parseInbox('all', 'OWNER')).toBe('all');
+    expect(parseInbox('all', 'AGENT')).toBe('all');
   });
 
-  it('cae a la IA si falta, es inválida o el rol no puede verla', () => {
+  it('cae a la IA si falta o es inválida', () => {
     expect(parseInbox(null, 'OWNER')).toBe('ai');
-    expect(parseInbox('otra', 'OWNER')).toBe('ai');
-    expect(parseInbox('all', 'AGENT')).toBe('ai');
+    expect(parseInbox('otra', 'AGENT')).toBe('ai');
   });
 });
 

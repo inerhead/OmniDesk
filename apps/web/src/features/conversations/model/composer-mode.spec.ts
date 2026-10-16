@@ -31,7 +31,7 @@ describe('composerMode', () => {
     ).toEqual({ kind: 'take' });
   });
 
-  it('asignada a otro: muestra su nombre, también a un supervisor', () => {
+  it('asignada a otro: muestra su nombre a un supervisor y a otro agente (SPEC 21)', () => {
     const mateo = { id: 'mateo', displayName: 'Mateo', avatarUrl: null };
 
     expect(

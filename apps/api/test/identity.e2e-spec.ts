@@ -330,7 +330,8 @@ describe('Identidad y tenancy (e2e)', () => {
       const owner = await company.client.get('/api/v1/conversations/counts').expect(200);
       expect(owner.body).toEqual({ ai: 2, mine: 0, all: 3 });
       const mine = await agent.client.get('/api/v1/conversations/counts').expect(200);
-      expect(mine.body).toEqual({ ai: 2, mine: 1 });
+      // SPEC 21: un AGENT también recibe `all`.
+      expect(mine.body).toEqual({ ai: 2, mine: 1, all: 3 });
       const other = await company.client
         .get(`/api/v1/conversations/counts?channelId=${randomUUID()}`)
         .expect(200);

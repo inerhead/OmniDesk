@@ -88,8 +88,8 @@ describe('SendAgentMessageUseCase', () => {
     expect(outbox.events).toHaveLength(2);
   });
 
-  it('un agente que no ve la conversación recibe not-found', async () => {
-    expect(await build().execute(mateo, input())).toEqual({ kind: 'not-found' });
+  it('otro agente, que la ve sin estar asignado, recibe forbidden (SPEC 21)', async () => {
+    expect(await build().execute(mateo, input())).toEqual({ kind: 'forbidden' });
     expect(conversations.messages).toHaveLength(0);
   });
 
@@ -201,7 +201,7 @@ describe('RetryFailedMessageUseCase', () => {
       kind: 'forbidden',
     });
     expect(await build().execute(mateo, { conversationId: conversation.id, messageId })).toEqual({
-      kind: 'not-found',
+      kind: 'forbidden',
     });
   });
 

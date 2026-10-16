@@ -89,12 +89,12 @@ describe('ListTimelineUseCase', () => {
     expect(third?.prevCursor).toBeNull();
   });
 
-  it('un AGENT no ve la línea de tiempo de una conversación asignada a otro', async () => {
+  it('un AGENT ve la línea de tiempo de una conversación asignada a otro (SPEC 21)', async () => {
     const assignedToMateo = readModel({ status: 'OPEN', assignedAgentId: 'mateo' });
 
     expect(
       await new ListTimelineUseCase(assignedToMateo).execute(laura, 'c1', undefined, 50),
-    ).toBeNull();
+    ).not.toBeNull();
     expect(
       await new ListTimelineUseCase(assignedToMateo).execute(owner, 'c1', undefined, 50),
     ).not.toBeNull();

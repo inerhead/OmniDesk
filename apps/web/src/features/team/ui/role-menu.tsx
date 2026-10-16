@@ -16,7 +16,7 @@ const ROLES: MemberRole[] = ['OWNER', 'ADMIN', 'AGENT'];
 const ROLE_DESCRIPTION: Record<MemberRole, string> = {
   OWNER: 'Todo, incluida la empresa',
   ADMIN: 'Miembros, canales y todas las conversaciones',
-  AGENT: 'Atiende sus conversaciones',
+  AGENT: 'Ve todas y atiende las suyas',
 };
 
 /** Rol de un miembro: menú con la descripción de cada rol si se puede cambiar; si no, insignia. */

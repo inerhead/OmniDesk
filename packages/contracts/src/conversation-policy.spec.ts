@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   availableCommands,
   can,
-  canViewInbox,
   commandApplies,
   type PolicyAction,
   type PolicyActor,
@@ -35,12 +34,17 @@ describe('can: OWNER y ADMIN', () => {
 });
 
 describe('can: AGENT', () => {
-  it('abre conversaciones sin asignar o asignadas a él, no las de otro', () => {
-    expect(can(laura, 'view', open(null))).toBe(true);
-    expect(can(laura, 'view', open('laura'))).toBe(true);
-    expect(can(laura, 'view', open('mateo'))).toBe(false);
-    expect(can(laura, 'view', closed('laura'))).toBe(true);
-    expect(can(laura, 'view', closed('mateo'))).toBe(false);
+  it('ve cualquier conversación de la empresa, también las de otro (SPEC 21)', () => {
+    for (const conversation of [
+      open(null),
+      open('laura'),
+      open('mateo'),
+      closed(null),
+      closed('laura'),
+      closed('mateo'),
+    ]) {
+      expect(can(laura, 'view', conversation)).toBe(true);
+    }
   });
 
   it('toma una conversación solo si está sin asignar', () => {
@@ -61,19 +65,6 @@ describe('can: AGENT', () => {
     expect(can(laura, action, open(null))).toBe(false);
     expect(can(laura, action, open('mateo'))).toBe(false);
     expect(can(laura, action, closed('mateo'))).toBe(false);
-  });
-});
-
-describe('canViewInbox', () => {
-  it('la bandeja all es solo de OWNER y ADMIN', () => {
-    expect(canViewInbox(owner, 'all')).toBe(true);
-    expect(canViewInbox(admin, 'all')).toBe(true);
-    expect(canViewInbox(laura, 'all')).toBe(false);
-  });
-
-  it.each(['ai', 'mine', 'closed'] as const)('la bandeja %s es de todos', (inbox) => {
-    expect(canViewInbox(laura, inbox)).toBe(true);
-    expect(canViewInbox(owner, inbox)).toBe(true);
   });
 });
 
@@ -150,5 +141,10 @@ describe('availableCommands (botones de la web)', () => {
       close: false,
       reopen: false,
     });
+  });
+
+  it('un AGENT no ve "Reabrir" en una cerrada que llevaba otro (SPEC 21)', () => {
+    expect(availableCommands(laura, closed('mateo')).reopen).toBe(false);
+    expect(availableCommands(laura, closed('laura')).reopen).toBe(true);
   });
 });

@@ -188,10 +188,10 @@ describe('Atención humana (e2e)', () => {
       ).toBe(1);
     });
 
-    it('Mateo, que no la ve, recibe 404; Sup. Demo, que la ve sin estar asignado, 403', async () => {
+    it('Mateo y Sup. Demo, que la ven sin estar asignados, reciben 403 (SPEC 21)', async () => {
       const conversationId = await lauraConversation();
 
-      await send(mateo, conversationId).expect(404);
+      await send(mateo, conversationId).expect(403);
       await send(owner, conversationId).expect(403);
       expect(await prisma.message.count({ where: { conversationId, senderType: 'AGENT' } })).toBe(
         0,

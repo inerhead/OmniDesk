@@ -1,4 +1,4 @@
-import { InboxSchema, canViewInbox, type Inbox, type MemberRole } from '@omnidesk/contracts';
+import { InboxSchema, type Inbox, type MemberRole } from '@omnidesk/contracts';
 
 export const INBOX_LABEL: Record<Inbox, string> = {
   ai: 'Sin asignar',
@@ -9,9 +9,9 @@ export const INBOX_LABEL: Record<Inbox, string> = {
 
 const ORDER: Inbox[] = ['ai', 'mine', 'all', 'closed'];
 
-/** Pestañas que ve el rol: "Todas" se oculta para un AGENT. */
-export function visibleInboxes(role: MemberRole): Inbox[] {
-  return ORDER.filter((inbox) => canViewInbox({ memberId: '', role }, inbox));
+/** Pestañas que ve el rol: todos los roles ven las cuatro (SPEC 21). */
+export function visibleInboxes(_role: MemberRole): Inbox[] {
+  return ORDER;
 }
 
 /** La bandeja de `?inbox=`; si falta, es inválida o el rol no puede verla, la de la IA. */

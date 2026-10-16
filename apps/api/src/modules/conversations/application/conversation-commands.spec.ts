@@ -120,10 +120,10 @@ describe('comandos de conversación', () => {
       expect(conversation().controlVersion).toBe(0);
     });
 
-    it('un AGENT no ve la conversación asignada a otro: not-found, no forbidden', async () => {
+    it('un AGENT ve la conversación asignada a otro pero no la toma: forbidden (SPEC 21)', async () => {
       await assignTo(owner, 'mateo');
 
-      expect(await assignTo(laura, 'laura')).toEqual({ kind: 'not-found' });
+      expect(await assignTo(laura, 'laura')).toEqual({ kind: 'forbidden' });
     });
 
     it('responde member-not-found si el destino no es del tenant', async () => {
@@ -163,10 +163,10 @@ describe('comandos de conversación', () => {
       });
     });
 
-    it('un AGENT no libera la de otro (not-found) y un OWNER sí', async () => {
+    it('un AGENT no libera la de otro (forbidden) y un OWNER sí', async () => {
       await assignTo(owner, 'laura');
 
-      expect(await command(release, mateo)).toEqual({ kind: 'not-found' });
+      expect(await command(release, mateo)).toEqual({ kind: 'forbidden' });
       expect(await command(release, owner)).toEqual({ kind: 'ok' });
     });
 
@@ -210,7 +210,7 @@ describe('comandos de conversación', () => {
       expect(await command(close, laura)).toEqual({ kind: 'forbidden' });
       await assignTo(owner, 'laura');
       await command(close, laura);
-      expect(await command(reopen, mateo)).toEqual({ kind: 'not-found' });
+      expect(await command(reopen, mateo)).toEqual({ kind: 'forbidden' });
     });
 
     it('cada comando consume una sequence del contador compartido con los mensajes', async () => {

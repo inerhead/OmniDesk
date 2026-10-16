@@ -90,13 +90,13 @@ export const InboxCountsQuerySchema = z.object({
 export type InboxCountsQuery = z.infer<typeof InboxCountsQuerySchema>;
 
 /**
- * Conversaciones por bandeja, con los mismos permisos que la lista: `all` solo para OWNER/ADMIN.
- * `closed` no se cuenta: el histórico solo crece.
+ * Conversaciones por bandeja, con el mismo filtro que la lista. Todos los roles reciben las tres
+ * (SPEC 21). `closed` no se cuenta: el histórico solo crece.
  */
 export const InboxCountsResponseSchema = z.object({
   ai: z.int().min(0),
   mine: z.int().min(0),
-  all: z.int().min(0).optional(),
+  all: z.int().min(0),
 });
 export type InboxCountsResponse = z.infer<typeof InboxCountsResponseSchema>;
 

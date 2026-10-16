@@ -45,7 +45,6 @@ import { InvalidCursorError } from '../../application/conversation-cursor';
 import type { CommandResult } from '../../application/conversation-command-runner';
 import type { ConversationSummary } from '../../application/conversation-summary';
 import { GetConversationSummaryUseCase } from '../../application/get-conversation-summary.use-case';
-import { InboxForbiddenError } from '../../application/inbox-filter';
 import { ListConversationsUseCase } from '../../application/list-conversations.use-case';
 import { ListMessagesUseCase } from '../../application/list-messages.use-case';
 import { ListTimelineUseCase } from '../../application/list-timeline.use-case';
@@ -109,9 +108,6 @@ export class ConversationsController {
 
   @Get()
   @ApiOkResponse({ type: ListConversationsResponseDto.Output })
-  @ApiForbiddenResponse({
-    description: 'Tu rol no puede ver esa bandeja (`all` es de OWNER/ADMIN).',
-  })
   async list(
     @Actor() actor: ActorContext,
     @Query() query: ListConversationsQueryDto,
@@ -128,7 +124,6 @@ export class ConversationsController {
       return { items: page.items.map(toSummaryDto), nextCursor: page.nextCursor };
     } catch (error) {
       if (error instanceof InvalidCursorError) throw new BadRequestException(error.message);
-      if (error instanceof InboxForbiddenError) throw new ForbiddenException(error.message);
       throw error;
     }
   }
@@ -137,7 +132,7 @@ export class ConversationsController {
   @Get('counts')
   @ApiOkResponse({
     type: InboxCountsResponseDto.Output,
-    description: 'Conversaciones por bandeja; `all` solo para OWNER/ADMIN.',
+    description: 'Conversaciones por bandeja: sin asignar, mías y todas.',
   })
   counts(
     @Actor() actor: ActorContext,
@@ -205,7 +200,8 @@ export class ConversationsController {
     description: 'Idempotente: el `clientMessageId` ya estaba registrado.',
   })
   @ApiConflictResponse({
-    description: 'La conversación está cerrada (`INVALID_STATE`) o la ventana de 18 h venció (`WINDOW_CLOSED`).',
+    description:
+      'La conversación está cerrada (`INVALID_STATE`) o la ventana de 18 h venció (`WINDOW_CLOSED`).',
   })
   @ApiForbiddenResponse({ description: 'Solo escribe el agente asignado.' })
   @ApiNotFoundResponse({ description: 'La conversación no existe o no puedes verla.' })

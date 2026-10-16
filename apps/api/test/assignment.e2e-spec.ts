@@ -325,7 +325,7 @@ describe('Asignación y control de IA (e2e)', () => {
   });
 
   describe('permisos', () => {
-    it('Laura (AGENT): toma una de la IA, no asigna a Mateo, no toma la de Mateo y no ve la bandeja all', async () => {
+    it('Laura (AGENT): toma una de la IA, no asigna a Mateo, no toma la de Mateo y sí ve la bandeja all', async () => {
       const mine = await inbound();
       await assign(laura, mine.conversationId, laura, mine.controlVersion).expect(200);
 
@@ -334,9 +334,13 @@ describe('Asignación y control de IA (e2e)', () => {
 
       const matteos = await inbound();
       await assign(owner, matteos.conversationId, mateo, matteos.controlVersion).expect(200);
-      await assign(laura, matteos.conversationId, laura, matteos.controlVersion + 1).expect(404);
+      await assign(laura, matteos.conversationId, laura, matteos.controlVersion + 1).expect(403);
 
-      await get(laura, '/api/v1/conversations').query({ inbox: 'all' }).expect(403);
+      // SPEC 21: un AGENT ve todas las abiertas de la empresa.
+      const all = await inboxIds(laura, 'all');
+      expect(all).toEqual(
+        expect.arrayContaining([mine, free, matteos].map((c) => c.conversationId)),
+      );
       await get(owner, '/api/v1/conversations').query({ inbox: 'all' }).expect(200);
     });
 
@@ -344,9 +348,9 @@ describe('Asignación y control de IA (e2e)', () => {
       const { conversationId, controlVersion } = await inbound();
       await assign(owner, conversationId, mateo, controlVersion).expect(200);
 
-      await command(laura, conversationId, 'release', controlVersion + 1).expect(404);
-      await command(laura, conversationId, 'close', controlVersion + 1).expect(404);
-      await command(laura, conversationId, 'reopen', controlVersion + 1).expect(404);
+      await command(laura, conversationId, 'release', controlVersion + 1).expect(403);
+      await command(laura, conversationId, 'close', controlVersion + 1).expect(403);
+      await command(laura, conversationId, 'reopen', controlVersion + 1).expect(403);
     });
 
     it('Laura ve 403 al cerrar una conversación de la IA que no es suya', async () => {
@@ -356,13 +360,25 @@ describe('Asignación y control de IA (e2e)', () => {
       expect(await version(conversationId)).toBe(controlVersion);
     });
 
-    it('Laura recibe 404 en timeline y messages de una conversación asignada a Mateo', async () => {
+    it('Laura lee una conversación de Mateo, pero escribir y cerrar en ella dan 403 (SPEC 21)', async () => {
       const { conversationId, controlVersion } = await inbound();
       await assign(owner, conversationId, mateo, controlVersion).expect(200);
 
-      await get(laura, `/api/v1/conversations/${conversationId}/timeline`).expect(404);
-      await get(laura, `/api/v1/conversations/${conversationId}/messages`).expect(404);
-      await get(owner, `/api/v1/conversations/${conversationId}/timeline`).expect(200);
+      await get(laura, `/api/v1/conversations/${conversationId}`).expect(200);
+      await get(laura, `/api/v1/conversations/${conversationId}/timeline`).expect(200);
+      await get(laura, `/api/v1/conversations/${conversationId}/messages`).expect(200);
+
+      await post(laura, `/api/v1/conversations/${conversationId}/messages`, {
+        clientMessageId: randomUUID(),
+        text: 'No debería salir',
+      }).expect(403);
+      await command(laura, conversationId, 'close', controlVersion + 1).expect(403);
+
+      const after = await prisma.conversation.findUniqueOrThrow({ where: { id: conversationId } });
+      expect(after).toMatchObject({ status: 'OPEN', assignedAgentId: mateo });
+      expect(await prisma.message.count({ where: { conversationId, senderType: 'AGENT' } })).toBe(
+        0,
+      );
     });
   });
 
@@ -400,10 +416,11 @@ describe('Asignación y control de IA (e2e)', () => {
         expect(mine).not.toContain(id);
       }
 
-      // Un AGENT solo ve en "Cerradas" las que tienen su assignedAgentId.
+      // SPEC 21: un AGENT ve en "Cerradas" todas las de la empresa, no solo las suyas.
       const lauraClosed = await inboxIds(laura, 'closed');
-      expect(lauraClosed).toContain(closedLaura.conversationId);
-      expect(lauraClosed).not.toContain(closedFree.conversationId);
+      expect(lauraClosed).toEqual(
+        expect.arrayContaining([closedLaura.conversationId, closedFree.conversationId]),
+      );
 
       // OWNER/ADMIN ven todas las cerradas y todas las abiertas.
       const ownerClosed = await inboxIds(owner, 'closed');
@@ -433,7 +450,7 @@ describe('Asignación y control de IA (e2e)', () => {
   });
 
   describe('GET /conversations/:id', () => {
-    it('devuelve el resumen con agente y controlVersion, y 404 si el AGENT no puede verla', async () => {
+    it('devuelve el resumen con agente y controlVersion, también a un AGENT que no la lleva', async () => {
       const { conversationId, controlVersion } = await inbound();
       await assign(owner, conversationId, mateo, controlVersion).expect(200);
 
@@ -444,7 +461,7 @@ describe('Asignación y control de IA (e2e)', () => {
         controlVersion: controlVersion + 1,
       });
 
-      await get(laura, `/api/v1/conversations/${conversationId}`).expect(404);
+      await get(laura, `/api/v1/conversations/${conversationId}`).expect(200);
       await get(mateo, `/api/v1/conversations/${conversationId}`).expect(200);
       await get(owner, `/api/v1/conversations/${randomUUID()}`).expect(404);
     });
@@ -589,7 +606,7 @@ describe('Asignación y control de IA (e2e)', () => {
       ]);
     });
 
-    it('Mateo nunca encuentra conversaciones asignadas a Laura', async () => {
+    it('Mateo no encuentra las de Laura en ai ni en mine, pero sí en closed (SPEC 21)', async () => {
       const token = randomUUID().slice(0, 8);
       const conversation = await inboundNamed(`Privada ${token}`);
       await assign(owner, conversation.conversationId, laura, conversation.controlVersion).expect(
@@ -602,12 +619,14 @@ describe('Asignación y control de IA (e2e)', () => {
         await version(conversation.conversationId),
       ).expect(200);
 
-      for (const inbox of ['ai', 'mine', 'closed'] as const) {
+      for (const inbox of ['ai', 'mine'] as const) {
         expect(await search(mateo, inbox, token)).toEqual([]);
       }
-      expect((await search(laura, 'closed', token)).map((item) => item.id)).toEqual([
-        conversation.conversationId,
-      ]);
+      for (const actor of [laura, mateo]) {
+        expect((await search(actor, 'closed', token)).map((item) => item.id)).toEqual([
+          conversation.conversationId,
+        ]);
+      }
     });
 
     it('createdAt aparece en la lista y en el detalle', async () => {

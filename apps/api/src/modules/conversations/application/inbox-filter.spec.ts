@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ActorContext } from '../../../shared/application/request-context';
-import { conversationSearch, InboxForbiddenError, inboxFilter } from './inbox-filter';
+import { conversationSearch, inboxFilter } from './inbox-filter';
 
 const owner: ActorContext = { userId: 'u-owner', tenantId: 't1', memberId: 'owner', role: 'OWNER' };
 const laura: ActorContext = { userId: 'u-laura', tenantId: 't1', memberId: 'laura', role: 'AGENT' };
@@ -17,10 +17,10 @@ describe('inboxFilter', () => {
     expect(inboxFilter(owner, 'mine')).toEqual({ status: 'OPEN', assignedAgentId: 'owner' });
   });
 
-  it('all: todas las abiertas para OWNER/ADMIN y prohibida para AGENT', () => {
+  it('all: todas las abiertas, para cualquier rol (SPEC 21)', () => {
     expect(inboxFilter(owner, 'all')).toEqual({ status: 'OPEN' });
     expect(inboxFilter({ ...owner, role: 'ADMIN' }, 'all')).toEqual({ status: 'OPEN' });
-    expect(() => inboxFilter(laura, 'all')).toThrow(InboxForbiddenError);
+    expect(inboxFilter(laura, 'all')).toEqual({ status: 'OPEN' });
   });
 
   it('channelId se combina con la bandeja', () => {
@@ -31,9 +31,9 @@ describe('inboxFilter', () => {
     });
   });
 
-  it('closed: todas las cerradas para OWNER/ADMIN y solo las suyas para un AGENT', () => {
+  it('closed: todas las cerradas, para cualquier rol (SPEC 21)', () => {
     expect(inboxFilter(owner, 'closed')).toEqual({ status: 'CLOSED' });
-    expect(inboxFilter(laura, 'closed')).toEqual({ status: 'CLOSED', assignedAgentId: 'laura' });
+    expect(inboxFilter(laura, 'closed')).toEqual({ status: 'CLOSED' });
   });
 });
 
@@ -61,12 +61,11 @@ describe('conversationSearch', () => {
 });
 
 describe('inboxFilter con q', () => {
-  it('combina la búsqueda con la bandeja y los permisos', () => {
+  it('combina la búsqueda con la bandeja', () => {
     expect(inboxFilter(laura, 'closed', 'jua')).toEqual({
       status: 'CLOSED',
-      assignedAgentId: 'laura',
       search: { name: 'jua' },
     });
-    expect(() => inboxFilter(laura, 'all', 'jua')).toThrow(InboxForbiddenError);
+    expect(inboxFilter(laura, 'all', 'jua')).toEqual({ status: 'OPEN', search: { name: 'jua' } });
   });
 });

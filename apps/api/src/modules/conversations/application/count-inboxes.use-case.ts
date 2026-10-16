@@ -1,7 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Inbox, InboxCountsResponse } from '@omnidesk/contracts';
 import type { ActorContext } from '../../../shared/application/request-context';
-import { canViewInbox } from '../domain/conversation-policy';
 import { inboxFilter } from './inbox-filter';
 import {
   CONVERSATION_READ_MODEL,
@@ -17,9 +16,8 @@ export class CountInboxesUseCase {
   constructor(@Inject(CONVERSATION_READ_MODEL) private readonly readModel: ConversationReadModel) {}
 
   async execute(actor: ActorContext, channelId?: string): Promise<InboxCountsResponse> {
-    const visible = COUNTED.filter((inbox) => canViewInbox(actor, inbox));
     const counts = await Promise.all(
-      visible.map((inbox) =>
+      COUNTED.map((inbox) =>
         this.readModel.countConversations(
           actor.tenantId,
           inboxFilter(actor, inbox, undefined, channelId),
@@ -27,7 +25,7 @@ export class CountInboxesUseCase {
       ),
     );
     return Object.fromEntries(
-      visible.map((inbox, index) => [inbox, counts[index]!]),
+      COUNTED.map((inbox, index) => [inbox, counts[index]!]),
     ) as InboxCountsResponse;
   }
 }

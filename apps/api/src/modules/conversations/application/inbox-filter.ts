@@ -1,14 +1,6 @@
 import type { Inbox } from '@omnidesk/contracts';
 import type { ActorContext } from '../../../shared/application/request-context';
-import { canViewInbox, isManager } from '../domain/conversation-policy';
 import type { ConversationFilter, ConversationSearch } from './ports/conversation-read-model';
-
-export class InboxForbiddenError extends Error {
-  constructor() {
-    super('Tu rol no puede ver esta bandeja');
-    this.name = 'InboxForbiddenError';
-  }
-}
 
 /**
  * Búsqueda de la bandeja (docs/specs/06): por nombre y, si `q` tiene 3 dígitos o más tras quitar
@@ -22,10 +14,9 @@ export function conversationSearch(q: string | undefined): ConversationSearch | 
 }
 
 /**
- * Filtro de cada bandeja (docs/specs/04). Lanza `InboxForbiddenError` si el rol no puede verla.
- * - ai: abiertas sin agente · mine: abiertas asignadas al actor · all: abiertas (OWNER/ADMIN)
- * - closed: cerradas; un AGENT solo las que tienen su `assignedAgentId`.
- * `q` y `channelId` se combinan con `AND` con la bandeja y los permisos.
+ * Filtro de cada bandeja (docs/specs/04). Todos los roles ven las cuatro (SPEC 21).
+ * - ai: abiertas sin agente · mine: abiertas asignadas al actor · all: abiertas · closed: cerradas
+ * `q` y `channelId` se combinan con `AND` con la bandeja.
  */
 export function inboxFilter(
   actor: ActorContext,
@@ -33,7 +24,6 @@ export function inboxFilter(
   q?: string,
   channelId?: string,
 ): ConversationFilter {
-  if (!canViewInbox(actor, inbox)) throw new InboxForbiddenError();
   const search = conversationSearch(q);
   return {
     ...byInbox(actor, inbox),
@@ -51,8 +41,6 @@ function byInbox(actor: ActorContext, inbox: Inbox): ConversationFilter {
     case 'all':
       return { status: 'OPEN' };
     case 'closed':
-      return isManager(actor.role)
-        ? { status: 'CLOSED' }
-        : { status: 'CLOSED', assignedAgentId: actor.memberId };
+      return { status: 'CLOSED' };
   }
 }

@@ -18,7 +18,7 @@ export interface ConversationPage {
 export class ListConversationsUseCase {
   constructor(@Inject(CONVERSATION_READ_MODEL) private readonly readModel: ConversationReadModel) {}
 
-  /** Lanza `InvalidCursorError` si el cursor no es válido e `InboxForbiddenError` si el rol no ve la bandeja. */
+  /** Lanza `InvalidCursorError` si el cursor no es válido. */
   async execute(
     actor: ActorContext,
     inbox: Inbox,

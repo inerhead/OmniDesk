@@ -124,13 +124,13 @@ autoheal:
 - [x] Con el caso de uso de salud fallando (base caída), `/api/v1/health/live` sigue respondiendo `200` y `/api/v1/health` responde `503`.
 - [x] En `docker-compose.prod.yml`, el healthcheck de `api` llama a `/api/v1/health/live`.
 - [x] `cloudflared` usa la imagen `cloudflare/cloudflared:2026.8.3` en los dos compose, y ninguno usa `:latest` para él.
-- [ ] Con el túnel conectado, `docker inspect --format '{{.State.Health.Status}}'` de `cloudflared` dice `healthy` en local y en prod.
+- [x] Con el túnel conectado, `docker inspect --format '{{.State.Health.Status}}'` de `cloudflared` dice `healthy` en local y en prod.
 - [x] El puerto `20241` no está publicado en el host (`docker port` de `cloudflared` y de su red compartida no lo listan).
 - [ ] En la simulación local, tras cortar la red, `cloudflared` se reinicia solo en menos de 2 minutos, y el log de `omnidesk-autoheal` lo registra.
 - [x] Tras reconectar la red, `dev-channel.gastromesa.com/omnidesk/api/v1/health` vuelve a responder `200` en menos de 2 minutos, sin intervención manual.
 - [x] Autoheal no reinicia contenedores sin la etiqueta: durante la simulación, `omnidesk-api`, `omnidesk-postgres` y `omnidesk-minio` conservan su `StartedAt`.
-- [ ] En prod, `autoheal` corre, y `cloudflared`, `gateway` y `api` están `healthy` con la etiqueta `autoheal=true`.
-- [ ] Tras el despliegue, `https://channel.gastromesa.com/omnidesk/` responde `200`.
+- [x] En prod, `autoheal` corre, y `cloudflared`, `gateway` y `api` están `healthy` con la etiqueta `autoheal=true`.
+- [x] Tras el despliegue, `https://channel.gastromesa.com/omnidesk/` responde `200`.
 - [x] `docs/despliegue.md` explica qué se reinicia, en cuánto tiempo, cómo verlo, el ajuste de `pmset` y el error 1033.
 - [ ] Lint, typecheck, test, build y e2e pasan.
 
@@ -202,5 +202,9 @@ Local, a mano:
 
 **Criterio pendiente: reinicio en menos de 2 minutos desde el corte.** No se cumple medido desde el corte: fueron unos 4 minutos. Desde que el túnel se queda sin conexiones fueron 68 s, el tiempo que controla este spec. Los otros 2,6 minutos son lo que tarda `cloudflared` en darse cuenta del corte de red, y eso no lo cambian ni el healthcheck ni autoheal. En el incidente del 2026-10-16, el túnel ya estaba sin conexiones al despertar el host: con este spec se habría reiniciado en unos 70 s. Queda para que el usuario decida si se da por bueno o se reformula el criterio.
 
-**Paso 6 (prod), pendiente de desplegar.** El compose de prod está editado y valida, pero el despliegue no se hizo: requiere reconstruir la imagen del API desde un commit (el healthcheck nuevo llama a `/health/live`, que la imagen actual no tiene) y reiniciar contenedores de producción. Quedan pendientes los criterios de prod (`healthy` en prod, autoheal corriendo y `200` tras el despliegue).
+**Paso 6 (prod), desplegado** el 2026-10-16 a las 02:46 UTC desde el commit `875b078`, con `APP_VERSION=875b078 docker compose -p omnidesk-prod --env-file .env.prod -f infra/deploy/docker-compose.prod.yml up -d --build api gateway cloudflared autoheal`. Prod corre en el Mac, no en el VPS: no se usó `deploy.sh`, que exige una etiqueta `vX.Y.Z` y `/srv/omnidesk`.
 
+- `omnidesk-prod-api`, `-gateway` y `-cloudflared` (`2026.8.3`) quedaron `healthy` con `autoheal=true`. `omnidesk-prod-autoheal` (`1.2.0`) corre. `postgres` y `minio` no llevan la etiqueta.
+- `cloudflared` no publica ningún puerto. El gateway solo publica `127.0.0.1:8082`.
+- `https://channel.gastromesa.com/omnidesk/`, `/api/v1/health` y `/api/v1/health/live` responden `200`. `/health` informa `"version":"875b078"` (antes `dev`).
+- En prod no se simuló ninguna caída.

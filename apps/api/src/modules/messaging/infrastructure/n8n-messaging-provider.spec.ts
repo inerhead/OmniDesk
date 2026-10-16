@@ -1,7 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { verifySignature } from '../../../shared/infrastructure/crypto/hmac-signature';
 import type { ChannelSecretCipher } from '../../channels/application/ports/channel-secret-cipher';
 import type { ChannelForSend } from '../../channels/application/ports/channel.repository';
 import {
@@ -10,13 +9,13 @@ import {
 } from '../application/ports/messaging-provider.port';
 import { N8nMessagingProvider } from './n8n-messaging-provider';
 
-const SECRET = 'whsec_n8n_test';
+const CLIENT_ID = 'acme-omnidesk';
+const SECRET = 'client-secret-n8n-test';
 /** "Cifrado" de prueba: el blob es el propio texto. */
 const cipher: ChannelSecretCipher = {
   encrypt: (plain) => new Uint8Array(Buffer.from(plain)),
   decrypt: (blob) => Buffer.from(blob).toString('utf8'),
 };
-const now = new Date('2026-10-14T10:00:00.000Z');
 
 interface Received {
   headers: IncomingMessage['headers'];
@@ -37,7 +36,8 @@ describe('N8nMessagingProvider', () => {
       provider: 'N8N',
       externalId: '1234567890',
       webhookUrl: url,
-      hmacSecretEnc: cipher.encrypt(SECRET),
+      n8nClientId: CLIENT_ID,
+      n8nClientSecretEnc: cipher.encrypt(SECRET),
       ...overrides,
     },
     conversationId: '0199c0de-0000-7000-8000-0000000000aa',
@@ -71,26 +71,19 @@ describe('N8nMessagingProvider', () => {
       res
         .writeHead(200, { 'content-type': 'application/json' })
         .end('{"providerMessageId":"wamid.ABC"}');
-    provider = new N8nMessagingProvider(cipher, { now: () => now });
+    provider = new N8nMessagingProvider(cipher);
   });
 
-  it('2xx con providerMessageId: firma, Idempotency-Key y el cuerpo del contrato', async () => {
+  it('2xx con providerMessageId: credenciales de cliente, Idempotency-Key y el cuerpo', async () => {
     await expect(provider.send(request())).resolves.toEqual({ providerMessageId: 'wamid.ABC' });
 
     expect(received).toHaveLength(1);
     const [{ headers, body }] = received as [Received];
     expect(headers['idempotency-key']).toBe('0199c0de-0000-7000-8000-000000000001');
-    expect(headers['x-client-id']).toBe('0199c0de-0000-7000-8000-0000000000c1');
-    expect(headers['x-client-secret']).toBe(SECRET);
     expect(headers['content-type']).toBe('application/json');
-    expect(
-      verifySignature(
-        headers['x-omnidesk-signature'] as string,
-        body,
-        [SECRET],
-        Math.floor(now.getTime() / 1000),
-      ),
-    ).toBe('ok');
+    expect(headers['x-client-id']).toBe(CLIENT_ID);
+    expect(headers['x-client-secret']).toBe(SECRET);
+    expect(headers['x-omnidesk-signature']).toBeUndefined();
     expect(JSON.parse(body)).toEqual({
       type: 'message.send',
       messageId: '0199c0de-0000-7000-8000-000000000001',
@@ -130,8 +123,11 @@ describe('N8nMessagingProvider', () => {
     ).rejects.toThrow(/n8n no respondió/);
   });
 
-  it('sin secreto: CHANNEL_NOT_CONFIGURED y no llama al webhook', async () => {
-    await expect(provider.send(request({ hmacSecretEnc: null }))).rejects.toBeInstanceOf(
+  it('sin credenciales de cliente: CHANNEL_NOT_CONFIGURED y no llama al webhook', async () => {
+    await expect(provider.send(request({ n8nClientSecretEnc: null }))).rejects.toBeInstanceOf(
+      ChannelNotConfiguredError,
+    );
+    await expect(provider.send(request({ n8nClientId: null }))).rejects.toBeInstanceOf(
       ChannelNotConfiguredError,
     );
     await expect(provider.send(request({ webhookUrl: null }))).rejects.toThrow(

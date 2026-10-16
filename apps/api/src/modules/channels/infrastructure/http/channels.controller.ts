@@ -2,6 +2,7 @@ import {
   Body,
   Inject,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   HttpCode,
@@ -11,6 +12,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -23,15 +25,14 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import {
-  ChannelCredentialsResponseSchema,
   ChannelSchema,
   ChannelTestResponseSchema,
+  ConfigureN8nClientRequestSchema,
   CreateChannelRequestSchema,
   ListChannelsResponseSchema,
   ListInboxChannelsResponseSchema,
   UpdateChannelRequestSchema,
   type Channel,
-  type ChannelCredentialsResponse,
   type ChannelTestResponse,
   type ListChannelsResponse,
   type ListInboxChannelsResponse,
@@ -44,10 +45,11 @@ import { OriginGuard } from '../../../../shared/infrastructure/http/origin.guard
 import { Actor } from '../../../../shared/infrastructure/http/request-context.decorators';
 import { SessionGuard } from '../../../identity/infrastructure/http/session.guard';
 import {
+  ConfigureN8nClientUseCase,
   CreateChannelUseCase,
-  IssueChannelCredentialsUseCase,
   ListChannelsUseCase,
   ListInboxChannelsUseCase,
+  RemoveN8nClientUseCase,
   TestChannelConnectionUseCase,
   UpdateChannelUseCase,
 } from '../../application/channels.use-cases';
@@ -59,7 +61,7 @@ class ListChannelsResponseDto extends createZodDto(ListChannelsResponseSchema) {
 class ListInboxChannelsResponseDto extends createZodDto(ListInboxChannelsResponseSchema) {}
 class CreateChannelRequestDto extends createZodDto(CreateChannelRequestSchema) {}
 class UpdateChannelRequestDto extends createZodDto(UpdateChannelRequestSchema) {}
-class ChannelCredentialsResponseDto extends createZodDto(ChannelCredentialsResponseSchema) {}
+class ConfigureN8nClientRequestDto extends createZodDto(ConfigureN8nClientRequestSchema) {}
 class ChannelTestResponseDto extends createZodDto(ChannelTestResponseSchema) {}
 
 function toChannel(channel: ChannelSummary, appUrl: string): Channel {
@@ -71,9 +73,10 @@ function toChannel(channel: ChannelSummary, appUrl: string): Channel {
     phoneNumber: channel.phoneNumber,
     externalId: channel.externalId,
     webhookUrl: channel.webhookUrl,
-    hasCredentials: channel.hasCredentials,
     aiEnabled: channel.aiEnabled ?? false,
     hasWhatsAppCredentials: channel.hasWhatsAppCredentials ?? false,
+    n8nClientId: channel.n8nClientId,
+    hasN8nClientSecret: channel.hasN8nClientSecret,
     whatsappWebhookUrl:
       channel.provider === 'WHATSAPP_CLOUD'
         ? `${appUrl.replace(/\/$/, '')}/api/v1/integrations/whatsapp/${channel.id}`
@@ -88,7 +91,7 @@ function invalidWebhook(reason: Exclude<WebhookUrlCheck, { ok: true }>['reason']
   return apiError(HttpStatus.BAD_REQUEST, 'INVALID_WEBHOOK_URL', WEBHOOK_URL_MESSAGES[reason]);
 }
 
-/** Canales de la empresa activa (SPEC 09): alta, edición, credenciales y prueba de conexión. */
+/** Canales de la empresa activa (SPEC 09): alta, edición, credenciales de cliente de n8n (SPEC 22) y prueba de conexión. */
 @ApiTags('channels')
 @UseGuards(OriginGuard, SessionGuard)
 @ApiForbiddenResponse({ description: 'Solo OWNER y ADMIN.' })
@@ -100,8 +103,9 @@ export class ChannelsController {
     private readonly listInboxChannels: ListInboxChannelsUseCase,
     private readonly createChannel: CreateChannelUseCase,
     private readonly updateChannel: UpdateChannelUseCase,
-    private readonly issueCredentials: IssueChannelCredentialsUseCase,
     private readonly testConnection: TestChannelConnectionUseCase,
+    private readonly configureN8nClient: ConfigureN8nClientUseCase,
+    private readonly removeN8nClient: RemoveN8nClientUseCase,
   ) {}
 
   @Get('inbox')
@@ -123,7 +127,6 @@ export class ChannelsController {
 
   @Post()
   @ApiCreatedResponse({ type: ChannelDto.Output, description: 'Canal creado, sin credenciales.' })
-  @ApiBadRequestResponse({ description: '`webhookUrl` no permitido (`INVALID_WEBHOOK_URL`).' })
   @ApiConflictResponse({ description: 'Ese `externalId` ya existe (`CHANNEL_EXTERNAL_ID_TAKEN`).' })
   async create(
     @Actor() actor: ActorContext,
@@ -133,8 +136,6 @@ export class ChannelsController {
     switch (result.kind) {
       case 'forbidden':
         throw new ForbiddenException(FORBIDDEN);
-      case 'invalid-webhook':
-        throw invalidWebhook(result.reason);
       case 'conflict':
         throw apiError(
           HttpStatus.CONFLICT,
@@ -168,29 +169,55 @@ export class ChannelsController {
     }
   }
 
-  @Post(':id/credentials')
-  @ApiCreatedResponse({
-    type: ChannelCredentialsResponseDto.Output,
-    description: 'API key y secreto HMAC nuevos. Solo aparecen en esta respuesta.',
+  /** `clientId` y `clientSecret` que OmniDesk envía a n8n en cada llamada (SPEC 22). */
+  @Put(':id/n8n-client')
+  @ApiOkResponse({ type: ChannelDto.Output, description: 'Canal actualizado, sin el secreto.' })
+  @ApiBadRequestResponse({
+    description: 'Falta `clientSecret` y el canal no tiene uno (`N8N_CLIENT_SECRET_REQUIRED`).',
   })
   @ApiNotFoundResponse({ description: 'El canal no existe en la empresa.' })
-  async credentials(
+  async putN8nClient(
     @Actor() actor: ActorContext,
     @Param('id', new ParseUUIDPipe()) id: string,
-  ): Promise<ChannelCredentialsResponse> {
-    const result = await this.issueCredentials.execute(actor, id);
+    @Body() body: ConfigureN8nClientRequestDto,
+  ): Promise<Channel> {
+    const result = await this.configureN8nClient.execute(actor, id, body);
+    switch (result.kind) {
+      case 'forbidden':
+        throw new ForbiddenException(FORBIDDEN);
+      case 'not-found':
+        throw new NotFoundException('Canal no encontrado');
+      case 'secret-required':
+        throw apiError(
+          HttpStatus.BAD_REQUEST,
+          'N8N_CLIENT_SECRET_REQUIRED',
+          'Indica el clientSecret del canal',
+        );
+      case 'ok':
+        return toChannel(result.channel, this.env.APP_URL);
+    }
+  }
+
+  /** Quita las credenciales de cliente y apaga la IA. Repetirlo responde 200 sin cambios. */
+  @Delete(':id/n8n-client')
+  @ApiOkResponse({ type: ChannelDto.Output, description: 'Canal sin credenciales y sin IA.' })
+  @ApiNotFoundResponse({ description: 'El canal no existe en la empresa.' })
+  async deleteN8nClient(
+    @Actor() actor: ActorContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<Channel> {
+    const result = await this.removeN8nClient.execute(actor, id);
     if (result.kind === 'forbidden') throw new ForbiddenException(FORBIDDEN);
     if (result.kind === 'not-found') throw new NotFoundException('Canal no encontrado');
-    return {
-      apiKey: result.credentials.apiKey,
-      hmacSecret: result.credentials.hmacSecret,
-      previousValidUntil: result.credentials.previousValidUntil?.toISOString() ?? null,
-    };
+    return toChannel(result.channel, this.env.APP_URL);
   }
 
   @Post(':id/test')
   @HttpCode(HttpStatus.OK)
-  @ApiOkResponse({ type: ChannelTestResponseDto.Output, description: '`ping` firmado al webhook.' })
+  @ApiOkResponse({
+    type: ChannelTestResponseDto.Output,
+    description: '`ping` al webhook con las credenciales de cliente.',
+  })
   @ApiNotFoundResponse({ description: 'El canal no existe en la empresa.' })
   async test(
     @Actor() actor: ActorContext,

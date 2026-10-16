@@ -79,11 +79,11 @@ describe('Adjuntos de WhatsApp (e2e)', () => {
       .send({ webhookUrl: 'https://n8n.example.com/webhook/ai' })
       .expect(200);
     await http()
-      .post(`/api/v1/channels/${channelId}/credentials`)
+      .put(`/api/v1/channels/${channelId}/n8n-client`)
       .set('Cookie', cookie)
       .set('Origin', WEB_ORIGIN)
-      .send({})
-      .expect(201);
+      .send({ clientId: 'acme-omnidesk', clientSecret: 'n8n-client-secret-for-e2e' })
+      .expect(200);
     await manage(`/api/v1/channels/${channelId}/whatsapp`).send({ aiEnabled: true }).expect(200);
   };
   const countEvents = (type: string) => db.outboxEvent.count({ where: { tenantId, type } });
@@ -258,9 +258,9 @@ describe('Adjuntos de WhatsApp (e2e)', () => {
   it('responde 206 con Content-Range (Safari) y 416 fuera de rango', async () => {
     const attachment = await readyImage();
     const url = `/api/v1/attachments/${attachment.id}/content`;
-    const partial = await binary(http().get(url).set('Cookie', cookie).set('Range', 'bytes=0-1')).expect(
-      206,
-    );
+    const partial = await binary(
+      http().get(url).set('Cookie', cookie).set('Range', 'bytes=0-1'),
+    ).expect(206);
     expect(partial.headers['content-range']).toBe(`bytes 0-1/${jpeg.length}`);
     expect(partial.headers['content-length']).toBe('2');
     expect(partial.body).toEqual(jpeg.subarray(0, 2));
@@ -276,7 +276,13 @@ describe('Adjuntos de WhatsApp (e2e)', () => {
       data: { email: `${randomUUID()}@test.local`, displayName: 'X' },
     });
     await db.tenantMember.create({
-      data: { tenantId: other.id, userId: user.id, email: user.email, displayName: 'X', role: 'OWNER' },
+      data: {
+        tenantId: other.id,
+        userId: user.id,
+        email: user.email,
+        displayName: 'X',
+        role: 'OWNER',
+      },
     });
     const otherCookie = await sessionFor(app, user.id, other.id);
 
@@ -349,9 +355,11 @@ describe('Adjuntos de WhatsApp (e2e)', () => {
 
   it('valida tipo, tamaño, pie de audio y archivo ausente', async () => {
     const conversationId = await openAssigned();
-    await upload(conversationId, { bytes: Buffer.from('PK'), name: 'a.zip', type: 'application/zip' }).expect(
-      415,
-    );
+    await upload(conversationId, {
+      bytes: Buffer.from('PK'),
+      name: 'a.zip',
+      type: 'application/zip',
+    }).expect(415);
     await upload(conversationId, {
       bytes: Buffer.alloc(5 * 1024 * 1024 + 1),
       name: 'g.png',

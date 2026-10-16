@@ -1,6 +1,4 @@
-import { signPayload, SIGNATURE_HEADER } from '../crypto/hmac-signature';
-
-export interface SignedWebhookResponse {
+export interface WebhookResponse {
   status: number;
   /** Cuerpo JSON, o `null` si no lo es. */
   json: unknown;
@@ -8,26 +6,21 @@ export interface SignedWebhookResponse {
 }
 
 /**
- * POST de un cuerpo JSON firmado (`X-OmniDesk-Signature`) a un webhook de integración. Lanza si no
- * hay respuesta (red, DNS o timeout). No sigue redirecciones: un webhook que redirige no es válido.
+ * POST de un cuerpo JSON a un webhook de integración, sin firma: n8n autentica con las cabeceras de
+ * cliente que pasa quien llama (SPEC 22). Lanza si no hay respuesta (red, DNS o timeout). No sigue
+ * redirecciones: un webhook que redirige no es válido.
  */
-export async function postSignedJson(
+export async function postJson(
   url: string,
-  secret: string,
   body: object,
-  {
-    nowSec,
-    timeoutMs,
-    headers = {},
-  }: { nowSec: number; timeoutMs: number; headers?: Record<string, string> },
-): Promise<SignedWebhookResponse> {
+  { timeoutMs, headers = {} }: { timeoutMs: number; headers?: Record<string, string> },
+): Promise<WebhookResponse> {
   const raw = JSON.stringify(body);
   const started = performance.now();
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      [SIGNATURE_HEADER]: signPayload(secret, raw, nowSec),
       ...headers,
     },
     body: raw,

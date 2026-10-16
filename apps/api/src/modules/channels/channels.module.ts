@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
 import { IdentityModule } from '../identity/identity.module';
 import {
+  ConfigureN8nClientUseCase,
   CreateChannelUseCase,
-  IssueChannelCredentialsUseCase,
   ListChannelsUseCase,
   ListInboxChannelsUseCase,
+  RemoveN8nClientUseCase,
   TestChannelConnectionUseCase,
   UpdateChannelUseCase,
   WebhookUrlValidator,
@@ -18,7 +19,10 @@ import { ChannelCredentialGuard } from './infrastructure/http/channel-credential
 import { ChannelsController } from './infrastructure/http/channels.controller';
 import { PrismaChannelRepository } from './infrastructure/prisma-channel.repository';
 
-/** Canales: credenciales de integración (API key + HMAC) y su gestión desde la web (SPEC 09). */
+/**
+ * Canales: credenciales de integración entrantes (API key + HMAC, SPEC 09), credenciales de cliente
+ * hacia n8n (SPEC 22) y su gestión desde la web.
+ */
 @Module({
   imports: [IdentityModule],
   controllers: [ChannelsController],
@@ -32,8 +36,9 @@ import { PrismaChannelRepository } from './infrastructure/prisma-channel.reposit
     ListInboxChannelsUseCase,
     CreateChannelUseCase,
     UpdateChannelUseCase,
-    IssueChannelCredentialsUseCase,
     TestChannelConnectionUseCase,
+    ConfigureN8nClientUseCase,
+    RemoveN8nClientUseCase,
   ],
   exports: [CHANNEL_REPOSITORY, CHANNEL_SECRET_CIPHER, ChannelCredentialGuard],
 })

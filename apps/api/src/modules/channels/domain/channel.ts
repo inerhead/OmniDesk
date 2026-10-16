@@ -22,11 +22,18 @@ export type NewChannel = Pick<Channel, 'name' | 'type' | 'provider' | 'externalI
 
 /** Canal para la UI de gestión: nunca lleva secretos. */
 export interface ChannelSummary extends Channel {
-  /** Tiene una API key vigente y un secreto HMAC. */
-  hasCredentials: boolean;
   credentialsRotatedAt: Date | null;
   aiEnabled?: boolean;
   hasWhatsAppCredentials?: boolean;
+  /** `X-Client-Id` hacia n8n (SPEC 22). */
+  n8nClientId: string | null;
+  /** Tiene `clientSecret` guardado; el valor nunca sale del servidor. */
+  hasN8nClientSecret: boolean;
+}
+
+/** Cabeceras con las que OmniDesk se autentica ante n8n en cada llamada (SPEC 22). */
+export function n8nClientHeaders(clientId: string, clientSecret: string): Record<string, string> {
+  return { 'X-Client-Id': clientId, 'X-Client-Secret': clientSecret };
 }
 
 /** Secretos HMAC cifrados de un canal. */

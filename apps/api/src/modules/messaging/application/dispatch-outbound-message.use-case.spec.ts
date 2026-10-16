@@ -34,7 +34,8 @@ const channel: ChannelForSend = {
   provider: 'N8N',
   externalId: 'pnid-1',
   webhookUrl: 'https://n8n.example.com/webhook/send',
-  hmacSecretEnc: new Uint8Array([1]),
+  n8nClientId: null,
+  n8nClientSecretEnc: null,
 };
 
 /** Registro de un solo canal (`c1`) con el proveedor falso. */

@@ -1,32 +1,19 @@
 import 'reflect-metadata';
-import { randomBytes, randomInt, randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
-import {
-  ChannelCredentialsResponseSchema,
-  ChannelSchema,
-  ListChannelsResponseSchema,
-  type Message,
-} from '@omnidesk/contracts';
+import { ChannelSchema, ListChannelsResponseSchema, type Message } from '@omnidesk/contracts';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
-import {
-  CHANNEL_SECRET_CIPHER,
-  type ChannelSecretCipher,
-} from '../src/modules/channels/application/ports/channel-secret-cipher';
-import {
-  CHANNEL_REPOSITORY,
-  type ChannelRepository,
-} from '../src/modules/channels/application/ports/channel.repository';
-import { CREDENTIALS_GRACE_MS } from '../src/modules/channels/domain/channel';
 import { MetricsRegistry } from '../src/modules/observability/infrastructure/metrics-registry';
-import { signPayload, verifySignature } from '../src/shared/infrastructure/crypto/hmac-signature';
+import { signPayload } from '../src/shared/infrastructure/crypto/hmac-signature';
 import { sha256Hex } from '../src/shared/infrastructure/crypto/sha256';
 import { PrismaService } from '../src/shared/infrastructure/prisma/prisma.service';
+import { issueLegacyCredentials } from './support/legacy-credentials';
 import { sessionFor, WEB_ORIGIN } from './support/session';
 import { E2E_DEMO_KEY, testEnv } from './support/test-env';
 
@@ -86,22 +73,10 @@ describe('Canales: firma HMAC de entrada (e2e)', () => {
     return req.send(raw);
   };
 
-  /** Emite API key + secreto nuevos por el repositorio (como lo hará la API de canales). */
+  /** API key + secreto nuevos de un canal N8N existente (la API ya no los emite, SPEC 22). */
   async function rotate(): Promise<{ apiKey: string; secret: string }> {
-    const repo = app.get<ChannelRepository>(CHANNEL_REPOSITORY);
-    const cipher = app.get<ChannelSecretCipher>(CHANNEL_SECRET_CIPHER);
-    const issued = {
-      apiKey: `odk_${randomBytes(24).toString('base64url')}`,
-      secret: randomBytes(32).toString('hex'),
-    };
-    const now = new Date();
-    await repo.rotateCredentials(tenantId, channelId, {
-      keyHash: sha256Hex(issued.apiKey),
-      hmacSecretEnc: cipher.encrypt(issued.secret),
-      now,
-      previousValidUntil: new Date(now.getTime() + CREDENTIALS_GRACE_MS),
-    });
-    return issued;
+    const issued = await issueLegacyCredentials(app, tenantId, channelId);
+    return { apiKey: issued.apiKey, secret: issued.hmacSecret };
   }
 
   let tenantId: string;
@@ -138,9 +113,9 @@ describe('Canales: firma HMAC de entrada (e2e)', () => {
   });
 
   it('las métricas cuentan la firma inválida, la credencial ausente y el ok (SPEC 11)', async () => {
-    const counter = app.get(MetricsRegistry).registry.getSingleMetric(
-      'omnidesk_integration_requests_total',
-    )!;
+    const counter = app
+      .get(MetricsRegistry)
+      .registry.getSingleMetric('omnidesk_integration_requests_total')!;
     const value = async (result: string) =>
       (await counter.get()).values.find(
         (sample) => sample.labels.endpoint === 'inbound' && sample.labels.result === result,
@@ -268,14 +243,18 @@ describe('Canales: API de gestión y envío por n8n (e2e)', () => {
       http().post(path).set('Cookie', cookie).set('Origin', WEB_ORIGIN).send(body),
     patch: (path: string, body: object) =>
       http().patch(path).set('Cookie', cookie).set('Origin', WEB_ORIGIN).send(body),
+    put: (path: string, body: object) =>
+      http().put(path).set('Cookie', cookie).set('Origin', WEB_ORIGIN).send(body),
+    delete: (path: string) => http().delete(path).set('Cookie', cookie).set('Origin', WEB_ORIGIN),
   });
+
+  const CLIENT_SECRET = 'client-secret-0123456789';
 
   const newChannel = (overrides: object = {}) => ({
     name: 'WhatsApp Ventas',
     phoneNumber: phone(),
     externalId: `pnid-${randomUUID().slice(0, 12)}`,
-    provider: 'N8N',
-    webhookUrl,
+    provider: 'WHATSAPP_CLOUD',
     ...overrides,
   });
 
@@ -292,15 +271,39 @@ describe('Canales: API de gestión y envío por n8n (e2e)', () => {
     return { memberId: member.id, cookie: await sessionFor(app, user.id, tenantId) };
   }
 
-  /** Canal N8N con credenciales emitidas por la API. */
-  async function channelWithCredentials(overrides: object = {}) {
+  /**
+   * Canal N8N existente (ya no se crean por la API, SPEC 22): API key y HMAC de entrada en la base y
+   * credenciales de cliente configuradas por la API.
+   */
+  async function channelWithCredentials() {
+    const row = await prisma.channel.create({
+      data: {
+        tenantId,
+        name: 'WhatsApp n8n',
+        type: 'WHATSAPP',
+        provider: 'N8N',
+        externalId: `pnid-${randomUUID().slice(0, 12)}`,
+        phoneNumber: phone(),
+        webhookUrl,
+      },
+    });
+    const legacy = await issueLegacyCredentials(app, tenantId, row.id);
+    const clientId = `acme-${randomUUID().slice(0, 8)}`;
     const channel = ChannelSchema.parse(
-      (await as(ownerCookie).post('/api/v1/channels', newChannel(overrides)).expect(201)).body,
+      (
+        await as(ownerCookie)
+          .put(`/api/v1/channels/${row.id}/n8n-client`, { clientId, clientSecret: CLIENT_SECRET })
+          .expect(200)
+      ).body,
     );
-    const credentials = ChannelCredentialsResponseSchema.parse(
-      (await as(ownerCookie).post(`/api/v1/channels/${channel.id}/credentials`).expect(201)).body,
-    );
-    return { channel, ...credentials };
+    return { channel, clientId, ...legacy };
+  }
+
+  /** Cabeceras de cliente presentes y sin firma saliente (SPEC 22). */
+  function expectClientHeaders(headers: IncomingMessage['headers'], clientId: string) {
+    expect(headers['x-client-id']).toBe(clientId);
+    expect(headers['x-client-secret']).toBe(CLIENT_SECRET);
+    expect(headers['x-omnidesk-signature']).toBeUndefined();
   }
 
   const signedPost = (path: string, body: object, apiKey: string, secret: string) => {
@@ -401,20 +404,22 @@ describe('Canales: API de gestión y envío por n8n (e2e)', () => {
       await as(agentCookie).post('/api/v1/channels', newChannel()).expect(403);
     });
 
-    it('el OWNER crea un canal N8N: aparece en la lista sin credenciales', async () => {
+    it('el OWNER crea un canal WhatsApp Cloud: aparece en la lista sin credenciales de cliente', async () => {
       const body = newChannel();
       const created = ChannelSchema.parse(
         (await as(ownerCookie).post('/api/v1/channels', body).expect(201)).body,
       );
       expect(created).toMatchObject({
         name: body.name,
-        provider: 'N8N',
+        provider: 'WHATSAPP_CLOUD',
         phoneNumber: body.phoneNumber,
         externalId: body.externalId,
-        webhookUrl,
-        hasCredentials: false,
-        credentialsRotatedAt: null,
+        webhookUrl: null,
+        n8nClientId: null,
+        hasN8nClientSecret: false,
+        aiEnabled: false,
       });
+      expect(created).not.toHaveProperty('hasCredentials');
 
       const list = ListChannelsResponseSchema.parse(
         (await as(ownerCookie).get('/api/v1/channels').expect(200)).body,
@@ -422,21 +427,17 @@ describe('Canales: API de gestión y envío por n8n (e2e)', () => {
       expect(list.items.map((c) => c.id)).toContain(created.id);
     });
 
+    it('ya no se crean canales N8N: 400', async () => {
+      await as(ownerCookie)
+        .post('/api/v1/channels', newChannel({ provider: 'N8N', webhookUrl }))
+        .expect(400);
+    });
+
     it('un externalId repetido en la empresa responde 409', async () => {
       const body = newChannel();
       await as(ownerCookie).post('/api/v1/channels', body).expect(201);
       const res = await as(ownerCookie).post('/api/v1/channels', body).expect(409);
       expect(res.body.code).toBe('CHANNEL_EXTERNAL_ID_TAKEN');
-    });
-
-    it('valida webhookUrl: IP privada 400, host permitido por http sí', async () => {
-      const res = await as(ownerCookie)
-        .post('/api/v1/channels', newChannel({ webhookUrl: 'http://10.0.0.5/hook' }))
-        .expect(400);
-      expect(res.body.code).toBe('INVALID_WEBHOOK_URL');
-      await as(ownerCookie)
-        .post('/api/v1/channels', newChannel({ webhookUrl: 'http://n8n:5678/webhook/x' }))
-        .expect(201);
     });
 
     it('PATCH cambia nombre y webhookUrl, y valida la URL', async () => {
@@ -451,76 +452,130 @@ describe('Canales: API de gestión y envío por n8n (e2e)', () => {
         name: 'Renombrado',
         webhookUrl: 'https://n8n.example.com/webhook/y',
       });
-      await as(ownerCookie)
+      const invalid = await as(ownerCookie)
         .patch(`/api/v1/channels/${channel.id}`, { webhookUrl: 'http://192.168.1.2/x' })
         .expect(400);
+      expect(invalid.body.code).toBe('INVALID_WEBHOOK_URL');
+      // Host permitido por N8N_WEBHOOK_ALLOWED_HOSTS: vale por http.
+      await as(ownerCookie)
+        .patch(`/api/v1/channels/${channel.id}`, { webhookUrl: 'http://n8n:5678/webhook/x' })
+        .expect(200);
       await as(ownerCookie).patch(`/api/v1/channels/${randomUUID()}`, { name: 'x' }).expect(404);
       await as(agentCookie).patch(`/api/v1/channels/${channel.id}`, { name: 'x' }).expect(403);
     });
 
-    it('las credenciales se devuelven una vez; en la base, sha256 y secreto cifrado', async () => {
-      const { channel, apiKey, hmacSecret, previousValidUntil } = await channelWithCredentials();
-      expect(previousValidUntil).toBeNull();
+    it('POST /channels/:id/credentials ya no existe: 404', async () => {
+      const { channel } = await channelWithCredentials();
+      await as(ownerCookie).post(`/api/v1/channels/${channel.id}/credentials`).expect(404);
+    });
+  });
 
-      const credential = await prisma.integrationCredential.findFirstOrThrow({
-        where: { channelId: channel.id },
-      });
-      expect(credential.keyHash).toBe(sha256Hex(apiKey));
-      const row = await prisma.channel.findUniqueOrThrow({ where: { id: channel.id } });
-      expect(row.hmacSecretEnc).not.toBeNull();
-      expect(Buffer.from(row.hmacSecretEnc!).includes(Buffer.from(hmacSecret))).toBe(false);
+  describe('credenciales de cliente de n8n (SPEC 22)', () => {
+    const cloudChannel = async () =>
+      ChannelSchema.parse(
+        (await as(ownerCookie).post('/api/v1/channels', newChannel()).expect(201)).body,
+      );
+    const putClient = (cookie: string, id: string, body: object) =>
+      as(cookie).put(`/api/v1/channels/${id}/n8n-client`, body);
+
+    it('el OWNER las guarda; el secreto no sale de la API y se guarda cifrado', async () => {
+      const channel = await cloudChannel();
+      const res = await putClient(ownerCookie, channel.id, {
+        clientId: 'acme',
+        clientSecret: '0123456789abcdef',
+      }).expect(200);
+      expect(res.body).toMatchObject({ n8nClientId: 'acme', hasN8nClientSecret: true });
 
       const list = await as(ownerCookie).get('/api/v1/channels').expect(200);
-      const raw = JSON.stringify(list.body);
-      expect(raw).not.toContain(apiKey);
-      expect(raw).not.toContain(hmacSecret);
-      expect(list.body.items.find((c: { id: string }) => c.id === channel.id)).toMatchObject({
-        hasCredentials: true,
-      });
-    });
-
-    it('rotar mantiene válidas 24 h la key y el secreto anteriores', async () => {
-      const first = await channelWithCredentials();
-      const rotated = ChannelCredentialsResponseSchema.parse(
-        (await as(ownerCookie).post(`/api/v1/channels/${first.channel.id}/credentials`).expect(201))
-          .body,
+      expect(JSON.stringify(list.body)).not.toContain('0123456789abcdef');
+      const row = await prisma.channel.findUniqueOrThrow({ where: { id: channel.id } });
+      expect(row.n8nClientSecretEnc).not.toBeNull();
+      expect(Buffer.from(row.n8nClientSecretEnc!).includes(Buffer.from('0123456789abcdef'))).toBe(
+        false,
       );
-      const until = new Date(rotated.previousValidUntil!).getTime();
-      expect(Math.abs(until - (Date.now() + CREDENTIALS_GRACE_MS))).toBeLessThan(60_000);
-
-      for (const [key, secret] of [
-        [first.apiKey, first.hmacSecret],
-        [rotated.apiKey, rotated.hmacSecret],
-      ] as const) {
-        await signedPost(
-          '/api/v1/integrations/messages/inbound',
-          {
-            externalMessageId: randomUUID(),
-            from: { externalId: phone() },
-            text: 'Hola',
-            sentAt: new Date().toISOString(),
-          },
-          key,
-          secret,
-        ).expect(201);
-      }
     });
 
-    it('probar conexión: ping firmado; con el webhook caído, el error', async () => {
-      const { channel, hmacSecret } = await channelWithCredentials();
+    it('un AGENT recibe 403; un canal de otra empresa, 404', async () => {
+      const channel = await cloudChannel();
+      const body = { clientId: 'acme', clientSecret: '0123456789abcdef' };
+      await putClient(agentCookie, channel.id, body).expect(403);
+      await as(agentCookie).delete(`/api/v1/channels/${channel.id}/n8n-client`).expect(403);
+      await putClient(ownerCookie, randomUUID(), body).expect(404);
+    });
+
+    it('valida el formato y exige el secreto la primera vez', async () => {
+      const channel = await cloudChannel();
+      await putClient(ownerCookie, channel.id, {
+        clientId: 'acme',
+        clientSecret: 'x'.repeat(15),
+      }).expect(400);
+      await putClient(ownerCookie, channel.id, {
+        clientId: 'x'.repeat(201),
+        clientSecret: '0123456789abcdef',
+      }).expect(400);
+      const res = await putClient(ownerCookie, channel.id, { clientId: 'acme' }).expect(400);
+      expect(res.body.code).toBe('N8N_CLIENT_SECRET_REQUIRED');
+    });
+
+    it('omitir el secreto cambia el id y conserva el secreto: el ping lleva el anterior', async () => {
+      const { channel } = await channelWithCredentials();
+      await putClient(ownerCookie, channel.id, { clientId: 'otro' }).expect(200);
+      await as(ownerCookie).post(`/api/v1/channels/${channel.id}/test`).expect(200);
+      const [ping] = received as [Received];
+      expectClientHeaders(ping.headers, 'otro');
+    });
+
+    it('activar la IA exige webhook y credenciales; el HMAC ya no hace falta', async () => {
+      const channel = await cloudChannel();
+      await as(ownerCookie)
+        .patch(`/api/v1/channels/${channel.id}`, { webhookUrl: 'https://n8n.example.com/w' })
+        .expect(200);
+      await as(ownerCookie)
+        .patch(`/api/v1/channels/${channel.id}/whatsapp`, { aiEnabled: true })
+        .expect(400);
+      await putClient(ownerCookie, channel.id, {
+        clientId: 'acme',
+        clientSecret: '0123456789abcdef',
+      }).expect(200);
+      await as(ownerCookie)
+        .patch(`/api/v1/channels/${channel.id}/whatsapp`, { aiEnabled: true })
+        .expect(200);
+      const row = await prisma.channel.findUniqueOrThrow({ where: { id: channel.id } });
+      expect(row).toMatchObject({ aiEnabled: true, hmacSecretEnc: null });
+    });
+
+    it('DELETE las quita y apaga la IA; repetirlo responde 200', async () => {
+      const channel = await cloudChannel();
+      await as(ownerCookie)
+        .patch(`/api/v1/channels/${channel.id}`, { webhookUrl: 'https://n8n.example.com/w' })
+        .expect(200);
+      await putClient(ownerCookie, channel.id, {
+        clientId: 'acme',
+        clientSecret: '0123456789abcdef',
+      }).expect(200);
+      await as(ownerCookie)
+        .patch(`/api/v1/channels/${channel.id}/whatsapp`, { aiEnabled: true })
+        .expect(200);
+
+      const res = await as(ownerCookie)
+        .delete(`/api/v1/channels/${channel.id}/n8n-client`)
+        .expect(200);
+      expect(res.body).toMatchObject({
+        n8nClientId: null,
+        hasN8nClientSecret: false,
+        aiEnabled: false,
+      });
+      await as(ownerCookie).delete(`/api/v1/channels/${channel.id}/n8n-client`).expect(200);
+    });
+
+    it('probar conexión: ping con credenciales de cliente y sin firma; con el webhook caído, el error', async () => {
+      const { channel, clientId } = await channelWithCredentials();
       const ok = await as(ownerCookie).post(`/api/v1/channels/${channel.id}/test`).expect(200);
       expect(ok.body).toMatchObject({ ok: true, httpStatus: 200, error: null });
       expect(ok.body.latencyMs).toBeGreaterThanOrEqual(0);
       const [ping] = received as [Received];
       expect(JSON.parse(ping.body)).toMatchObject({ type: 'ping', channelId: channel.id });
-      expect(
-        verifySignature(
-          ping.headers['x-omnidesk-signature'] as string,
-          ping.body,
-          [hmacSecret],
-          nowSec(),
-        ),
-      ).toBe('ok');
+      expectClientHeaders(ping.headers, clientId);
 
       await as(ownerCookie)
         .patch(`/api/v1/channels/${channel.id}`, { webhookUrl: 'http://127.0.0.1:1/caido' })
@@ -529,11 +584,23 @@ describe('Canales: API de gestión y envío por n8n (e2e)', () => {
       expect(down.body).toMatchObject({ ok: false, httpStatus: null });
       expect(down.body.error).toBeTruthy();
     });
+
+    it('probar conexión sin credenciales de cliente: error y ninguna petición', async () => {
+      const { channel } = await channelWithCredentials();
+      await as(ownerCookie).delete(`/api/v1/channels/${channel.id}/n8n-client`).expect(200);
+      const res = await as(ownerCookie).post(`/api/v1/channels/${channel.id}/test`).expect(200);
+      expect(res.body).toMatchObject({
+        ok: false,
+        httpStatus: null,
+        error: 'El canal no tiene credenciales de cliente de n8n',
+      });
+      expect(received).toHaveLength(0);
+    });
   });
 
   describe('envío por n8n', () => {
-    it('un mensaje de agente se envía firmado con Idempotency-Key y queda SENT', async () => {
-      const { channel, apiKey, hmacSecret } = await channelWithCredentials();
+    it('un mensaje de agente se envía con credenciales de cliente e Idempotency-Key y queda SENT', async () => {
+      const { channel, clientId, apiKey, hmacSecret } = await channelWithCredentials();
       const conversationId = await ownedConversation(apiKey, hmacSecret);
       const message = await sendAgentMessage(conversationId);
 
@@ -545,14 +612,7 @@ describe('Canales: API de gestión y envío por n8n (e2e)', () => {
 
       const call = received.find((r) => r.body.includes(message.id))!;
       expect(call.headers['idempotency-key']).toBe(message.id);
-      expect(
-        verifySignature(
-          call.headers['x-omnidesk-signature'] as string,
-          call.body,
-          [hmacSecret],
-          nowSec(),
-        ),
-      ).toBe('ok');
+      expectClientHeaders(call.headers, clientId);
       expect(JSON.parse(call.body)).toMatchObject({
         type: 'message.send',
         messageId: message.id,
@@ -576,10 +636,10 @@ describe('Canales: API de gestión y envío por n8n (e2e)', () => {
       expect((await messageRow(message.id)).status).toBe('DELIVERED');
     });
 
-    it('un canal N8N sin secreto deja el mensaje FAILED (CHANNEL_NOT_CONFIGURED) sin llamar al webhook', async () => {
+    it('un canal N8N sin credenciales de cliente deja el mensaje FAILED (CHANNEL_NOT_CONFIGURED) sin llamar al webhook', async () => {
       const { channel, apiKey, hmacSecret } = await channelWithCredentials();
       const conversationId = await ownedConversation(apiKey, hmacSecret);
-      await prisma.channel.update({ where: { id: channel.id }, data: { hmacSecretEnc: null } });
+      await as(ownerCookie).delete(`/api/v1/channels/${channel.id}/n8n-client`).expect(200);
       received = [];
 
       const message = await sendAgentMessage(conversationId);

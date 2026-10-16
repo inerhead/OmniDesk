@@ -27,6 +27,8 @@ export const ApiErrorCodeSchema = z.enum([
   'NOT_SUSPENDED',
   'DEMO_TENANT_LOCKED',
   'TENANT_DELETING',
+  // SPEC 22: credenciales de cliente de n8n.
+  'N8N_CLIENT_SECRET_REQUIRED',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCodeSchema>;
 

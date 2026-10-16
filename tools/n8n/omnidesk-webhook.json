@@ -6,41 +6,63 @@
         "httpMethod": "POST",
         "path": "omnidesk",
         "responseMode": "responseNode",
-        "options": {
-          "rawBody": true
-        }
+        "options": {}
       },
       "id": "a1b2c3d4-e5f6-4789-a012-omnideskhook",
       "name": "OmniDesk",
       "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
+      "typeVersion": 2.1,
       "position": [0, 0],
       "webhookId": "omnidesk"
     },
     {
       "parameters": {
-        "mode": "runOnceForAllItems",
-        "language": "javaScript",
-        "jsCode": "const { timingSafeEqual } = require('crypto');\n\n// Client id = id del canal en OmniDesk. Secret = secreto HMAC de Generar credenciales.\nconst CLIENT_ID = 'REEMPLAZA_CLIENT_ID';\nconst CLIENT_SECRET = 'REEMPLAZA_CLIENT_SECRET';\n\nfunction same(left, right) {\n  const a = Buffer.from(String(left));\n  const b = Buffer.from(String(right));\n  return a.length > 0 && a.length === b.length && timingSafeEqual(a, b);\n}\n\nconst item = $input.first();\nconst headers = item.json.headers ?? {};\nconst clientId = headers['x-client-id'];\nconst clientSecret = headers['x-client-secret'];\nlet body = item.json.body;\nif (typeof body === 'string') {\n  try {\n    body = JSON.parse(body);\n  } catch {\n    body = null;\n  }\n}\n\nif (!same(clientId, CLIENT_ID) || !same(clientSecret, CLIENT_SECRET) || !body || typeof body !== 'object') {\n  return [{ json: { statusCode: 401, reply: { ok: false } } }];\n}\n\nif (body.type === 'ping') {\n  return [{ json: { statusCode: 200, reply: { ok: true } } }];\n}\n\nif (body.type === 'ai.reply') {\n  return [{ json: { statusCode: 501, reply: { ok: false } } }];\n}\n\nreturn [{ json: { statusCode: 400, reply: { ok: false } } }];\n"
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "omnidesk_clients"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "clientId",
+              "condition": "eq",
+              "keyValue": "={{ $json.headers['x-client-id'] }}"
+            },
+            {
+              "keyName": "clientSecret",
+              "condition": "eq",
+              "keyValue": "={{ $json.headers['x-client-secret'] }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
       },
-      "id": "b2c3d4e5-f6a7-4890-b123-omnideskcode",
-      "name": "Autorizar",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [280, 0]
+      "id": "b2c3d4e5-f6a7-4890-b123-omnidesktable",
+      "name": "Buscar cliente",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [280, 0],
+      "settings": {
+        "alwaysOutputData": true
+      }
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify($json.reply) }}",
+        "responseBody": "={{ JSON.stringify(!$json.clientId ? { ok: false } : $('OmniDesk').item.json.body.type === 'ping' ? { ok: true } : { ok: false }) }}",
         "options": {
-          "responseCode": "={{ $json.statusCode }}"
+          "responseCode": "={{ !$json.clientId ? 401 : $('OmniDesk').item.json.body.type === 'ping' ? 200 : $('OmniDesk').item.json.body.type === 'ai.reply' ? 501 : 400 }}"
         }
       },
       "id": "c3d4e5f6-a7b8-4901-c234-omnideskreply",
       "name": "Responder a OmniDesk",
       "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.4,
+      "typeVersion": 1.5,
       "position": [560, 0]
     }
   ],
@@ -49,14 +71,14 @@
       "main": [
         [
           {
-            "node": "Autorizar",
+            "node": "Buscar cliente",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Autorizar": {
+    "Buscar cliente": {
       "main": [
         [
           {

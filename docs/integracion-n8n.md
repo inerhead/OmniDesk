@@ -16,10 +16,14 @@ Referencias de Meta: [verificación del webhook](https://whatsapp.github.io/What
 
 ## Activar IA
 
-1. En **Editar**, guarda la URL de un webhook de producción de n8n que devuelva la respuesta de IA dentro de la petición HTTP.
-2. Pulsa **Generar credenciales**. Copia el secreto HMAC al entorno seguro de n8n. La API key se mantiene por compatibilidad con las integraciones antiguas; el flujo directo no necesita que n8n llame a OmniDesk.
-3. Implementa `ping` y `ai.reply` en el workflow; usa **Probar conexión n8n** para verificar el ping.
-4. Activa **Respuestas de IA**. No se permite activarla sin URL y HMAC.
+Todo se configura en el paso **IA con n8n** del canal.
+
+1. Guarda la URL de un webhook de producción de n8n que devuelva la respuesta de IA dentro de la petición HTTP.
+2. Escribe el **Client ID** y el **Client secret** que tu workflow de n8n espera y pulsa **Guardar credenciales** (ver [Credenciales de cliente](#credenciales-de-cliente)). El secreto no se vuelve a mostrar; deja el campo vacío para conservarlo al cambiar solo el Client ID.
+3. Implementa `ping` y `ai.reply` en el workflow; usa **Probar conexión** para verificar el ping.
+4. Activa **Respuestas de IA**. No se permite activarla sin URL y credenciales de cliente.
+
+**Quitar credenciales** borra el Client ID y el secreto y apaga la IA del canal.
 
 Desactivar la IA afecta a las solicitudes pendientes y las respuestas en vuelo: se vuelve a comprobar la configuración antes de registrar la respuesta. Los mensajes entrantes siempre se guardan primero. Tomar/cerrar una conversación invalida respuestas con el `controlVersion` anterior.
 
@@ -27,7 +31,7 @@ Sin IA, o si n8n falla, el mensaje entrante permanece en la bandeja para atenci�
 
 ### Petición que recibe n8n
 
-`POST <webhookUrl>` con `Content-Type: application/json`, `Idempotency-Key: <messageId>` y `X-OmniDesk-Signature`:
+`POST <webhookUrl>` con `Content-Type: application/json`, `Idempotency-Key: <messageId>`, `X-Client-Id` y `X-Client-Secret`:
 
 ```json
 {
@@ -57,29 +61,42 @@ La petición incluye el mensaje actual y los identificadores para que tu workflo
 { "type": "ping", "channelId": "0199c0de-0000-7000-8000-000000000003", "at": "2026-10-12T10:00:00.000Z" }
 ```
 
-Responde `200 { "ok": true }`. La prueba muestra estado HTTP, latencia o error; no genera conversación ni llama al modelo.
+Lleva `X-Client-Id` y `X-Client-Secret`, como `ai.reply`. Responde `200 { "ok": true }`. La prueba muestra estado HTTP, latencia o error; no genera conversación ni llama al modelo. Sin credenciales de cliente, OmniDesk no llama y muestra "El canal no tiene credenciales de cliente de n8n".
 
 El timeout de cada llamada es 10 segundos. IA y envíos usan Outbox y hasta cinco reintentos con esperas de 1/2/4/8/16 segundos. Devuelve de forma estable la misma respuesta para la misma `Idempotency-Key`; deduplica antes de invocar el modelo. No se siguen redirecciones.
 
-## Firma HMAC de OmniDesk
+## Credenciales de cliente
 
-Formato: `t=<unix_segundos>,v1=<hex HMAC_SHA256(secret, t + '.' + rawBody)>`.
+Desde SPEC 22, OmniDesk se autentica ante n8n con dos cabeceras en **todas** sus llamadas (`ai.reply`, `ping` y `message.send`):
 
-El código siguiente puede adaptarse a un nodo Code de n8n con `node:crypto` habilitado. `rawBody` debe contener el cuerpo original capturado por el nodo Webhook (opción de cuerpo crudo); no uses `JSON.stringify()` sobre un objeto ya parseado para verificar una firma. La forma de obtener esos bytes depende de cómo configures el nodo.
+```http
+X-Client-Id: <clientId>
+X-Client-Secret: <clientSecret>
+```
+
+- Los valores los elige la empresa y los escribe en OmniDesk: `clientId` de 1 a 200 caracteres y `clientSecret` de 16 a 512.
+- OmniDesk guarda el secreto cifrado con `CHANNEL_SECRETS_KEY` y nunca lo devuelve por la API.
+- Las llamadas salientes ya **no** llevan `X-OmniDesk-Signature`. La protección depende de HTTPS (obligatorio en producción) y de deduplicar por `Idempotency-Key`.
+- En n8n, valida las cabeceras antes de ejecutar la IA, por ejemplo con **Header Auth** en el nodo Webhook o buscando el par en una tabla, y responde `401` si no coinciden. Compara el secreto en tiempo constante (`crypto.timingSafeEqual`) si lo haces en un nodo Code.
+- No registres `X-Client-Secret` en logs ni lo devuelvas en respuestas del workflow.
+- Para cambiar el secreto, actualízalo primero en n8n (aceptando ambos un momento si tu workflow lo permite) y después en OmniDesk. No hay periodo de gracia: con el secreto antiguo en n8n, las llamadas fallan y quedan para atención humana tras los reintentos.
+
+`tools/n8n/omnidesk-webhook.json` es un workflow de ejemplo que valida el par contra la tabla de datos `omnidesk_clients` y responde `401` si no existe.
+
+## Canales N8N legados y simulador
+
+El adaptador N8N anterior se conserva para los canales existentes; desde SPEC 22 **no se crean canales N8N nuevos** (`POST /api/v1/channels` solo admite `WHATSAPP_CLOUD`). Su webhook recibe `type: 'message.send'`, `messageId`, `conversationId`, `channel: { id, externalId }`, `to` y `text`, con `Idempotency-Key`, `X-Client-Id` y `X-Client-Secret`. Debe deduplicar por `Idempotency-Key`, enviar a Meta y devolver `2xx { "providerMessageId": "wamid.…" }`. Sin credenciales de cliente, el mensaje queda `FAILED` con `CHANNEL_NOT_CONFIGURED`.
+
+En sentido contrario (n8n → OmniDesk), esos canales y el simulador siguen usando su API key y su secreto HMAC vigentes: `Authorization: Bearer <apiKey>` y `X-OmniDesk-Signature` cuando el canal tiene secreto. Desde SPEC 22 la API ya no emite ni rota esas credenciales (`POST /api/v1/channels/:id/credentials` responde `404`); si ya se rotaron, las anteriores siguen valiendo hasta su vencimiento de 24 horas:
+
+- `POST /api/v1/integrations/messages/inbound`: `{ externalMessageId, from: { externalId, displayName? }, text, sentAt }`; devuelve `conversationId`, `messageId`, `aiAllowed`, `controlVersion` y `duplicate`.
+- `POST /api/v1/integrations/messages/outbound`: `{ conversationId, controlVersion, idempotencyKey, text }`; devuelve `messageId` y `sendAllowed`. Si el control cambió, la conversación está cerrada o pasaron 18 h desde el último mensaje del cliente, responde `409` con `{ sendAllowed: false, reason }` (`CONTROL_CHANGED`, `CONVERSATION_CLOSED` o `WINDOW_CLOSED`) y no se envía.
+- `POST /api/v1/integrations/messages/status`: `{ messageId, providerMessageId, status, occurredAt, error? }`; estados `SENT`, `DELIVERED`, `READ`, `FAILED`.
+
+Formato de `X-OmniDesk-Signature` en esas peticiones: `t=<unix_segundos>,v1=<hex HMAC_SHA256(secret, t + '.' + rawBody)>`, con un desfase máximo de 5 minutos. Firma los bytes exactos que envías:
 
 ```js
-const { createHmac, timingSafeEqual } = require('node:crypto');
-
-function verifyOmniDesk(header, rawBody, secrets, nowSec = Math.floor(Date.now() / 1000)) {
-  const match = /^t=(\d+),v1=([a-f0-9]{64})$/.exec(header ?? '');
-  if (!match || Math.abs(nowSec - Number(match[1])) > 300) return false;
-  const received = Buffer.from(match[2], 'hex');
-  return secrets.some((secret) => {
-    const expected = createHmac('sha256', secret)
-      .update(match[1] + '.').update(rawBody).digest();
-    return timingSafeEqual(expected, received);
-  });
-}
+const { createHmac } = require('node:crypto');
 
 function signOmniDesk(secret, rawBody, nowSec = Math.floor(Date.now() / 1000)) {
   const digest = createHmac('sha256', secret)
@@ -88,24 +105,10 @@ function signOmniDesk(secret, rawBody, nowSec = Math.floor(Date.now() / 1000)) {
 }
 ```
 
-Obtén el secreto de almacenamiento seguro del servidor n8n. Nunca lo incluyas en respuestas del workflow. Rechaza firmas inválidas antes de ejecutar IA. Mantén sincronizado el reloj del servidor.
-
-**Rotación:** la API key y el HMAC nuevos solo se muestran en el diálogo actual. OmniDesk acepta los anteriores durante 24 horas en las integraciones legadas. Al rotar, OmniDesk firma inmediatamente con el nuevo HMAC: n8n debe actualizarse para aceptarlo. El app secret y access token de Meta se sustituyen por separado y no tienen esa ventana de gracia local.
-
-## Canales N8N legados y simulador
-
-El adaptador N8N anterior se conserva para los canales existentes. Su webhook recibe `type: 'message.send'`, `messageId`, `conversationId`, `channel: { id, externalId }`, `to` y `text`. Debe deduplicar por `Idempotency-Key`, enviar a Meta y devolver `2xx { "providerMessageId": "wamid.…" }`.
-
-Esos canales y el simulador utilizan los endpoints con `Authorization: Bearer <apiKey>` y firma HMAC cuando el canal tiene secreto:
-
-- `POST /api/v1/integrations/messages/inbound`: `{ externalMessageId, from: { externalId, displayName? }, text, sentAt }`; devuelve `conversationId`, `messageId`, `aiAllowed`, `controlVersion` y `duplicate`.
-- `POST /api/v1/integrations/messages/outbound`: `{ conversationId, controlVersion, idempotencyKey, text }`; devuelve `messageId` y `sendAllowed`. Si el control cambió, la conversación está cerrada o pasaron 18 h desde el último mensaje del cliente, responde `409` con `{ sendAllowed: false, reason }` (`CONTROL_CHANGED`, `CONVERSATION_CLOSED` o `WINDOW_CLOSED`) y no se envía.
-- `POST /api/v1/integrations/messages/status`: `{ messageId, providerMessageId, status, occurredAt, error? }`; estados `SENT`, `DELIVERED`, `READ`, `FAILED`.
-
-Los canales `WHATSAPP_CLOUD` usan exclusivamente el webhook nativo de Meta, no estos endpoints legados. Para un canal de prueba N8N, créalo con `POST /api/v1/channels` (sesión OWNER/ADMIN, Origin permitido) y genera credenciales desde Settings. Ejecuta:
+Los canales `WHATSAPP_CLOUD` usan exclusivamente el webhook nativo de Meta, no estos endpoints legados. Para el simulador contra un canal N8N existente, usa su API key y su secreto HMAC:
 
 ```sh
-DEMO_CHANNEL_API_KEY='<apiKey del canal de prueba>' \
+DEMO_CHANNEL_API_KEY='<apiKey del canal N8N>' \
 SIMULATOR_HMAC_SECRET='<hmacSecret del canal>' \
 SIMULATOR_API_URL='http://localhost:8088/omnidesk' \
 pnpm simulate

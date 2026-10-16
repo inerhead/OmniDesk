@@ -5,12 +5,13 @@ export interface ChannelTestResult {
   error: string | null;
 }
 
-/** Envía un `ping` firmado al webhook del canal, sin reintentos. */
+/** Envía un `ping` con las credenciales de cliente al webhook del canal, sin reintentos. */
 export interface ChannelWebhookTester {
   ping(input: {
     channelId: string;
     webhookUrl: string;
-    secret: string;
+    clientId: string;
+    clientSecret: string;
     now: Date;
   }): Promise<ChannelTestResult>;
 }

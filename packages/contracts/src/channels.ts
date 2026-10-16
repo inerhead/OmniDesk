@@ -15,10 +15,12 @@ export const ChannelSchema = z.object({
   /** phone_number_id de Meta. */
   externalId: z.string(),
   webhookUrl: z.url().nullable(),
-  /** Tiene una API key vigente y un secreto HMAC. */
-  hasCredentials: z.boolean(),
   aiEnabled: z.boolean().default(false),
   hasWhatsAppCredentials: z.boolean().default(false),
+  /** `X-Client-Id` que OmniDesk envía a n8n (SPEC 22). */
+  n8nClientId: z.string().nullable(),
+  /** Tiene un `clientSecret` guardado; el valor nunca se devuelve (SPEC 22). */
+  hasN8nClientSecret: z.boolean(),
   whatsappWebhookUrl: z.url().nullable().default(null),
   credentialsRotatedAt: z.iso.datetime().nullable(),
 });
@@ -42,19 +44,13 @@ export type ListInboxChannelsResponse = z.infer<typeof ListInboxChannelsResponse
 
 const ChannelNameSchema = z.string().trim().min(1).max(80);
 
-/** `POST /api/v1/channels` */
-export const CreateChannelRequestSchema = z
-  .object({
-    name: ChannelNameSchema,
-    phoneNumber: E164Schema,
-    externalId: z.string().trim().min(1).max(64),
-    provider: z.enum(['N8N', 'WHATSAPP_CLOUD']),
-    webhookUrl: z.url().optional(),
-  })
-  .refine((body) => body.provider !== 'N8N' || !!body.webhookUrl, {
-    message: 'N8N requiere webhookUrl',
-    path: ['webhookUrl'],
-  });
+/** `POST /api/v1/channels`: solo WhatsApp Cloud; ya no se crean canales N8N (SPEC 22). */
+export const CreateChannelRequestSchema = z.object({
+  name: ChannelNameSchema,
+  phoneNumber: E164Schema,
+  externalId: z.string().trim().min(1).max(64),
+  provider: z.literal('WHATSAPP_CLOUD'),
+});
 export type CreateChannelRequest = z.infer<typeof CreateChannelRequestSchema>;
 
 /** `PATCH /api/v1/channels/:id` */
@@ -65,14 +61,12 @@ export const UpdateChannelRequestSchema = z
   });
 export type UpdateChannelRequest = z.infer<typeof UpdateChannelRequestSchema>;
 
-/** `POST /api/v1/channels/:id/credentials`: los valores solo aparecen en esta respuesta. */
-export const ChannelCredentialsResponseSchema = z.object({
-  apiKey: z.string(),
-  hmacSecret: z.string(),
-  /** Hasta cuándo siguen valiendo la API key y el secreto anteriores; `null` si no había. */
-  previousValidUntil: z.iso.datetime().nullable(),
+/** `PUT /api/v1/channels/:id/n8n-client`: omitir `clientSecret` conserva el guardado (SPEC 22). */
+export const ConfigureN8nClientRequestSchema = z.object({
+  clientId: z.string().trim().min(1).max(200),
+  clientSecret: z.string().trim().min(16).max(512).optional(),
 });
-export type ChannelCredentialsResponse = z.infer<typeof ChannelCredentialsResponseSchema>;
+export type ConfigureN8nClientRequest = z.infer<typeof ConfigureN8nClientRequestSchema>;
 
 /** `POST /api/v1/channels/:id/test`: un `ping` firmado al webhook, sin reintentos. */
 export const ChannelTestResponseSchema = z.object({

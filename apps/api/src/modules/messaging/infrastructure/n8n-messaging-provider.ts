@@ -1,10 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { N8nSendMessageResponseSchema, type N8nSendMessageRequest } from '@omnidesk/contracts';
-import { CLOCK, type Clock } from '../../../shared/application/clock.port';
-import {
-  describeFetchError,
-  postSignedJson,
-} from '../../../shared/infrastructure/http/signed-webhook';
+import { describeFetchError, postJson } from '../../../shared/infrastructure/http/signed-webhook';
+import { n8nClientHeaders } from '../../channels/domain/channel';
 import {
   CHANNEL_SECRET_CIPHER,
   type ChannelSecretCipher,
@@ -18,30 +15,29 @@ import {
 export const N8N_SEND_TIMEOUT_MS = 10_000;
 
 /**
- * Envía por el webhook de n8n del canal (n8n → WhatsApp Cloud API). Firma con el secreto del canal
- * y manda `Idempotency-Key: <messageId>`: un reintento tras una caída no debe entregar dos veces.
+ * Envía por el webhook de n8n del canal (n8n → WhatsApp Cloud API). Se autentica con las
+ * credenciales de cliente del canal (SPEC 22) y manda `Idempotency-Key: <messageId>`: un reintento
+ * tras una caída no debe entregar dos veces.
  */
 @Injectable()
 export class N8nMessagingProvider implements MessagingProvider {
   /** Reemplazable en las pruebas. */
   timeoutMs = N8N_SEND_TIMEOUT_MS;
 
-  constructor(
-    @Inject(CHANNEL_SECRET_CIPHER) private readonly cipher: ChannelSecretCipher,
-    @Inject(CLOCK) private readonly clock: Clock,
-  ) {}
+  constructor(@Inject(CHANNEL_SECRET_CIPHER) private readonly cipher: ChannelSecretCipher) {}
 
   async send(request: SendMessageRequest): Promise<{ providerMessageId: string }> {
     if (request.attachment) throw new ChannelNotConfiguredError('el canal n8n no admite adjuntos');
     const { channel } = request;
-    if (!channel.hmacSecretEnc) {
-      throw new ChannelNotConfiguredError(`el canal ${channel.id} no tiene secreto HMAC`);
+    if (!channel.n8nClientId || !channel.n8nClientSecretEnc) {
+      throw new ChannelNotConfiguredError(
+        `el canal ${channel.id} no tiene credenciales de cliente de n8n`,
+      );
     }
     if (!channel.webhookUrl) {
       throw new ChannelNotConfiguredError(`el canal ${channel.id} no tiene webhookUrl`);
     }
 
-    const secret = this.cipher.decrypt(channel.hmacSecretEnc);
     const body: N8nSendMessageRequest = {
       type: 'message.send',
       messageId: request.messageId,
@@ -52,13 +48,11 @@ export class N8nMessagingProvider implements MessagingProvider {
     };
     let response;
     try {
-      response = await postSignedJson(channel.webhookUrl, secret, body, {
-        nowSec: Math.floor(this.clock.now().getTime() / 1000),
+      response = await postJson(channel.webhookUrl, body, {
         timeoutMs: this.timeoutMs,
         headers: {
           'idempotency-key': request.messageId,
-          'X-Client-Id': channel.id,
-          'X-Client-Secret': secret,
+          ...n8nClientHeaders(channel.n8nClientId, this.cipher.decrypt(channel.n8nClientSecretEnc)),
         },
       });
     } catch (error) {

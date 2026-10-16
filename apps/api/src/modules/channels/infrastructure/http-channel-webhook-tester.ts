@@ -1,9 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { N8nPingRequest } from '@omnidesk/contracts';
-import {
-  describeFetchError,
-  postSignedJson,
-} from '../../../shared/infrastructure/http/signed-webhook';
+import { describeFetchError, postJson } from '../../../shared/infrastructure/http/signed-webhook';
+import { n8nClientHeaders } from '../domain/channel';
 import type {
   ChannelTestResult,
   ChannelWebhookTester,
@@ -16,21 +14,22 @@ export class HttpChannelWebhookTester implements ChannelWebhookTester {
   async ping({
     channelId,
     webhookUrl,
-    secret,
+    clientId,
+    clientSecret,
     now,
   }: {
     channelId: string;
     webhookUrl: string;
-    secret: string;
+    clientId: string;
+    clientSecret: string;
     now: Date;
   }): Promise<ChannelTestResult> {
     const body: N8nPingRequest = { type: 'ping', channelId, at: now.toISOString() };
     const started = performance.now();
     try {
-      const res = await postSignedJson(webhookUrl, secret, body, {
-        nowSec: Math.floor(now.getTime() / 1000),
+      const res = await postJson(webhookUrl, body, {
         timeoutMs: CHANNEL_TEST_TIMEOUT_MS,
-        headers: { 'X-Client-Id': channelId, 'X-Client-Secret': secret },
+        headers: n8nClientHeaders(clientId, clientSecret),
       });
       const ok = res.status >= 200 && res.status < 300;
       return {

@@ -6,11 +6,11 @@ import {
   type TransactionRunner,
 } from '../../shared/application/transaction-runner.port';
 import { OUTBOX_PORT, type OutboxPort } from '../../shared/application/outbox.port';
-import { signPayload } from '../../shared/infrastructure/crypto/hmac-signature';
 import {
   CHANNEL_SECRET_CIPHER,
   type ChannelSecretCipher,
 } from '../channels/application/ports/channel-secret-cipher';
+import { n8nClientHeaders } from '../channels/domain/channel';
 import { RegisterAiReplyUseCase } from '../conversations/application/register-ai-reply.use-case';
 import {
   CONVERSATION_REPOSITORY,
@@ -41,7 +41,13 @@ export class AiReplyWorker {
   async process(tenantId: string, raw: unknown): Promise<void> {
     const payload = Payload.parse(raw);
     const channel = await this.settings.find(payload.channelId, tenantId);
-    if (!channel?.aiEnabled || !channel.webhookUrl || !channel.hmacSecretEnc) return;
+    if (
+      !channel?.aiEnabled ||
+      !channel.webhookUrl ||
+      !channel.n8nClientId ||
+      !channel.n8nClientSecretEnc
+    )
+      return;
     const conversation = await this.conversations.findById(tenantId, payload.conversationId);
     if (
       !conversation ||
@@ -61,7 +67,6 @@ export class AiReplyWorker {
       from: payload.from,
       text: payload.text,
     });
-    const secret = this.cipher.decrypt(channel.hmacSecretEnc);
     const response = await fetch(channel.webhookUrl, {
       method: 'POST',
       redirect: 'error',
@@ -69,9 +74,7 @@ export class AiReplyWorker {
       headers: {
         'content-type': 'application/json',
         'Idempotency-Key': payload.messageId,
-        'X-Client-Id': channel.id,
-        'X-Client-Secret': secret,
-        'X-OmniDesk-Signature': signPayload(secret, body, Math.floor(Date.now() / 1000)),
+        ...n8nClientHeaders(channel.n8nClientId, this.cipher.decrypt(channel.n8nClientSecretEnc)),
       },
       body,
     });

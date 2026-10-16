@@ -7,7 +7,6 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/shared/ui/s
 import { updateChannel } from './channels-api';
 import { channelSteps, PROVIDER_LABEL } from './model/channel-status';
 import { AiStep } from './steps/ai-step';
-import { CredentialsStep } from './steps/credentials-step';
 import { MetaStep } from './steps/meta-step';
 import { useStepAction } from './steps/use-step-action';
 
@@ -81,7 +80,7 @@ function ChannelName({ channel, refresh }: { channel: Channel; refresh: () => Pr
 
 /**
  * Panel lateral de un canal (SPEC 17): cabecera con el nombre editable y pasos numerados (Conectar
- * Meta, IA con n8n, Credenciales). Un canal n8n no tiene el paso de Meta.
+ * Meta, IA con n8n). Un canal n8n no tiene el paso de Meta.
  */
 export function ChannelPanel({
   channel,
@@ -111,8 +110,7 @@ export function ChannelPanel({
             {channelSteps(channel).map((step) => {
               const props = { channel, step, refresh };
               if (step.key === 'meta') return <MetaStep key={step.key} {...props} />;
-              if (step.key === 'ai') return <AiStep key={step.key} {...props} />;
-              return <CredentialsStep key={step.key} {...props} />;
+              return <AiStep key={step.key} {...props} />;
             })}
           </div>
         )}

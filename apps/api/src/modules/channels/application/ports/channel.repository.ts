@@ -14,15 +14,9 @@ export interface ChannelForSend {
   provider: ChannelProvider;
   externalId: string;
   webhookUrl: string | null;
-  hmacSecretEnc: SecretBlob | null;
-}
-
-export interface CredentialRotation {
-  keyHash: string;
-  hmacSecretEnc: SecretBlob;
-  now: Date;
-  /** Hasta cuándo valen la API key y el secreto anteriores. */
-  previousValidUntil: Date;
+  /** Credenciales de cliente hacia n8n (SPEC 22); el secreto va cifrado. */
+  n8nClientId: string | null;
+  n8nClientSecretEnc: SecretBlob | null;
 }
 
 export interface ChannelRepository {
@@ -41,14 +35,16 @@ export interface ChannelRepository {
     patch: { name?: string; webhookUrl?: string | null },
   ): Promise<Channel | null>;
   /**
-   * Nueva API key y nuevo secreto. Las credenciales vigentes vencen en `previousValidUntil` y el
-   * secreto actual pasa a "anterior" hasta esa fecha. `hadPrevious`: había credenciales vigentes.
+   * Guarda el `clientId` y, si viene, el `clientSecret` cifrado (SPEC 22). `false` si el canal no
+   * existe en la empresa.
    */
-  rotateCredentials(
+  setN8nClient(
     tenantId: string,
     channelId: string,
-    rotation: CredentialRotation,
-  ): Promise<{ hadPrevious: boolean }>;
+    client: { clientId: string; clientSecretEnc?: SecretBlob },
+  ): Promise<boolean>;
+  /** Borra las credenciales de cliente y apaga la IA. `false` si el canal no existe en la empresa. */
+  clearN8nClient(tenantId: string, channelId: string): Promise<boolean>;
   upsertChannel(tenantId: string, channel: NewChannel): Promise<Channel>;
   /** Deja `keyHash` como única credencial activa del canal (revoca las demás). */
   setOnlyActiveCredential(tenantId: string, channelId: string, keyHash: string): Promise<void>;

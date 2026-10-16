@@ -49,9 +49,12 @@ export class WhatsAppSettings {
       throw new ForbiddenException('Solo OWNER y ADMIN gestionan canales');
     const channel = await this.find(channelId, actor.tenantId);
     if (!channel) throw new NotFoundException('Canal no encontrado');
-    if (input.aiEnabled && (!channel.webhookUrl || !channel.hmacSecretEnc)) {
+    if (
+      input.aiEnabled &&
+      (!channel.webhookUrl || !channel.n8nClientId || !channel.n8nClientSecretEnc)
+    ) {
       throw new BadRequestException(
-        'Configura el webhook de IA y genera credenciales antes de activarla',
+        'Configura el webhook de IA y las credenciales de cliente antes de activarla',
       );
     }
     await this.db.client.channel.update({

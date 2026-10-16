@@ -1,14 +1,8 @@
-import { randomBytes } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { CLOCK, type Clock } from '../../../shared/application/clock.port';
 import type { ActorContext } from '../../../shared/application/request-context';
-import {
-  TRANSACTION_RUNNER,
-  type TransactionRunner,
-} from '../../../shared/application/transaction-runner.port';
 import { ENV, type Env } from '../../../shared/config/env';
-import { hashToken } from '../../identity/application/session-token';
-import { CREDENTIALS_GRACE_MS, type Channel, type ChannelSummary } from '../domain/channel';
+import type { Channel, ChannelSummary } from '../domain/channel';
 import { canManageChannels, checkWebhookUrl, type WebhookUrlCheck } from '../domain/channel-policy';
 import { CHANNEL_SECRET_CIPHER, type ChannelSecretCipher } from './ports/channel-secret-cipher';
 import {
@@ -72,30 +66,22 @@ export interface CreateChannelInput {
   name: string;
   phoneNumber: string;
   externalId: string;
-  provider: 'N8N' | 'WHATSAPP_CLOUD';
-  webhookUrl?: string;
+  provider: 'WHATSAPP_CLOUD';
 }
 
-/** Alta de un canal de WhatsApp por n8n, sin credenciales (se emiten aparte). */
+/** Alta de un canal de WhatsApp Cloud (SPEC 22: ya no se crean canales N8N). */
 @Injectable()
 export class CreateChannelUseCase {
   constructor(
     @Inject(CHANNEL_REPOSITORY) private readonly channels: ChannelRepository,
-    private readonly webhookUrls: WebhookUrlValidator,
     @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
   async execute(
     actor: ActorContext,
     input: CreateChannelInput,
-  ): Promise<
-    { kind: 'ok'; channel: ChannelSummary } | Forbidden | InvalidWebhook | { kind: 'conflict' }
-  > {
+  ): Promise<{ kind: 'ok'; channel: ChannelSummary } | Forbidden | { kind: 'conflict' }> {
     if (!canManageChannels(actor.role)) return { kind: 'forbidden' };
-    if (input.webhookUrl) {
-      const check = this.webhookUrls.check(input.webhookUrl);
-      if (!check.ok) return { kind: 'invalid-webhook', reason: check.reason };
-    }
     const created = await this.channels.create(actor.tenantId, { ...input, type: 'WHATSAPP' });
     if (!created) return { kind: 'conflict' };
     const channel = await this.channels.findSummary(actor.tenantId, created.id, this.clock.now());
@@ -132,28 +118,13 @@ export class UpdateChannelUseCase {
   }
 }
 
-export interface IssuedCredentials {
-  apiKey: string;
-  hmacSecret: string;
-  previousValidUntil: Date | null;
-}
-
-/** Nueva API key (`odk_…`) y secreto HMAC (`whsec_…`): 32 bytes aleatorios cada uno. */
-export function newChannelCredentials(): { apiKey: string; hmacSecret: string } {
-  return {
-    apiKey: `odk_${randomBytes(32).toString('base64url')}`,
-    hmacSecret: `whsec_${randomBytes(32).toString('base64url')}`,
-  };
-}
-
 /**
- * Emite (o rota) la API key y el secreto HMAC. Se devuelven una sola vez: la key se guarda como
- * sha256 y el secreto cifrado. Si ya existían, los anteriores siguen valiendo 24 h.
+ * Guarda el `clientId` y el `clientSecret` que OmniDesk envía a n8n (SPEC 22). El secreto es de solo
+ * escritura: omitirlo conserva el guardado, pero la primera vez es obligatorio.
  */
 @Injectable()
-export class IssueChannelCredentialsUseCase {
+export class ConfigureN8nClientUseCase {
   constructor(
-    @Inject(TRANSACTION_RUNNER) private readonly tx: TransactionRunner,
     @Inject(CHANNEL_REPOSITORY) private readonly channels: ChannelRepository,
     @Inject(CHANNEL_SECRET_CIPHER) private readonly cipher: ChannelSecretCipher,
     @Inject(CLOCK) private readonly clock: Clock,
@@ -162,32 +133,50 @@ export class IssueChannelCredentialsUseCase {
   async execute(
     actor: ActorContext,
     channelId: string,
-  ): Promise<{ kind: 'ok'; credentials: IssuedCredentials } | Forbidden | NotFound> {
+    input: { clientId: string; clientSecret?: string },
+  ): Promise<
+    { kind: 'ok'; channel: ChannelSummary } | Forbidden | NotFound | { kind: 'secret-required' }
+  > {
     if (!canManageChannels(actor.role)) return { kind: 'forbidden' };
     const now = this.clock.now();
-    const previousValidUntil = new Date(now.getTime() + CREDENTIALS_GRACE_MS);
-    const issued = newChannelCredentials();
-    const hmacSecretEnc = this.cipher.encrypt(issued.hmacSecret);
-
-    return this.tx.run(async () => {
-      if (!(await this.channels.findSummary(actor.tenantId, channelId, now))) {
-        return { kind: 'not-found' };
-      }
-      const { hadPrevious } = await this.channels.rotateCredentials(actor.tenantId, channelId, {
-        keyHash: hashToken(issued.apiKey),
-        hmacSecretEnc,
-        now,
-        previousValidUntil,
-      });
-      return {
-        kind: 'ok',
-        credentials: { ...issued, previousValidUntil: hadPrevious ? previousValidUntil : null },
-      };
+    const current = await this.channels.findSummary(actor.tenantId, channelId, now);
+    if (!current) return { kind: 'not-found' };
+    if (input.clientSecret === undefined && !current.hasN8nClientSecret) {
+      return { kind: 'secret-required' };
+    }
+    await this.channels.setN8nClient(actor.tenantId, channelId, {
+      clientId: input.clientId,
+      ...(input.clientSecret !== undefined && {
+        clientSecretEnc: this.cipher.encrypt(input.clientSecret),
+      }),
     });
+    const channel = await this.channels.findSummary(actor.tenantId, channelId, now);
+    return { kind: 'ok', channel: channel! };
   }
 }
 
-/** `ping` firmado al webhook del canal, sin reintentos. */
+/** Quita las credenciales de cliente de n8n y apaga la IA del canal (SPEC 22). */
+@Injectable()
+export class RemoveN8nClientUseCase {
+  constructor(
+    @Inject(CHANNEL_REPOSITORY) private readonly channels: ChannelRepository,
+    @Inject(CLOCK) private readonly clock: Clock,
+  ) {}
+
+  async execute(
+    actor: ActorContext,
+    channelId: string,
+  ): Promise<{ kind: 'ok'; channel: ChannelSummary } | Forbidden | NotFound> {
+    if (!canManageChannels(actor.role)) return { kind: 'forbidden' };
+    if (!(await this.channels.clearN8nClient(actor.tenantId, channelId))) {
+      return { kind: 'not-found' };
+    }
+    const channel = await this.channels.findSummary(actor.tenantId, channelId, this.clock.now());
+    return { kind: 'ok', channel: channel! };
+  }
+}
+
+/** `ping` al webhook del canal con las credenciales de cliente (SPEC 22), sin reintentos. */
 @Injectable()
 export class TestChannelConnectionUseCase {
   constructor(
@@ -204,7 +193,7 @@ export class TestChannelConnectionUseCase {
     if (!canManageChannels(actor.role)) return { kind: 'forbidden' };
     const channel = await this.channels.findForSend(actor.tenantId, channelId);
     if (!channel) return { kind: 'not-found' };
-    if (!channel.webhookUrl || !channel.hmacSecretEnc) {
+    if (!channel.webhookUrl || !channel.n8nClientId || !channel.n8nClientSecretEnc) {
       return {
         kind: 'ok',
         result: {
@@ -212,7 +201,7 @@ export class TestChannelConnectionUseCase {
           httpStatus: null,
           latencyMs: 0,
           error: channel.webhookUrl
-            ? 'El canal no tiene credenciales: genéralas primero'
+            ? 'El canal no tiene credenciales de cliente de n8n'
             : 'El canal no tiene webhookUrl',
         },
       };
@@ -222,7 +211,8 @@ export class TestChannelConnectionUseCase {
       result: await this.tester.ping({
         channelId: channel.id,
         webhookUrl: channel.webhookUrl,
-        secret: this.cipher.decrypt(channel.hmacSecretEnc),
+        clientId: channel.n8nClientId,
+        clientSecret: this.cipher.decrypt(channel.n8nClientSecretEnc),
         now: this.clock.now(),
       }),
     };

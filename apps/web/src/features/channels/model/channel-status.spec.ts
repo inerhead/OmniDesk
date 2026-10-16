@@ -4,9 +4,10 @@ import { channelBadges, channelSteps } from './channel-status';
 const cloud = {
   provider: 'WHATSAPP_CLOUD' as const,
   webhookUrl: null,
-  hasCredentials: false,
   aiEnabled: false,
   hasWhatsAppCredentials: false,
+  n8nClientId: null,
+  hasN8nClientSecret: false,
 };
 
 describe('channelBadges', () => {
@@ -22,7 +23,8 @@ describe('channelBadges', () => {
     const full = {
       ...cloud,
       webhookUrl: 'https://n8n.example.com/webhook/ai',
-      hasCredentials: true,
+      n8nClientId: 'acme',
+      hasN8nClientSecret: true,
       aiEnabled: true,
       hasWhatsAppCredentials: true,
     };
@@ -43,29 +45,40 @@ describe('channelBadges', () => {
 });
 
 describe('channelSteps', () => {
-  it('WhatsApp Cloud: tres pasos; la IA cuenta solo con webhook y el interruptor', () => {
+  it('WhatsApp Cloud: dos pasos; la IA cuenta con webhook, credenciales de cliente e interruptor', () => {
     const half = {
       ...cloud,
       hasWhatsAppCredentials: true,
       webhookUrl: 'https://n8n.example.com/w',
+      n8nClientId: 'acme',
+      hasN8nClientSecret: true,
     };
     expect(channelSteps(half).map((step) => [step.number, step.key, step.done])).toEqual([
       [1, 'meta', true],
       [2, 'ai', false],
-      [3, 'credentials', false],
     ]);
+    expect(channelSteps({ ...half, aiEnabled: true }).map((step) => step.done)).toEqual([
+      true,
+      true,
+    ]);
+    expect(
+      channelSteps({ ...half, aiEnabled: true, hasN8nClientSecret: false }).map(
+        (step) => step.done,
+      ),
+    ).toEqual([true, false]);
   });
 
-  it('n8n (legado): dos pasos renumerados desde 1', () => {
+  it('n8n (legado): un solo paso, completo con webhook y credenciales de cliente', () => {
     const n8n = {
       ...cloud,
       provider: 'N8N' as const,
       webhookUrl: 'https://n8n.example.com/w',
-      hasCredentials: true,
+      n8nClientId: 'acme',
+      hasN8nClientSecret: true,
     };
     expect(channelSteps(n8n).map((step) => [step.number, step.title, step.done])).toEqual([
       [1, 'IA con n8n', true],
-      [2, 'Credenciales de n8n', true],
     ]);
+    expect(channelSteps({ ...n8n, n8nClientId: null }).map((step) => step.done)).toEqual([false]);
   });
 });

@@ -106,7 +106,8 @@ export class WhatsAppWebhookController {
             result.aiAllowed &&
             channel.aiEnabled &&
             channel.webhookUrl &&
-            channel.hmacSecretEnc
+            channel.n8nClientId &&
+            channel.n8nClientSecretEnc
           ) {
             await this.outbox.enqueue({
               tenantId: channel.tenantId,

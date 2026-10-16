@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
-import { HealthResponseSchema } from '@omnidesk/contracts';
+import { HealthLiveResponseSchema, HealthResponseSchema } from '@omnidesk/contracts';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
@@ -41,6 +41,12 @@ describe('GET /api/v1/health (base de datos real)', () => {
 
   afterAll(async () => {
     await app.close();
+  });
+
+  it('liveness: /health/live responde 200 { status: ok } sin sesión (SPEC 19)', async () => {
+    const res = await request(app.getHttpServer()).get('/api/v1/health/live').expect(200);
+
+    expect(HealthLiveResponseSchema.parse(res.body)).toEqual({ status: 'ok' });
   });
 
   it('responde 200 con un cuerpo que cumple el contrato', async () => {
@@ -151,6 +157,12 @@ describe('GET /api/v1/health (base de datos abajo)', () => {
     const body = HealthResponseSchema.parse(res.body);
     expect(body.status).toBe('error');
     expect(body.checks.database).toBe('down');
+  });
+
+  it('liveness: /health/live sigue respondiendo 200 con la base down (SPEC 19)', async () => {
+    const res = await request(app.getHttpServer()).get('/api/v1/health/live').expect(200);
+
+    expect(res.body).toEqual({ status: 'ok' });
   });
 });
 

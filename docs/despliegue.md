@@ -222,7 +222,7 @@ $C logs -f --tail 100 api   # logs JSON (pino) con x-request-id
 $C restart api
 ```
 
-Todos los servicios tienen `restart: unless-stopped`: vuelven solos tras reiniciar el VPS.
+Todos los servicios tienen `restart: unless-stopped`: vuelven solos tras reiniciar el VPS. Si un servicio sigue vivo pero deja de responder, lo reinicia `autoheal` (ver [Autorreparación](#autorreparación-spec-19)).
 
 ## 7. Problemas frecuentes
 
@@ -235,6 +235,7 @@ Todos los servicios tienen `restart: unless-stopped`: vuelven solos tras reinici
 | `403 Origen no permitido` al enviar | `CORS_ORIGINS` no es exactamente `https://<dominio>` (sin `/omnidesk` ni barra final). |
 | El API no arranca tras un despliegue | Una migración falló: `$C logs api`. Corrige en el repo y vuelve a desplegar, o haz rollback (§4). |
 | Las empresas nuevas se quedan en **Solicitud en revisión** y nadie ve **Plataforma** | `PLATFORM_ADMIN_EMAILS` está vacía o no tiene el email exacto de tu cuenta de Google (SPEC 18). Al arrancar, el API lo avisa en `$C logs api`. Corrige el `.env` y vuelve a desplegar. |
+| Cloudflare responde **error 1033** en `/omnidesk/` | El túnel no tiene ninguna conexión: `cloudflared` sigue "Up" pero se quedó colgado (típico tras una suspensión del host o un corte de red). `autoheal` lo reinicia solo en unos 4 min desde el corte. Para no esperar: `$C restart cloudflared`. Ver [Autorreparación](#autorreparación-spec-19). |
 | `413` al adjuntar | Falta `client_max_body_size 20m` en el `location /omnidesk/` de Nginx. Sin esa línea, Nginx corta a partir de 1 MB. |
 
 ## 8. Evolución (fuera de SPEC 08)
@@ -315,3 +316,36 @@ La migración de RLS falla a propósito si el rol que migra no es superusuario n
 **Job de retención.** Corre a las 03:30, hora del servidor (después del backup de las 03:00), con un advisory lock: aunque haya varias instancias, se ejecuta una sola vez. Lo que borra sigue en los backups durante 7 días. Qué se borra y qué no: [datos.md](datos.md).
 
 **Restaurar en un servidor nuevo:** crea antes los roles (paso 1b de §5, *Restaurar un backup*).
+
+## Autorreparación (SPEC 19)
+
+Docker solo reinicia un contenedor cuando su proceso termina. Uno que sigue vivo pero ya no sirve (por ejemplo, el túnel sin conexiones con Cloudflare) se queda así hasta que alguien lo reinicia. El contenedor **`autoheal`** reinicia los que su healthcheck marca `unhealthy`, pero solo si llevan la etiqueta `autoheal=true`:
+
+| Servicio | Healthcheck | Reinicio tras el fallo |
+| --- | --- | --- |
+| `cloudflared` (prod, dev y local) | `cloudflared tunnel ready`: falla con 0 conexiones activas | 3 fallos × 30 s + hasta 10 s: unos 100 s |
+| `gateway` (prod y dev) | `wget` a `${BASE_PATH}/` | unos 100 s |
+| `api` (prod y dev) | `GET /api/v1/health/live`: liveness, **no** mira la base | 5 fallos × 10 s + hasta 10 s: unos 60 s |
+
+- **El API no se reinicia por la base.** Con Postgres caído, `/api/v1/health` responde `503` (es el que deben usar los monitores externos), pero `/health/live` sigue en `200`. Reiniciar el API no arreglaría la base.
+- **Detección del túnel.** Tras un corte de red, `cloudflared` tarda unos 2–3 min en dar por perdidas sus conexiones. Después, autoheal lo reinicia en unos 70 s: unos 4 min desde el corte. Si el túnel ya está sin conexiones (como al despertar el host), basta con esos 70 s.
+- **Reiniciar el gateway reinicia también el túnel**, que comparte su red (`network_mode: service:gateway`): se queda sin red, pasa a `unhealthy` y autoheal lo reinicia unos 100 s después.
+- **Sin backoff.** Un servicio que falla siempre (por ejemplo, el API con una migración rota) se reinicia sin fin. Se ve en el log de autoheal.
+- **`postgres`, `minio` y `backup` no llevan la etiqueta**: autoheal nunca los toca.
+- **Seguridad.** autoheal monta `/var/run/docker.sock`, que da control total de Docker en el host. El `:ro` no limita esa API. La imagen va fijada (`willfarrell/autoheal:1.2.0`), sin puertos ni red publicada.
+
+```bash
+$C ps                                                         # columna STATUS: (healthy) / (unhealthy)
+docker inspect --format '{{.State.Health.Status}}' omnidesk-prod-cloudflared
+docker logs omnidesk-prod-autoheal                            # una línea por cada reinicio
+```
+
+**Si el servidor es un Mac** (por ejemplo, prod en un portátil): la causa más común de un túnel colgado es la suspensión. Déjalo con el cargador y desactiva la suspensión con corriente:
+
+```bash
+sudo pmset -c sleep 0 disksleep 0
+pmset -g | grep -E ' sleep|disksleep'   # comprueba: sleep 0
+```
+
+Con la tapa cerrada se suspende igual, salvo con pantalla externa y cargador conectados.
+

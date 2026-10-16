@@ -13,3 +13,10 @@ export const HealthResponseSchema = z.object({
 });
 
 export type HealthResponse = z.infer<typeof HealthResponseSchema>;
+
+/**
+ * `GET /api/v1/health/live` (SPEC 19): el proceso responde; no mira la base. Lo usa el healthcheck
+ * del contenedor, para que autoheal no reinicie el API cuando la que falla es la base.
+ */
+export const HealthLiveResponseSchema = z.object({ status: z.literal('ok') });
+export type HealthLiveResponse = z.infer<typeof HealthLiveResponseSchema>;

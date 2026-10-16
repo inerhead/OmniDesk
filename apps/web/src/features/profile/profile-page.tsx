@@ -6,9 +6,12 @@ import { ME_QUERY_KEY, useMe } from '@/features/auth/api/use-me';
 import { ApiHttpError } from '@/shared/api/http-client';
 import { Avatar } from '@/shared/ui/avatar';
 import { Button } from '@/shared/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/card';
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog';
-import { Skeleton } from '@/shared/ui/skeleton';
+import {
+  SettingsPage,
+  SettingsSection,
+  SettingsSectionSkeleton,
+} from '@/shared/ui/settings-section';
 import { checkImageSource, readAsDataUrl } from '@/shared/lib/crop-to-blob';
 import { deleteAvatar, putAvatar } from './profile-api';
 
@@ -27,7 +30,10 @@ function uploadNotice(error: unknown): string {
   return 'No se pudo guardar la foto. Inténtalo de nuevo.';
 }
 
-/** `/settings/profile`: la foto del usuario (subir, cambiar o quitar), con su nombre y email. */
+/**
+ * `/settings/profile`: la foto del usuario (subir, cambiar o quitar) y su cuenta (nombre y email,
+ * solo lectura), en secciones de dos columnas (SPEC 21).
+ */
 export function ProfilePage() {
   const { data: me } = useMe();
   const queryClient = useQueryClient();
@@ -90,9 +96,10 @@ export function ProfilePage() {
 
   if (!me) {
     return (
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 p-4">
-        <Skeleton className="h-48 w-full" />
-      </div>
+      <SettingsPage title="Mi perfil" description="Tu cuenta en OmniDesk">
+        <SettingsSectionSkeleton />
+        <SettingsSectionSkeleton />
+      </SettingsPage>
     );
   }
 
@@ -101,13 +108,9 @@ export function ProfilePage() {
   const busy = upload.isPending || remove.isPending;
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col gap-4 overflow-y-auto p-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Mi perfil</CardTitle>
-          <CardDescription>Tu foto se ve en todas tus empresas.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col items-center gap-4 sm:flex-row sm:items-center">
+    <SettingsPage title="Mi perfil" description="Tu cuenta en OmniDesk">
+      <SettingsSection title="Foto" description="Tu foto se ve en todas tus empresas.">
+        <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center">
           <Avatar
             id={user.id}
             name={user.displayName}
@@ -117,12 +120,6 @@ export function ProfilePage() {
             className="size-24 text-3xl"
           />
           <div className="flex min-w-0 flex-1 flex-col items-center gap-3 sm:items-start">
-            <div className="flex min-w-0 flex-col items-center sm:items-start">
-              <span className="max-w-full truncate font-semibold">{user.displayName}</span>
-              <span className="text-muted-foreground max-w-full truncate text-sm">
-                {user.email}
-              </span>
-            </div>
             <div className="flex flex-wrap justify-center gap-2">
               <Button type="button" disabled={busy} onClick={() => input.current?.click()}>
                 <Camera aria-hidden />
@@ -148,16 +145,27 @@ export function ProfilePage() {
               className="hidden"
               onChange={(event) => void pick(event)}
             />
+            {notice && (
+              <p role="status" className="text-muted-foreground text-sm">
+                {notice}
+              </p>
+            )}
           </div>
-        </CardContent>
-        {notice && (
-          <CardContent>
-            <p role="status" className="text-muted-foreground text-sm">
-              {notice}
-            </p>
-          </CardContent>
-        )}
-      </Card>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection title="Cuenta" description="Vienen de tu cuenta de Google.">
+        <dl className="grid gap-3 text-sm sm:grid-cols-2">
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <dt className="text-muted-foreground text-xs">Nombre</dt>
+            <dd className="truncate font-medium">{user.displayName}</dd>
+          </div>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <dt className="text-muted-foreground text-xs">Email</dt>
+            <dd className="truncate font-medium">{user.email}</dd>
+          </div>
+        </dl>
+      </SettingsSection>
 
       {source !== null && (
         <Suspense fallback={null}>
@@ -186,6 +194,6 @@ export function ProfilePage() {
         }}
         onOpenChange={setConfirmRemove}
       />
-    </div>
+    </SettingsPage>
   );
 }

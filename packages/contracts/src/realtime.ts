@@ -14,6 +14,8 @@ export const RealtimeEventSchema = z.object({
    * el contacto y su historial; la web la quita de la lista).
    */
   reason: z.enum(['message', 'assignment', 'delivery', 'deleted']),
+  /** SPEC 21: el mensaje lo envió el cliente. Solo con `reason: 'message'`. */
+  inbound: z.literal(true).optional(),
   occurredAt: z.iso.datetime(),
 });
 export type RealtimeEvent = z.infer<typeof RealtimeEventSchema>;

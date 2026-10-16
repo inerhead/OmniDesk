@@ -243,17 +243,33 @@ html[data-keyboard] {
 }
 
 /* Icono de Conversaciones: entra el bocadillo del cliente, responde el otro y se desvanecen
-   (2,4 s). La respuesta tapa a la pregunta con el fondo del botón (`--nav-icon-bg`). */
+   (2,4 s). La respuesta tapa a la pregunta con el fondo del botón (`--nav-icon-bg`).
+   SPEC 21: en reposo está quieto con los dos visibles; solo se anima con un mensaje de un cliente,
+   en bucle (`data-mode='loop'`) o una pasada (`data-mode='once'`). */
 .chat-in {
   transform-box: fill-box;
   transform-origin: 15% 100%;
-  animation: chat-in 2.4s ease-out infinite;
 }
 
 .chat-out {
   transform-box: fill-box;
   transform-origin: 85% 100%;
+}
+
+[data-mode='loop'] .chat-in {
+  animation: chat-in 2.4s ease-out infinite;
+}
+
+[data-mode='loop'] .chat-out {
   animation: chat-out 2.4s ease-out infinite;
+}
+
+[data-mode='once'] .chat-in {
+  animation: chat-in 2.4s ease-out;
+}
+
+[data-mode='once'] .chat-out {
+  animation: chat-out 2.4s ease-out;
 }
 
 @keyframes chat-in {
@@ -289,9 +305,10 @@ html[data-keyboard] {
   }
 }
 
+/* Con movimiento reducido no anima: el aviso es el punto fijo de `NavItemIcon`. */
 @media (prefers-reduced-motion: reduce) {
-  .chat-in,
-  .chat-out {
+  [data-mode] .chat-in,
+  [data-mode] .chat-out {
     animation: none;
     opacity: 1;
     transform: none;

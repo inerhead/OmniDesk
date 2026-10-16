@@ -68,6 +68,7 @@ describe('RegisterInboundMessageUseCase', () => {
         type: 'conversation.changed',
         conversationId: first.conversationId,
         reason: 'message',
+        inbound: true,
       },
     });
   });
@@ -195,6 +196,8 @@ describe('RegisterAiReplyUseCase', () => {
       type: 'conversation.changed',
       payload: { conversationId, reason: 'message' },
     });
+    // SPEC 21: una respuesta de la IA no es un mensaje del cliente.
+    expect(outbox.events[0]!.payload).not.toHaveProperty('inbound');
   });
 
   it('es idempotente por idempotencyKey y no encola de nuevo', async () => {

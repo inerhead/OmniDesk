@@ -1,10 +1,14 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, type ReactNode } from 'react';
-import { useNavigate } from 'react-router';
+import { useEffect, useRef, type ReactNode } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { fetchMe } from '@/features/auth/api/auth-api';
 import { ME_QUERY_KEY } from '@/features/auth/api/use-me';
 import { resetSessionCache } from '@/features/auth/api/use-session-actions';
 import { markConversationDeleted } from '@/features/conversations/model/deleted-conversations';
+import {
+  isConversationsPath,
+  signalInbound,
+} from '@/features/conversations/model/new-message-signal';
 import { realtimeTarget } from '@/shared/config/env';
 import { connectRealtime } from '@/shared/realtime/realtime-client';
 
@@ -21,6 +25,12 @@ export function RealtimeProvider({
 }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  // La ruta se lee en cada evento sin reconectar el socket al navegar.
+  const pathname = useLocation().pathname;
+  const pathnameRef = useRef(pathname);
+  useEffect(() => {
+    pathnameRef.current = pathname;
+  }, [pathname]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -28,6 +38,8 @@ export function RealtimeProvider({
       onEvent: (event) => {
         // Contacto borrado (SPEC 12): el chat abierto lo avisa y la lista se refresca sin ella.
         if (event.reason === 'deleted') markConversationDeleted(event.conversationId);
+        // Mensaje de un cliente (SPEC 21): aviso en el icono de Conversaciones.
+        if (event.inbound) signalInbound(isConversationsPath(pathnameRef.current));
         void queryClient.invalidateQueries({ queryKey: ['conversations'] });
         void queryClient.invalidateQueries({ queryKey: ['timeline', event.conversationId] });
       },

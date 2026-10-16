@@ -1,13 +1,20 @@
 import type { SVGProps } from 'react';
 
+export type ChatReplyIconMode = 'idle' | 'loop' | 'once';
+
 /**
- * Icono de Conversaciones (SPEC 17): el bocadillo del cliente y la respuesta, en bucle con
+ * Icono de Conversaciones (SPEC 17): el bocadillo del cliente y la respuesta, animados con
  * `.chat-in` y `.chat-out` (index.css). La respuesta se rellena con `--nav-icon-bg`, el fondo del
  * botón que la contiene, para tapar limpio al primer bocadillo.
+ * `mode` (SPEC 21): quieto en reposo, en bucle hasta entrar a Conversaciones o una sola pasada.
  */
-export function ChatReplyIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
+export function ChatReplyIcon({
+  className,
+  mode = 'idle',
+  ...props
+}: Omit<SVGProps<SVGSVGElement>, 'mode'> & { mode?: ChatReplyIconMode }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" className={className} {...props}>
+    <svg viewBox="0 0 24 24" fill="none" className={className} data-mode={mode} {...props}>
       <path
         className="chat-in"
         d="M4 2.5h9a2 2 0 0 1 2 2V9a2 2 0 0 1-2 2H7.5L4.5 13.5V11H4a2 2 0 0 1-2-2V4.5a2 2 0 0 1 2-2z"

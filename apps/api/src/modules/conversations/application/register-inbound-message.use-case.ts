@@ -129,6 +129,7 @@ export class RegisterInboundMessageUseCase {
       conversation.id,
       'message',
       now,
+      { inbound: true },
     );
     // Sin avisos con la empresa inactiva: nadie la atiende.
     if (tenantActive && created) {

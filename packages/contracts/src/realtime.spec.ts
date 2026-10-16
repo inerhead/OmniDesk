@@ -25,6 +25,18 @@ describe('RealtimeEventSchema', () => {
     expect(RealtimeEventSchema.safeParse({ ...valid, reason: 'delivery' }).success).toBe(true);
   });
 
+  it('conserva inbound: true en un mensaje del cliente (SPEC 21)', () => {
+    expect(RealtimeEventSchema.parse({ ...valid, inbound: true })).toEqual({
+      ...valid,
+      inbound: true,
+    });
+  });
+
+  it('inbound es opcional y solo admite true', () => {
+    expect(RealtimeEventSchema.parse(valid)).not.toHaveProperty('inbound');
+    expect(RealtimeEventSchema.safeParse({ ...valid, inbound: false }).success).toBe(false);
+  });
+
   it('rechaza un motivo desconocido', () => {
     expect(RealtimeEventSchema.safeParse({ ...valid, reason: 'otro' }).success).toBe(false);
   });

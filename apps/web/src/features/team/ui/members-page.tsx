@@ -11,6 +11,7 @@ import { Card } from '@/shared/ui/card';
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog';
 import { EmptyState } from '@/shared/ui/empty-state';
 import { Input } from '@/shared/ui/input';
+import { PageHeader } from '@/shared/ui/page-header';
 import { SegmentedControl } from '@/shared/ui/segmented-control';
 import { Skeleton } from '@/shared/ui/skeleton';
 import { deleteInvitation, deleteMember, fetchInvitations, patchMemberRole } from '../api/team-api';
@@ -109,15 +110,11 @@ export function MembersPage() {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <section className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6 md:px-8 md:py-10">
-        <header className="flex flex-wrap items-end justify-between gap-3">
-          <div className="flex flex-col gap-1">
-            <h1 className="text-2xl font-semibold tracking-tight">Miembros</h1>
-            <p className="text-muted-foreground text-sm">
-              Quién trabaja en esta empresa y con qué rol.
-            </p>
-          </div>
-          <InviteDialog actorRole={actor.role} />
-        </header>
+        <PageHeader
+          title="Miembros"
+          description="Quién trabaja en esta empresa y con qué rol."
+          actions={<InviteDialog actorRole={actor.role} />}
+        />
 
         {notice && (
           <div

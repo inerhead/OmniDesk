@@ -8,6 +8,7 @@ import { Button } from '@/shared/ui/button';
 import { Card } from '@/shared/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/shared/ui/dialog';
 import { EmptyState } from '@/shared/ui/empty-state';
+import { PageHeader } from '@/shared/ui/page-header';
 import { Skeleton } from '@/shared/ui/skeleton';
 import { ChannelPanel } from './channel-panel';
 import { ChannelRow } from './channel-row';
@@ -141,15 +142,11 @@ function ManagedChannels({ tenantId }: { tenantId: string }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <section className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6 md:px-8 md:py-10">
-        <header className="flex flex-wrap items-end justify-between gap-3">
-          <div className="flex flex-col gap-1">
-            <h1 className="text-2xl font-semibold tracking-tight">Canales</h1>
-            <p className="text-muted-foreground text-sm">
-              Conecta WhatsApp y elige si la IA atiende tus mensajes.
-            </p>
-          </div>
-          {addButton}
-        </header>
+        <PageHeader
+          title="Canales"
+          description="Conecta WhatsApp y elige si la IA atiende tus mensajes."
+          actions={addButton}
+        />
 
         {channels.isPending ? (
           <div className="flex flex-col gap-3">

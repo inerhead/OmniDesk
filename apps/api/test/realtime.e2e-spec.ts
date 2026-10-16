@@ -182,15 +182,19 @@ describe('Tiempo real: Outbox + Socket.IO (e2e)', () => {
         type: 'conversation.changed',
         conversationId,
         reason: 'message',
+        inbound: true,
       });
     });
 
     it('entrega también el evento de una respuesta de IA', async () => {
-      const { conversationId } = (await inbound(inboundBody()).expect(201)).body;
       const socket = connect();
       await connected(socket);
       // El socket se une al room de forma asíncrona tras conectar.
       await sleep(200);
+      // Primero llega el evento del entrante; si no se espera, se confunde con el de la IA.
+      const fromClient = nextEvent(socket);
+      const { conversationId } = (await inbound(inboundBody()).expect(201)).body;
+      expect(await fromClient).toMatchObject({ conversationId, inbound: true });
       const received = nextEvent(socket);
 
       await outbound({
@@ -200,7 +204,10 @@ describe('Tiempo real: Outbox + Socket.IO (e2e)', () => {
         text: 'Hola',
       }).expect(201);
 
-      expect(await received).toMatchObject({ conversationId, reason: 'message' });
+      const event = await received;
+      expect(event).toMatchObject({ conversationId, reason: 'message' });
+      // SPEC 21: la respuesta de la IA no anima el icono de Conversaciones.
+      expect(event).not.toHaveProperty('inbound');
     });
 
     it('acepta el origen de CORS_ORIGINS y no otro', async () => {

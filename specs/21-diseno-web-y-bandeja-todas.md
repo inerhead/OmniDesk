@@ -218,49 +218,49 @@ type NewMessageSignal =
 
 **Ajustes:**
 
-- [ ] En `/settings/company`, `/settings/notifications` y `/settings/profile` hay una cabecera con título y subtítulo.
-- [ ] A 1280 px cada sección muestra el título y la descripción a la izquierda y la tarjeta a la derecha.
-- [ ] A 400 px las secciones se apilan y no hay scroll horizontal.
+- [x] En `/settings/company`, `/settings/notifications` y `/settings/profile` hay una cabecera con título y subtítulo.
+- [x] A 1280 px cada sección muestra el título y la descripción a la izquierda y la tarjeta a la derecha.
+- [x] A 400 px las secciones se apilan y no hay scroll horizontal.
 - [ ] Empresa muestra cinco secciones: Empresa, Contacto, Logo, Retención de datos y Zona de peligro. Zona de peligro va en rojo.
 - [ ] Guardar datos, cambiar el logo, cambiar la retención e inactivar funcionan como antes, y su aviso aparece dentro de su sección.
 - [ ] Con la empresa inactiva, Empresa muestra la cabecera y la sección "Empresa inactiva" con "Reactivar".
-- [ ] Mi perfil muestra las secciones Foto y Cuenta. Cuenta tiene el nombre y el email, sin campos editables.
+- [x] Mi perfil muestra las secciones Foto y Cuenta. Cuenta tiene el nombre y el email, sin campos editables.
 - [ ] Notificaciones muestra las secciones Este dispositivo y Qué avisarte. Activar, desactivar y enviar la prueba funcionan como antes.
 
 **Plataforma:**
 
-- [ ] A 1280 px, `/platform` muestra una fila de encabezados, y las columnas quedan alineadas en todas las filas, con nombres de distinta longitud.
+- [x] A 1280 px, `/platform` muestra una fila de encabezados, y las columnas quedan alineadas en todas las filas, con nombres de distinta longitud.
 - [ ] Una pendiente muestra el botón "Aprobar" y "Rechazar" en el menú "⋯".
-- [ ] Una aprobada activa no tiene botón y tiene "Suspender" en el menú "⋯".
+- [x] Una aprobada activa no tiene botón y tiene "Suspender" en el menú "⋯".
 - [ ] Una aprobada suspendida muestra "Levantar suspensión" y tiene "Borrar" en el menú "⋯".
 - [ ] Cada acción abre el diálogo de hoy y funciona como antes.
 - [ ] La pestaña Borradas muestra sus cinco columnas, sin acciones.
-- [ ] A 400 px las filas se apilan y no hay scroll horizontal.
+- [x] A 400 px las filas se apilan y no hay scroll horizontal.
 
 **Login:**
 
-- [ ] A 1280 px, `/login` muestra el panel de marca índigo a la izquierda (logo, titular y tres ventajas) y el login a la derecha.
-- [ ] A 400 px muestra solo la tarjeta de hoy.
+- [x] A 1280 px, `/login` muestra el panel de marca índigo a la izquierda (logo, titular y tres ventajas) y el login a la derecha.
+- [x] A 400 px muestra solo la tarjeta de hoy.
 - [ ] `/onboarding` e `/invite/:token` usan la misma pantalla partida. La invitación muestra la marca de la empresa sobre el título.
 
 **Icono:**
 
-- [ ] Sin mensajes nuevos, el icono de Conversaciones está quieto con los dos bocadillos visibles.
+- [x] Sin mensajes nuevos, el icono de Conversaciones está quieto con los dos bocadillos visibles.
 - [ ] Estando en `/status` o en Ajustes, un mensaje de un cliente (`simulate` o webhook) pone el icono a animar en bucle en el rail y en la barra móvil. Entrar a Conversaciones lo detiene.
-- [ ] Estando en `/conversations`, un mensaje de un cliente hace una sola pasada.
-- [ ] Una respuesta de la IA o un mensaje enviado por un agente no animan el icono.
-- [ ] Con "reducir movimiento", un mensaje de un cliente fuera de Conversaciones muestra el punto fijo, y entrar lo quita.
-- [ ] Con aviso, el enlace se anuncia como "Conversaciones, mensajes nuevos".
-- [ ] El evento de un entrante lleva `inbound: true`. El de una respuesta de la IA no lo lleva.
+- [x] Estando en `/conversations`, un mensaje de un cliente hace una sola pasada.
+- [x] Una respuesta de la IA o un mensaje enviado por un agente no animan el icono.
+- [x] Con "reducir movimiento", un mensaje de un cliente fuera de Conversaciones muestra el punto fijo, y entrar lo quita.
+- [x] Con aviso, el enlace se anuncia como "Conversaciones, mensajes nuevos".
+- [x] El evento de un entrante lleva `inbound: true`. El de una respuesta de la IA no lo lleva.
 
 **Agent:**
 
-- [ ] Un Agent ve las pestañas Sin asignar, Mías, Todas y Cerradas, y "Todas" muestra su contador.
-- [ ] `GET /api/v1/conversations?inbox=all` como Agent responde `200` con todas las abiertas de la empresa.
-- [ ] Como Agent, "Cerradas" incluye conversaciones que cerró otro agente.
-- [ ] Un Agent abre una conversación de otro agente y ve el historial, los adjuntos y el panel de contacto.
-- [ ] En esa conversación, el Agent ve "Asignada a X" y no tiene composer, ni "Tomar", "Soltar", "Cerrar" o "Reabrir".
-- [ ] Enviar un mensaje o cerrar esa conversación por API como Agent responde `403`.
+- [x] Un Agent ve las pestañas Sin asignar, Mías, Todas y Cerradas, y "Todas" muestra su contador.
+- [x] `GET /api/v1/conversations?inbox=all` como Agent responde `200` con todas las abiertas de la empresa.
+- [x] Como Agent, "Cerradas" incluye conversaciones que cerró otro agente.
+- [x] Un Agent abre una conversación de otro agente y ve el historial, los adjuntos y el panel de contacto.
+- [x] En esa conversación, el Agent ve "Asignada a X" y no tiene composer, ni "Tomar", "Soltar", "Cerrar" o "Reabrir".
+- [x] Enviar un mensaje o cerrar esa conversación por API como Agent responde `403`.
 - [ ] El menú de rol describe Agent como "Ve todas y atiende las suyas".
 
 **General:**
@@ -309,3 +309,34 @@ type NewMessageSignal =
 - Ilustraciones en el login.
 
 Cada uno de esos, si llega, va en su propio spec.
+
+## Verificación de implementación
+
+2026-10-16, rama `spec-21-diseno-web-y-bandeja-todas`.
+
+Automatizado, en verde:
+
+- `pnpm turbo run typecheck lint test build` en todo el monorepo: 428 unitarias del API, 183 de la web y 118 de contratos. El único aviso de lint (`main.tsx`) ya estaba en `main`.
+- `pnpm --filter @omnidesk/api test:e2e` en el contenedor de dev contra la base `_e2e`, sin las claves VAPID del contenedor: 256 pasaron y 4 se saltaron. Solo falla `health.e2e-spec.ts > Producción`, que no arranca en ese entorno (`ECONNREFUSED 127.0.0.1:9050`) y no toca este spec.
+- Con las claves VAPID del `.env` de dev, `push.e2e-spec.ts > sin claves VAPID` y `assignment.e2e-spec.ts > cada comando encola…` fallan porque esperan un entorno sin VAPID. Tampoco dependen de este spec.
+- `assignment.e2e-spec.ts`: un Agent recibe `200` en `inbox=all` y en "Cerradas" ve las que cerró otro. Lee el resumen, el timeline y los mensajes de una conversación de otro agente, y escribir, cerrar, soltar, reabrir o tomarla responde `403`.
+- `realtime.e2e-spec.ts`: el socket recibe `inbound: true` en un entrante y no lo recibe en una respuesta de la IA.
+- Pruebas unitarias nuevas o cambiadas: política (`can('view')` para todos, sin `canViewInbox`), `inbox-filter`, `count-inboxes`, contrato `inbound`, `new-message-signal`, `navItemLabel`, `rowActions` de `/platform` y `inbox.ts`.
+
+Comprobado en el navegador (Chrome headless contra el stack de dev, 1280 y 400 px):
+
+- Ajustes: cabecera y secciones en dos columnas en Empresa, Notificaciones y Mi perfil; a 400 px se apilan sin scroll horizontal.
+- `/platform`: encabezados y columnas alineadas en Aprobadas; el menú "⋯" de una activa ofrece "Suspender" en rojo; a 400 px las filas se apilan sin scroll horizontal de la página.
+- Login y onboarding en pantalla partida a 1280 px, y la tarjeta de siempre a 400 px.
+- Icono: con un `conversation.changed` con `inbound: true` encolado en el Outbox de dev, en `/status` pasa a bucle y el enlace se anuncia como "Conversaciones, mensajes nuevos"; al entrar vuelve a reposo; dentro hace una pasada. Con movimiento reducido aparece el punto fijo fuera y desaparece al entrar.
+- Como Agent (Mateo): las cuatro pestañas con contador en "Todas", y una conversación de Sup. Demo con historial, audio, panel de contacto y "Asignada a Sup. Demo", sin composer ni botones.
+
+Queda para la revisión manual:
+
+- **Empresa:** la sección Zona de peligro, guardar datos, cambiar el logo, cambiar la retención, inactivar y el estado "Empresa inactiva".
+- **Notificaciones:** activar, desactivar y enviar la prueba.
+- **Plataforma:** una pendiente ("Aprobar" y "Rechazar"), una suspendida ("Levantar suspensión" y "Borrar"), cada diálogo y la pestaña Borradas con filas. En dev no había empresas en esos estados; la tabla de acciones la cubre `platform-actions.spec.ts`.
+- **Invitación:** `/invite/:token` en pantalla partida con la marca de la empresa.
+- **Icono en la barra móvil:** usa el mismo `NavItemIcon` que el rail, pero solo se comprobó el rail.
+- **Menú de rol:** el texto "Ve todas y atiende las suyas" no se abrió en el navegador.
+

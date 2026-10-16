@@ -1,11 +1,14 @@
 import { NavLink } from 'react-router';
 import { activeMembership, useMe } from '@/features/auth/api/use-me';
+import { useNewMessageSignal } from '@/features/conversations/model/new-message-signal';
 import { ChannelSwitcher } from '@/features/conversations/ui/channel-switcher';
 import { UserMenu } from '@/features/auth/ui/user-menu';
 import { cn } from '@/shared/lib/utils';
 import { InstallPrompt } from '@/shared/pwa/install-prompt';
 import { TenantMark } from '@/shared/ui/tenant-mark';
 import { Tooltip } from '@/shared/ui/tooltip';
+import { NavItemIcon } from './nav-item-icon';
+import { navItemLabel } from './nav-item-label';
 import { NAV_ITEMS } from './nav-items';
 import { publicAsset } from '@/shared/config/env';
 
@@ -30,6 +33,7 @@ function RailBrand() {
 
 /** Rail vertical de 64 px (≥ md): navegación y canales arriba; instalar y perfil abajo. */
 export function NavRail() {
+  const signal = useNewMessageSignal();
   return (
     <nav
       aria-label="Principal"
@@ -37,11 +41,11 @@ export function NavRail() {
     >
       <RailBrand />
       <div className="flex min-h-0 w-full flex-1 flex-col items-center gap-2 overflow-y-auto">
-        {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
-          <Tooltip key={to} content={label} side="right">
+        {NAV_ITEMS.map((item) => (
+          <Tooltip key={item.to} content={item.label} side="right">
             <NavLink
-              to={to}
-              aria-label={label}
+              to={item.to}
+              aria-label={navItemLabel(item, signal)}
               className={({ isActive }) =>
                 cn(
                   'focus-visible:ring-ring/50 flex size-10 shrink-0 items-center justify-center rounded-lg transition-colors outline-none focus-visible:ring-[3px]',
@@ -52,7 +56,7 @@ export function NavRail() {
                 )
               }
             >
-              <Icon className="size-5" aria-hidden />
+              <NavItemIcon item={item} className="size-5" />
             </NavLink>
           </Tooltip>
         ))}

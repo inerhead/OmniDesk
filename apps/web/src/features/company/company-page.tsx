@@ -9,17 +9,21 @@ import {
   useState,
   type ChangeEvent,
   type FormEvent,
+  type ReactNode,
 } from 'react';
 import { ME_QUERY_KEY, activeMembership, useMe } from '@/features/auth/api/use-me';
 import { ApiCodeError } from '@/shared/api/api-error';
 import { ApiHttpError } from '@/shared/api/http-client';
 import { checkImageSource, readAsDataUrl } from '@/shared/lib/crop-to-blob';
 import { Button } from '@/shared/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/card';
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog';
 import { EmptyState } from '@/shared/ui/empty-state';
 import { Input } from '@/shared/ui/input';
-import { Skeleton } from '@/shared/ui/skeleton';
+import {
+  SettingsPage,
+  SettingsSection,
+  SettingsSectionSkeleton,
+} from '@/shared/ui/settings-section';
 import { TenantMark } from '@/shared/ui/tenant-mark';
 import {
   COMPANY_QUERY_KEY,
@@ -31,7 +35,7 @@ import {
   reactivateCompany,
 } from './company-api';
 import { DeactivateDialog } from './deactivate-dialog';
-import { RetentionCard } from './retention-card';
+import { RetentionSection } from './retention-section';
 
 const loadCropDialog = () => import('@/shared/ui/image-crop-dialog');
 const ImageCropDialog = lazy(loadCropDialog);
@@ -58,9 +62,19 @@ function logoNotice(error: unknown): string {
   return 'No se pudo guardar el logo. Inténtalo de nuevo.';
 }
 
+/** Cabecera y ancho de la página, iguales en todos sus estados (SPEC 21). */
+function CompanyLayout({ children }: { children: ReactNode }) {
+  return (
+    <SettingsPage title="Empresa" description="Datos, logo, retención y estado de la empresa">
+      {children}
+    </SettingsPage>
+  );
+}
+
 /**
  * `/settings/company` (solo Owner): datos, logo, retención (SPEC 12) e inactivación de la empresa
- * activa. Con la empresa inactiva solo muestra el aviso y "Reactivar" (SPEC 16).
+ * activa, en secciones de dos columnas (SPEC 21). Con la empresa inactiva solo muestra el aviso y
+ * "Reactivar" (SPEC 16).
  */
 export function CompanyPage() {
   const { data: me } = useMe();
@@ -74,10 +88,10 @@ export function CompanyPage() {
 
   if (!me || (isOwner && company.isPending)) {
     return (
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 p-4">
-        <Skeleton className="h-40 w-full" />
-        <Skeleton className="h-40 w-full" />
-      </div>
+      <CompanyLayout>
+        <SettingsSectionSkeleton />
+        <SettingsSectionSkeleton />
+      </CompanyLayout>
     );
   }
   if (!isOwner || !company.data) {
@@ -119,18 +133,13 @@ function InactiveCompany({ company }: { company: TenantDetails }) {
   const when = dateFormat.format(new Date(company.deactivatedAt!));
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col gap-4 overflow-y-auto p-4">
-      <Card>
-        <CardHeader className="flex flex-row items-center gap-4">
+    <CompanyLayout>
+      <SettingsSection title="Empresa inactiva" description={`Inactivada por ${by} el ${when}.`}>
+        <div className="flex min-w-0 items-center gap-4">
           <TenantMark id={company.id} name={company.name} logoUrl={company.logoUrl} size="md" />
-          <div className="flex min-w-0 flex-col gap-1">
-            <CardTitle className="truncate">{company.name} está inactiva</CardTitle>
-            <CardDescription>
-              Inactivada por {by} el {when}.
-            </CardDescription>
-          </div>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
+          <p className="truncate font-semibold">{company.name} está inactiva</p>
+        </div>
+        <div className="flex flex-col gap-3">
           <p className="text-muted-foreground text-sm">
             Los mensajes de WhatsApp se siguen guardando, sin IA ni notificaciones. Admin y Agent no
             tienen acceso y no sale ningún mensaje. Al reactivarla, se reenvían los mensajes
@@ -149,9 +158,9 @@ function InactiveCompany({ company }: { company: TenantDetails }) {
               {notice}
             </p>
           )}
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </SettingsSection>
+    </CompanyLayout>
   );
 }
 
@@ -163,13 +172,13 @@ function ActiveCompany({ company }: { company: TenantDetails }) {
   }, []);
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col gap-4 overflow-y-auto p-4">
+    <CompanyLayout>
       <CompanyData company={company} />
       <CompanyContact company={company} />
       <CompanyLogo company={company} />
-      <RetentionCard company={company} onSaved={applyCompany} />
+      <RetentionSection company={company} onSaved={applyCompany} />
       <DangerZone company={company} />
-    </div>
+    </CompanyLayout>
   );
 }
 
@@ -201,50 +210,47 @@ function CompanyData({ company }: { company: TenantDetails }) {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Empresa</CardTitle>
-        <CardDescription>El nombre se ve en el selector de empresas y en el rail.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
-          <label className="flex flex-col gap-1.5 text-sm font-medium">
-            Nombre
-            <Input
-              value={name}
-              maxLength={80}
-              aria-invalid={!nameValid}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </label>
-          <label className="flex flex-col gap-1.5 text-sm font-medium">
-            Identificador (slug)
-            <Input
-              value={slug}
-              disabled={company.slugLocked}
-              aria-invalid={!slugValid}
-              aria-describedby="company-slug-help"
-              onChange={(event) => setSlug(event.target.value.toLowerCase())}
-            />
-            <span id="company-slug-help" className="text-muted-foreground text-xs font-normal">
-              {company.slugLocked
-                ? 'La empresa demo conserva su identificador.'
-                : 'Solo minúsculas, números y guiones simples.'}
-            </span>
-          </label>
-          <div className="flex items-center gap-3">
-            <Button type="submit" disabled={save.isPending || !changed || !nameValid || !slugValid}>
-              {save.isPending ? 'Guardando…' : 'Guardar'}
-            </Button>
-            {notice && (
-              <p role="status" className="text-muted-foreground text-sm">
-                {notice}
-              </p>
-            )}
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+    <SettingsSection
+      title="Empresa"
+      description="El nombre se ve en el selector de empresas y en el rail."
+    >
+      <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
+          Nombre
+          <Input
+            value={name}
+            maxLength={80}
+            aria-invalid={!nameValid}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-1.5 text-sm font-medium">
+          Identificador (slug)
+          <Input
+            value={slug}
+            disabled={company.slugLocked}
+            aria-invalid={!slugValid}
+            aria-describedby="company-slug-help"
+            onChange={(event) => setSlug(event.target.value.toLowerCase())}
+          />
+          <span id="company-slug-help" className="text-muted-foreground text-xs font-normal">
+            {company.slugLocked
+              ? 'La empresa demo conserva su identificador.'
+              : 'Solo minúsculas, números y guiones simples.'}
+          </span>
+        </label>
+        <div className="flex items-center gap-3">
+          <Button type="submit" disabled={save.isPending || !changed || !nameValid || !slugValid}>
+            {save.isPending ? 'Guardando…' : 'Guardar'}
+          </Button>
+          {notice && (
+            <p role="status" className="text-muted-foreground text-sm">
+              {notice}
+            </p>
+          )}
+        </div>
+      </form>
+    </SettingsSection>
   );
 }
 
@@ -252,28 +258,25 @@ function CompanyData({ company }: { company: TenantDetails }) {
 function CompanyContact({ company }: { company: TenantDetails }) {
   const hasContact = company.contactPhone !== null || company.contactEmail !== null;
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Contacto</CardTitle>
-        <CardDescription>Los datos que se enviaron al pedir el alta de la empresa.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {hasContact ? (
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <div className="flex min-w-0 flex-col gap-0.5">
-              <dt className="text-muted-foreground text-xs">Teléfono móvil</dt>
-              <dd className="truncate font-medium">{company.contactPhone ?? '—'}</dd>
-            </div>
-            <div className="flex min-w-0 flex-col gap-0.5">
-              <dt className="text-muted-foreground text-xs">Email</dt>
-              <dd className="truncate font-medium">{company.contactEmail ?? '—'}</dd>
-            </div>
-          </dl>
-        ) : (
-          <p className="text-muted-foreground text-sm">Sin datos de contacto.</p>
-        )}
-      </CardContent>
-    </Card>
+    <SettingsSection
+      title="Contacto"
+      description="Los datos que se enviaron al pedir el alta de la empresa."
+    >
+      {hasContact ? (
+        <dl className="grid gap-3 text-sm sm:grid-cols-2">
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <dt className="text-muted-foreground text-xs">Teléfono móvil</dt>
+            <dd className="truncate font-medium">{company.contactPhone ?? '—'}</dd>
+          </div>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <dt className="text-muted-foreground text-xs">Email</dt>
+            <dd className="truncate font-medium">{company.contactEmail ?? '—'}</dd>
+          </div>
+        </dl>
+      ) : (
+        <p className="text-muted-foreground text-sm">Sin datos de contacto.</p>
+      )}
+    </SettingsSection>
   );
 }
 
@@ -322,12 +325,8 @@ function CompanyLogo({ company }: { company: TenantDetails }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Logo</CardTitle>
-        <CardDescription>Cuadrado; sin logo se muestran las iniciales.</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col items-center gap-4 sm:flex-row">
+    <SettingsSection title="Logo" description="Cuadrado; sin logo se muestran las iniciales.">
+      <div className="flex flex-col items-center gap-4 sm:flex-row">
         <TenantMark id={company.id} name={company.name} logoUrl={company.logoUrl} size="lg" />
         <div className="flex flex-col items-center gap-2 sm:items-start">
           <div className="flex flex-wrap justify-center gap-2">
@@ -361,7 +360,7 @@ function CompanyLogo({ company }: { company: TenantDetails }) {
             onChange={(event) => void pick(event)}
           />
         </div>
-      </CardContent>
+      </div>
 
       {source !== null && (
         <Suspense fallback={null}>
@@ -389,7 +388,7 @@ function CompanyLogo({ company }: { company: TenantDetails }) {
         }}
         onOpenChange={setConfirmRemove}
       />
-    </Card>
+    </SettingsSection>
   );
 }
 
@@ -412,28 +411,23 @@ function DangerZone({ company }: { company: TenantDetails }) {
   });
 
   return (
-    <Card className="border-destructive/40">
-      <CardHeader>
-        <CardTitle className="text-destructive">Zona de peligro</CardTitle>
-        <CardDescription>
-          Inactivar corta la atención y el acceso de Admin y Agent. Los datos se conservan y puedes
-          reactivarla después.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Button
-          type="button"
-          variant="outline"
-          className="border-destructive/50 text-destructive hover:text-destructive"
-          onClick={() => {
-            setError(null);
-            setOpen(true);
-          }}
-        >
-          <PowerOff aria-hidden />
-          Inactivar empresa
-        </Button>
-      </CardContent>
+    <SettingsSection
+      title="Zona de peligro"
+      description="Inactivar corta la atención y el acceso de Admin y Agent. Los datos se conservan y puedes reactivarla después."
+      tone="danger"
+    >
+      <Button
+        type="button"
+        variant="outline"
+        className="border-destructive/50 text-destructive hover:text-destructive self-start"
+        onClick={() => {
+          setError(null);
+          setOpen(true);
+        }}
+      >
+        <PowerOff aria-hidden />
+        Inactivar empresa
+      </Button>
       <DeactivateDialog
         open={open}
         tenantName={company.name}
@@ -442,6 +436,6 @@ function DangerZone({ company }: { company: TenantDetails }) {
         onConfirm={(confirmName) => deactivate.mutate(confirmName)}
         onOpenChange={setOpen}
       />
-    </Card>
+    </SettingsSection>
   );
 }

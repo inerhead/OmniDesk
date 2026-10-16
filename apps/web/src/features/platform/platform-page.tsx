@@ -1,10 +1,6 @@
-import type {
-  PlatformTenantDeletionRow,
-  PlatformTenantRow,
-  PlatformTenantStatus,
-} from '@omnidesk/contracts';
+import type { PlatformTenantRow, PlatformTenantStatus } from '@omnidesk/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Building2, LogOut, Phone, Plus, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Building2, LogOut, Plus, Trash2, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useSearchParams } from 'react-router';
 import { ME_QUERY_KEY, useMe } from '@/features/auth/api/use-me';
@@ -15,14 +11,15 @@ import { ApiCodeError } from '@/shared/api/api-error';
 import { publicAsset } from '@/shared/config/env';
 import { cn } from '@/shared/lib/utils';
 import { ThemeMenu } from '@/shared/theme/theme-menu';
-import { Badge } from '@/shared/ui/badge';
 import { Button } from '@/shared/ui/button';
 import { Card } from '@/shared/ui/card';
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog';
 import { EmptyState } from '@/shared/ui/empty-state';
+import { PageHeader } from '@/shared/ui/page-header';
 import { SegmentedControl } from '@/shared/ui/segmented-control';
 import { Skeleton } from '@/shared/ui/skeleton';
 import { DeleteTenantDialog } from './delete-tenant-dialog';
+import { DeletionRow } from './deletion-row';
 import {
   approveTenant,
   deleteTenant,
@@ -33,12 +30,14 @@ import {
   suspendTenant,
   unsuspendTenant,
 } from './platform-api';
+import { PlatformRow } from './platform-row';
+import type { PlatformRowHandlers } from './platform-actions';
+import { PlatformRowActions } from './platform-row-actions';
+import { DELETION_COLUMNS, DELETION_GRID, TENANT_GRID, tenantColumns } from './platform-columns';
+import { PlatformTable } from './platform-table';
 import { RejectDialog } from './reject-dialog';
 import { SuspendDialog } from './suspend-dialog';
 import { deletionErrorMessage } from './tenant-deletion';
-
-const dateFormat = new Intl.DateTimeFormat('es', { dateStyle: 'medium' });
-const formatDate = (iso: string | null) => (iso ? dateFormat.format(new Date(iso)) : '—');
 
 /** Pestañas de `/platform`: las tres de SPEC 18 y "Borradas" (SPEC 20). */
 type PlatformTab = PlatformTenantStatus | 'deleted';
@@ -52,15 +51,6 @@ const TABS: { value: PlatformTab; label: string; empty: string }[] = [
 
 /** Mientras alguna empresa se está borrando, la pestaña se refresca sola. */
 const DELETING_REFETCH_MS = 5_000;
-
-const STATE: Record<
-  NonNullable<PlatformTenantRow['state']>,
-  { label: string; variant: 'success' | 'secondary' | 'destructive' }
-> = {
-  active: { label: 'Activa', variant: 'success' },
-  inactive: { label: 'Inactiva', variant: 'secondary' },
-  suspended: { label: 'Suspendida', variant: 'destructive' },
-};
 
 function parseTab(value: string | null): PlatformTab {
   return value === 'approved' || value === 'rejected' || value === 'deleted' ? value : 'pending';
@@ -80,6 +70,7 @@ function errorNotice(error: unknown): string {
  * `/platform` (solo admins de plataforma, SPEC 18 y 20): pestañas Pendientes, Aprobadas, Rechazadas
  * y Borradas (la activa en `?tab=`). Aprobar o rechazar solicitudes, suspender o levantar la
  * suspensión de una empresa aprobada, y borrar una suspendida. No necesita empresa activa.
+ * Cada pestaña es una tabla con columnas fijas (SPEC 21).
  */
 export function PlatformPage() {
   const { data: me } = useMe();
@@ -161,16 +152,24 @@ export function PlatformPage() {
   const deletedRows = deletions.data ?? [];
   const isEmpty = tab === 'deleted' ? deletedRows.length === 0 : rows.length === 0;
   const emptyLabel = TABS.find((item) => item.value === tab)!.empty;
+  const handlers: PlatformRowHandlers = {
+    onApprove: (row) => approve.mutate(row.id),
+    onReject: setRejecting,
+    onSuspend: setSuspending,
+    onUnsuspend: setUnsuspending,
+    onDelete: (row) => {
+      remove.reset();
+      setDeleting(row);
+    },
+  };
 
   return (
     <PlatformShell>
-      <section className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 py-6 md:px-8 md:py-10">
-        <header className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Plataforma</h1>
-          <p className="text-muted-foreground text-sm">
-            Empresas que piden el alta en OmniDesk, suspendidas y borradas.
-          </p>
-        </header>
+      <section className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-6 md:px-8 md:py-10">
+        <PageHeader
+          title="Plataforma"
+          description="Empresas que piden el alta en OmniDesk, suspendidas y borradas."
+        />
 
         {notice && (
           <div
@@ -241,72 +240,24 @@ export function PlatformPage() {
             <EmptyState icon={tab === 'deleted' ? Trash2 : Building2} title={emptyLabel} />
           </Card>
         ) : tab === 'deleted' ? (
-          <Card className="gap-0 py-0">
-            <ul className="divide-y">
-              {deletedRows.map((row) => (
-                <DeletionRow key={row.id} row={row} />
-              ))}
-            </ul>
-          </Card>
+          <PlatformTable columns={DELETION_COLUMNS} grid={DELETION_GRID}>
+            {deletedRows.map((row) => (
+              <DeletionRow key={row.id} row={row} />
+            ))}
+          </PlatformTable>
         ) : (
-          <Card className="gap-0 py-0">
-            <ul className="divide-y">
-              {rows.map((row) => (
-                <PlatformRow key={row.id} row={row} tab={tab}>
-                  {tab === 'pending' && (
-                    <>
-                      <Button size="sm" disabled={pending} onClick={() => approve.mutate(row.id)}>
-                        Aprobar
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={pending}
-                        onClick={() => setRejecting(row)}
-                      >
-                        Rechazar
-                      </Button>
-                    </>
-                  )}
-                  {tab === 'approved' &&
-                    (row.state === 'suspended' ? (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={pending}
-                          onClick={() => setUnsuspending(row)}
-                        >
-                          Levantar suspensión
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={pending}
-                          className="text-destructive"
-                          onClick={() => {
-                            remove.reset();
-                            setDeleting(row);
-                          }}
-                        >
-                          Borrar
-                        </Button>
-                      </>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={pending}
-                        className="text-destructive"
-                        onClick={() => setSuspending(row)}
-                      >
-                        Suspender
-                      </Button>
-                    ))}
-                </PlatformRow>
-              ))}
-            </ul>
-          </Card>
+          <PlatformTable columns={tenantColumns(tab)} grid={TENANT_GRID[tab]}>
+            {rows.map((row) => (
+              <PlatformRow
+                key={row.id}
+                row={row}
+                tab={tab}
+                actions={
+                  <PlatformRowActions row={row} tab={tab} pending={pending} handlers={handlers} />
+                }
+              />
+            ))}
+          </PlatformTable>
         )}
 
         <RejectDialog
@@ -356,88 +307,6 @@ export function PlatformPage() {
         />
       </section>
     </PlatformShell>
-  );
-}
-
-/** Constancia de una empresa borrada o en borrado (SPEC 20). Sin acciones. */
-function DeletionRow({ row }: { row: PlatformTenantDeletionRow }) {
-  const done = row.completedAt !== null;
-  const counts = [
-    `${row.membersDeleted} miembros`,
-    `${row.usersDeleted} cuentas`,
-    `${row.conversationsDeleted} conversaciones`,
-    `${row.messagesDeleted} mensajes`,
-    `${row.attachmentsDeleted} archivos`,
-  ].join(' · ');
-  return (
-    <li className="flex flex-col gap-1 px-4 py-4">
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <span className="truncate text-sm font-medium">{row.tenantName}</span>
-        <span className="text-muted-foreground truncate text-xs">{row.tenantSlug}</span>
-        <Badge variant={done ? 'secondary' : 'destructive'}>
-          {done ? `Borrada el ${formatDate(row.completedAt)}` : 'Borrando…'}
-        </Badge>
-      </div>
-      <span className="text-muted-foreground truncate text-xs">
-        Borrada por {row.requestedByEmail} · pedida el {formatDate(row.requestedAt)}
-      </span>
-      <span className="text-muted-foreground text-xs tabular-nums">{counts}</span>
-    </li>
-  );
-}
-
-/** Una empresa o un rechazo. En móvil se apila: datos arriba, acciones debajo. */
-function PlatformRow({
-  row,
-  tab,
-  children,
-}: {
-  row: PlatformTenantRow;
-  tab: PlatformTenantStatus;
-  children?: ReactNode;
-}) {
-  const state = row.state ? STATE[row.state] : null;
-  const when =
-    tab === 'pending'
-      ? `Pedida el ${formatDate(row.requestedAt)}`
-      : tab === 'approved'
-        ? `Aprobada el ${formatDate(row.approvedAt)}`
-        : `Rechazada el ${formatDate(row.rejectedAt)}`;
-  return (
-    <li className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:justify-between">
-      <div className="flex min-w-0 flex-col gap-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <span className="truncate text-sm font-medium">{row.name}</span>
-          <span className="text-muted-foreground truncate text-xs">{row.slug}</span>
-          {state && <Badge variant={state.variant}>{state.label}</Badge>}
-        </div>
-        <span className="text-muted-foreground truncate text-xs">
-          {tab === 'approved' ? 'Owner' : 'Solicitante'}: {row.requester.displayName}
-          {row.requester.email && ` · ${row.requester.email}`}
-        </span>
-        <span className="text-muted-foreground flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
-          <span className="inline-flex items-center gap-1">
-            <Phone aria-hidden className="size-3" />
-            {row.contactPhone ?? 'Sin teléfono'}
-          </span>
-          <span className="truncate">{row.contactEmail ?? 'Sin email de contacto'}</span>
-          <span>{when}</span>
-        </span>
-        {row.rejectionReason && (
-          <p className="bg-muted mt-1 rounded-md px-3 py-2 text-xs">
-            <span className="text-muted-foreground">Motivo: </span>
-            {row.rejectionReason}
-          </p>
-        )}
-        {row.state === 'suspended' && row.suspensionReason && (
-          <p className="bg-destructive/10 mt-1 rounded-md px-3 py-2 text-xs">
-            <span className="text-muted-foreground">Motivo de la suspensión: </span>
-            {row.suspensionReason}
-          </p>
-        )}
-      </div>
-      {children && <div className="flex shrink-0 gap-2">{children}</div>}
-    </li>
   );
 }
 

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Navigate, Outlet, useLocation, useMatch } from 'react-router';
 import { useMe } from '@/features/auth/api/use-me';
 import { blockedActiveMembership } from '@/features/auth/model/tenant-request';
@@ -6,6 +7,10 @@ import {
   RejectionNoticeDialog,
 } from '@/features/auth/ui/tenant-request-screens';
 import { inactiveTenantRedirect } from '@/features/company/inactive-tenant';
+import {
+  clearSignal,
+  isConversationsPath,
+} from '@/features/conversations/model/new-message-signal';
 import { PresenceReporter, PushOpenListener } from '@/features/notifications/push-runtime';
 import { OfflineBanner } from '@/shared/pwa/offline-banner';
 import { UpdatePrompt } from '@/shared/pwa/update-prompt';
@@ -26,6 +31,12 @@ export function AppLayout() {
   const pathname = useLocation().pathname;
   const blocked = blockedActiveMembership(me);
   const redirect = blocked ? null : inactiveTenantRedirect(me, pathname);
+  const onConversations = isConversationsPath(pathname);
+
+  // Entrar a Conversaciones apaga el aviso de mensaje nuevo (SPEC 21).
+  useEffect(() => {
+    if (onConversations) clearSignal();
+  }, [onConversations]);
 
   return (
     // `key`: al cambiar de empresa activa (o de estado), el socket se cierra y se abre con el room nuevo.

@@ -4,7 +4,7 @@ import { activeMembership, isManagerRole, useMe } from '@/features/auth/api/use-
 import { ApiHttpError } from '@/shared/api/http-client';
 import { detectIos, detectStandalone } from '@/shared/pwa/install-mode';
 import { Button } from '@/shared/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/shared/ui/card';
+import { SettingsPage, SettingsSection } from '@/shared/ui/settings-section';
 import {
   currentPushSubscription,
   disablePushOnThisDevice,
@@ -27,10 +27,15 @@ function deviceState(configAvailable: boolean, subscribed: boolean): DeviceState
   return subscribed ? 'on' : 'off';
 }
 
+/**
+ * `/settings/notifications`: este dispositivo (activar, desactivar y la prueba) y qué avisarte, en
+ * secciones de dos columnas (SPEC 21). Cada aviso va en la sección que lo produjo.
+ */
 export function NotificationsPage() {
   const { data: me } = useMe();
   const queryClient = useQueryClient();
-  const [notice, setNotice] = useState<string | null>(null);
+  const [deviceNotice, setDeviceNotice] = useState<string | null>(null);
+  const [preferencesNotice, setPreferencesNotice] = useState<string | null>(null);
   const [subscribed, setSubscribed] = useState<boolean | null>(null);
   const config = useQuery({ queryKey: ['push-config'], queryFn: fetchPushConfig });
   const preferences = useQuery({
@@ -65,10 +70,10 @@ export function NotificationsPage() {
     },
     onSuccess: (enabled) => {
       setSubscribed(enabled);
-      setNotice(enabled ? 'Notificaciones activadas en este dispositivo.' : 'Desactivadas.');
+      setDeviceNotice(enabled ? 'Notificaciones activadas en este dispositivo.' : 'Desactivadas.');
     },
     onError: () => {
-      setNotice(
+      setDeviceNotice(
         Notification.permission === 'denied'
           ? 'Bloqueadas: actívalas en los ajustes del navegador.'
           : 'No se pudo activar. Recarga la página e inténtalo de nuevo.',
@@ -80,16 +85,17 @@ export function NotificationsPage() {
     mutationFn: patchNotificationPreferences,
     onSuccess: (next) => {
       queryClient.setQueryData(PREFERENCES_KEY, next);
-      setNotice('Preferencias guardadas.');
+      setPreferencesNotice('Preferencias guardadas.');
     },
-    onError: () => setNotice('No se pudieron guardar.'),
+    onError: () => setPreferencesNotice('No se pudieron guardar.'),
   });
 
   const test = useMutation({
     mutationFn: postTestPush,
-    onSuccess: () => setNotice('Enviada. Si no aparece, revisa que este dispositivo esté activado.'),
+    onSuccess: () =>
+      setDeviceNotice('Enviada. Si no aparece, revisa que este dispositivo esté activado.'),
     onError: (error) => {
-      setNotice(
+      setDeviceNotice(
         error instanceof ApiHttpError && error.status === 503
           ? 'Este usuario no tiene dispositivos suscritos.'
           : 'No se pudo enviar la prueba.',
@@ -98,86 +104,82 @@ export function NotificationsPage() {
   });
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col gap-4 overflow-y-auto p-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>Notificaciones</CardTitle>
-          <CardDescription>
-            Avisos de asignaciones, mensajes y envíos fallidos en este dispositivo.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {state === 'checking' && <p className="text-muted-foreground text-sm">Comprobando…</p>}
-          {state === 'unavailable' && (
-            <p className="text-sm">Notificaciones no disponibles en este entorno.</p>
-          )}
-          {state === 'ios-install' && (
-            <p className="text-sm">
-              Instala la app (Compartir → Añadir a pantalla de inicio) para recibir notificaciones.
-            </p>
-          )}
-          {state === 'blocked' && (
-            <p className="text-sm">Bloqueadas: actívalas en los ajustes del navegador.</p>
-          )}
-          {state === 'on' && <p className="text-sm">Activadas en este dispositivo.</p>}
-          {(state === 'off' || state === 'on') && (
-            <Button type="button" onClick={() => toggle.mutate()} disabled={toggle.isPending}>
-              {state === 'on' ? 'Desactivar en este dispositivo' : 'Activar notificaciones en este dispositivo'}
-            </Button>
-          )}
-          {state === 'on' && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => test.mutate()}
-              disabled={test.isPending}
-            >
-              Enviar notificación de prueba
-            </Button>
-          )}
-          {notice && (
-            <p role="status" className="text-muted-foreground text-sm">
-              {notice}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+    <SettingsPage title="Notificaciones" description="Avisos push de OmniDesk">
+      <SettingsSection
+        title="Este dispositivo"
+        description="Avisos de asignaciones, mensajes y envíos fallidos en este dispositivo."
+      >
+        {state === 'checking' && <p className="text-muted-foreground text-sm">Comprobando…</p>}
+        {state === 'unavailable' && (
+          <p className="text-sm">Notificaciones no disponibles en este entorno.</p>
+        )}
+        {state === 'ios-install' && (
+          <p className="text-sm">
+            Instala la app (Compartir → Añadir a pantalla de inicio) para recibir notificaciones.
+          </p>
+        )}
+        {state === 'blocked' && (
+          <p className="text-sm">Bloqueadas: actívalas en los ajustes del navegador.</p>
+        )}
+        {state === 'on' && <p className="text-sm">Activadas en este dispositivo.</p>}
+        {(state === 'off' || state === 'on') && (
+          <Button type="button" onClick={() => toggle.mutate()} disabled={toggle.isPending}>
+            {state === 'on'
+              ? 'Desactivar en este dispositivo'
+              : 'Activar notificaciones en este dispositivo'}
+          </Button>
+        )}
+        {state === 'on' && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => test.mutate()}
+            disabled={test.isPending}
+          >
+            Enviar notificación de prueba
+          </Button>
+        )}
+        {deviceNotice && (
+          <p role="status" className="text-muted-foreground text-sm">
+            {deviceNotice}
+          </p>
+        )}
+      </SettingsSection>
 
       {preferences.data && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Qué avisarte</CardTitle>
-            <CardDescription>Estas preferencias son de esta empresa.</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
+        <SettingsSection title="Qué avisarte" description="Estas preferencias son de esta empresa.">
+          <Preference
+            label="Me asignan una conversación"
+            checked={preferences.data.assigned}
+            onChange={(assigned) => save.mutate({ ...preferences.data!, assigned })}
+          />
+          <Preference
+            label="El cliente escribe en una conversación mía"
+            checked={preferences.data.customerMessage}
+            onChange={(customerMessage) => save.mutate({ ...preferences.data!, customerMessage })}
+          />
+          <Preference
+            label="Falla un mensaje que envié"
+            checked={preferences.data.sendFailed}
+            onChange={(sendFailed) => save.mutate({ ...preferences.data!, sendFailed })}
+          />
+          {manager && (
             <Preference
-              label="Me asignan una conversación"
-              checked={preferences.data.assigned}
-              onChange={(assigned) => save.mutate({ ...preferences.data!, assigned })}
+              label="La IA abre una conversación nueva"
+              checked={preferences.data.newAiConversation}
+              onChange={(newAiConversation) =>
+                save.mutate({ ...preferences.data!, newAiConversation })
+              }
             />
-            <Preference
-              label="El cliente escribe en una conversación mía"
-              checked={preferences.data.customerMessage}
-              onChange={(customerMessage) => save.mutate({ ...preferences.data!, customerMessage })}
-            />
-            <Preference
-              label="Falla un mensaje que envié"
-              checked={preferences.data.sendFailed}
-              onChange={(sendFailed) => save.mutate({ ...preferences.data!, sendFailed })}
-            />
-            {manager && (
-              <Preference
-                label="La IA abre una conversación nueva"
-                checked={preferences.data.newAiConversation}
-                onChange={(newAiConversation) =>
-                  save.mutate({ ...preferences.data!, newAiConversation })
-                }
-              />
-            )}
-          </CardContent>
-        </Card>
+          )}
+          {preferencesNotice && (
+            <p role="status" className="text-muted-foreground text-sm">
+              {preferencesNotice}
+            </p>
+          )}
+        </SettingsSection>
       )}
-    </div>
+    </SettingsPage>
   );
 }
 

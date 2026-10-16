@@ -271,7 +271,7 @@ Todas las entidades de negocio llevan `tenantId`. Los índices compuestos empiez
 - El modo de atención se **deriva**: la IA atiende solo si `status = OPEN` y `assignedAgentId = null`. No hay una columna `handlingMode` duplicada.
 - Cada comando es una operación atómica del backend. Bloquea la fila de la conversación, valida permisos y pertenencia al tenant, cambia el estado, escribe `ConversationEvent` y `OutboxEvent`, e incrementa `controlVersion`.
 - Se asignan conversaciones individuales, no canales completos.
-- Permisos (SPEC 04): OWNER/ADMIN pueden todo; un AGENT solo toma conversaciones sin asignar y libera, cierra o reabre las suyas. Un AGENT no ve las conversaciones asignadas a otros (`404`, no `403`, para no revelar que existen). La política es una función pura (`can`) y el API siempre decide; la web solo la usa para mostrar u ocultar botones.
+- Permisos (SPEC 04 y 21): OWNER/ADMIN pueden todo; un AGENT solo toma conversaciones sin asignar y libera, cierra o reabre las suyas. Desde SPEC 21, un AGENT **ve** cualquier conversación de su empresa (`can(actor, 'view', …)` es `true` para todos los roles): lee el historial, los adjuntos y el contacto de una conversación de otro agente, pero actuar o escribir en ella responde `403`. La política es una función pura (`can`) y el API siempre decide; la web solo la usa para mostrar u ocultar botones.
 - Mensajes y eventos de asignación comparten el contador `lastSequence`: el historial es una sola línea de tiempo (`GET /conversations/:id/timeline`).
 
 ## 9. Protocolo de control de IA
@@ -334,7 +334,7 @@ La web registra el permiso solo al pulsar «Activar notificaciones». En escrito
 - El historial cronológico se ordena por `Message.sequence` (monótono por conversación). La hora del proveedor se guarda aparte.
 - La paginación del historial usa cursor por `sequence`.
 - Bandejas iniciales: IA/general, Mis conversaciones, Todas y Cerradas.
-- **Por defecto**, un `AGENT` ve las conversaciones sin asignar (IA) y las suyas. Las bandejas "Todas" y las conversaciones asignadas a otros agentes son solo para `OWNER` y `ADMIN`.
+- Todos los roles ven las cuatro bandejas (SPEC 21): "Todas" son todas las abiertas de la empresa y "Cerradas" todas las cerradas. Un `AGENT` ve en solo lectura las conversaciones de otros agentes.
 - Layout (SPEC 06), con aspecto de herramienta de soporte profesional:
   - **Rail** vertical de 64 px (≥ md) con los destinos (Conversaciones, Estado) y, abajo, el estado de conexión, el tema, instalar app y el usuario. En móvil pasa a una **barra inferior** que se oculta con un chat abierto.
   - **Lista**: buscador (nombre o teléfono, en el servidor y dentro de la bandeja activa) y bandejas como control segmentado.
@@ -448,7 +448,7 @@ La arquitectura sí admite estas ampliaciones.
 **Decisiones por defecto** (resuelven pendientes de v0.1; el spec del incremento correspondiente puede revisarlas):
 
 - Un mensaje entrante en una conversación cerrada la reabre y la devuelve a la IA (§8).
-- Un `AGENT` no ve las conversaciones asignadas a otros agentes (§10).
+- Un `AGENT` ve las conversaciones asignadas a otros agentes en solo lectura (SPEC 21, §10).
 - El MVP es solo texto.
 - Un número de WhatsApp por `Channel`. Una empresa puede tener varios `Channel`, y la ruta de envío sale de `Channel.provider`.
 - Las respuestas de IA en vuelo se resuelven con el protocolo `controlVersion` (§9).

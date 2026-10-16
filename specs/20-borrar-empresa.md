@@ -1,6 +1,6 @@
 # SPEC 20 — Borrado de empresas por el admin de plataforma
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:** SPEC 07, SPEC 12, SPEC 14, SPEC 15, SPEC 16, SPEC 18
 > **Date:** 2026-10-15
 > **Objective:** Un admin de plataforma puede borrar de forma irreversible una empresa suspendida desde `/platform`, y un proceso en segundo plano elimina todas sus filas, sus archivos del bucket y las cuentas de los miembros que no pertenecen a otra empresa.

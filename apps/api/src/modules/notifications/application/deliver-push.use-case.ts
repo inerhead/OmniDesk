@@ -65,12 +65,18 @@ export class DeliverPushUseCase implements PushSender {
     const topic = event.conversationId.replaceAll('-', '');
 
     for (const target of context.targets) {
-      if (
-        shouldSuppress(event.kind, target.memberId, event.conversationId, this.presence.snapshot())
-      ) {
-        continue;
-      }
       for (const subscription of target.subscriptions) {
+        if (
+          shouldSuppress(
+            event.kind,
+            target.memberId,
+            event.conversationId,
+            subscription.endpoint,
+            this.presence.snapshot(),
+          )
+        ) {
+          continue;
+        }
         try {
           await this.transport.send(subscription, body, { ttl: PUSH_TTL_SECONDS, topic });
           await this.notifications.touch(subscription.endpoint, new Date());

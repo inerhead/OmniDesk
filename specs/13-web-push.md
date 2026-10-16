@@ -1,6 +1,6 @@
 # SPEC 13 — Robustez IV: notificaciones Web Push
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:** SPEC 06, SPEC 07, SPEC 08
 > **Date:** 2026-10-12
 > **Objective:** Los miembros activan notificaciones Web Push por dispositivo y eligen con 4 interruptores cuáles reciben (asignación, mensaje del cliente, envío fallido, nueva conversación en IA), y el API las envía mediante el Outbox con VAPID, mostrando el nombre del contacto y un preview que al tocarse abre la conversación en la PWA.
@@ -37,9 +37,9 @@ Las notificaciones se generan como eventos del Outbox, en la misma transacción 
     - Si crea una conversación nueva → `new_ai_conversation`.
   - Dispatcher, al marcar un mensaje `FAILED` → `send_failed`.
 - **Supresión de "mensaje del cliente" cuando el agente ya lo está viendo:**
-  - La web emite `presence { conversationId | null, visible }` por Socket.IO cuando cambia `visibilitychange` o la conversación abierta.
-  - El API guarda en memoria la presencia por miembro.
-  - El dispatcher omite `customer_message` si el miembro tiene un socket con `visible: true` y esa conversación abierta.
+  - La web emite `presence { conversationId | null, visible, endpoint | null }` por Socket.IO cuando cambia `visibilitychange` o la conversación abierta. `endpoint` es la suscripción push de ese navegador.
+  - El API guarda en memoria la presencia por socket.
+  - El dispatcher omite `customer_message` solo para la suscripción cuyo socket tiene `visible: true` y esa conversación abierta. Los demás dispositivos del miembro (otro navegador, el móvil) sí reciben el aviso.
   - Las demás notificaciones nunca se suprimen.
 - **Envío:**
   - Con la librería `web-push`, a todas las suscripciones de los usuarios destinatarios.
@@ -48,7 +48,7 @@ Las notificaciones se generan como eventos del Outbox, en la misma transacción 
   - Una respuesta `404`/`410` borra la suscripción.
   - Otros errores se reintentan con la política del Outbox, hasta 3 intentos (en push, una notificación tardía no aporta).
 - **Contenido:**
-  - **Título:** nombre del contacto o, si no tiene, el teléfono.
+  - **Título:** nombre del contacto y teléfono ("Ana · +573001112233") o, si no tiene nombre, solo el teléfono.
   - **Cuerpo:**
     - `assigned`: "Te asignaron esta conversación".
     - `customer_message` y `new_ai_conversation`: el preview del mensaje, de 80 caracteres como máximo, con "…".
@@ -207,7 +207,7 @@ shouldSuppress(kind, memberId, conversationId, presence: PresenceMap): boolean
 - [ ] Sup. Demo asigna una conversación a Laura: Laura recibe "Te asignaron esta conversación" con el nombre del contacto.
 - [ ] Laura se asigna a sí misma una conversación: no recibe notificación.
 - [ ] El cliente escribe en una conversación de Laura: Laura recibe el nombre y el preview, recortado a 80 caracteres.
-- [ ] Con esa misma conversación abierta y visible en la PWA de Laura, un nuevo mensaje del cliente **no** genera notificación. Con la pestaña oculta, sí.
+- [ ] Con esa misma conversación abierta y visible en la PWA de Laura, un nuevo mensaje del cliente **no** genera notificación en ese dispositivo, pero sí en sus otros dispositivos. Con la pestaña oculta, sí.
 - [ ] Con `SIMULATED_PROVIDER_FAILURE_RATE=1`, el mensaje de Laura que queda `FAILED` genera "No se pudo enviar tu mensaje".
 - [ ] Con "Nuevo mensaje del cliente" desactivado, Laura no recibe esa notificación pero sí las de asignación.
 - [ ] Sup. Demo con "Nueva conversación en IA" activado recibe una notificación al crearse una conversación nueva desde el simulador. Con el interruptor desactivado (por defecto), no.

@@ -65,6 +65,32 @@ describe('DeliverPushUseCase', () => {
     expect(notifications.touch).toHaveBeenCalledWith('https://push.example/ok', expect.any(Date));
   });
 
+  it('con el chat abierto en un dispositivo, avisa solo a los demás', async () => {
+    const transport: PushTransport = { send: vi.fn(async () => undefined) };
+    const presence = new PresenceRegistry();
+    presence.set('mac', {
+      memberId,
+      conversationId,
+      visible: true,
+      endpoint: 'https://push.example/gone',
+    });
+    const useCase = new DeliverPushUseCase(env, repository(), transport, presence);
+
+    await useCase.deliver({
+      kind: 'customer_message',
+      tenantId,
+      conversationId,
+      recipientMemberIds: [memberId],
+    });
+
+    expect(transport.send).toHaveBeenCalledTimes(1);
+    expect(transport.send).toHaveBeenCalledWith(
+      expect.objectContaining({ endpoint: 'https://push.example/ok' }),
+      expect.any(String),
+      expect.any(Object),
+    );
+  });
+
   it('un fallo transitorio se propaga para que el Outbox reintente', async () => {
     const transport: PushTransport = {
       send: vi.fn(async () => {

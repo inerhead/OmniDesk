@@ -33,11 +33,13 @@ export interface RecipientContext {
   members: MemberPrefs[];
 }
 
-/** Un socket abierto: se suprime el aviso solo si este miembro está viendo el chat. */
+/** Un socket abierto: se suprime el aviso solo en el dispositivo que está viendo el chat. */
 export interface PresenceEntry {
   memberId: string;
   conversationId: string | null;
   visible: boolean;
+  /** Suscripción push del navegador de este socket; null si no tiene. */
+  endpoint: string | null;
 }
 
 export type PresenceMap = ReadonlyMap<string, PresenceEntry>;
@@ -57,7 +59,10 @@ export function buildPushPayload(
   tenantId: string,
   basePath: string,
 ): PushPayload {
-  const title = contact.displayName?.trim() || contact.externalId;
+  const name = contact.displayName?.trim();
+  // Con nombre, también el teléfono: dos contactos pueden llamarse igual.
+  const title =
+    name && contact.externalId ? `${name} · ${contact.externalId}` : name || contact.externalId;
   const body =
     kind === 'assigned'
       ? 'Te asignaron esta conversación'
@@ -105,13 +110,14 @@ export function resolveRecipients(kind: NotificationKind, ctx: RecipientContext)
 }
 
 /**
- * Solo `customer_message` se calla, y solo si algún socket de ese miembro tiene el chat abierto
- * y la pestaña visible. El resto de avisos siempre se envían.
+ * Solo `customer_message` se calla, y solo en la suscripción `endpoint` si su socket tiene el chat
+ * abierto y la pestaña visible. Los demás dispositivos del miembro y el resto de avisos, siempre.
  */
 export function shouldSuppress(
   kind: NotificationKind,
   memberId: string,
   conversationId: string,
+  endpoint: string,
   presence: PresenceMap,
 ): boolean {
   if (kind !== 'customer_message') return false;
@@ -119,7 +125,8 @@ export function shouldSuppress(
     if (
       entry.memberId === memberId &&
       entry.visible &&
-      entry.conversationId === conversationId
+      entry.conversationId === conversationId &&
+      entry.endpoint === endpoint
     ) {
       return true;
     }

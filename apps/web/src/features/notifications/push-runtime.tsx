@@ -6,21 +6,50 @@ import { resetSessionCache } from '@/features/auth/api/use-session-actions';
 import { useMe } from '@/features/auth/api/use-me';
 import { basePath } from '@/shared/config/env';
 import { emitPresence } from '@/shared/realtime/realtime-client';
+import { currentPushSubscription } from './push-api';
 
-/** Reporta la conversación abierta y si la pestaña está visible, para no avisar de lo que ya se ve. */
+/** Se conserva entre chats: así no se reporta `null` mientras se vuelve a leer. */
+let knownEndpoint: string | null = null;
+
+/**
+ * Reporta la conversación abierta, si la pestaña está visible y la suscripción push de este
+ * navegador: el API no avisa en este dispositivo de lo que ya se ve, pero sí en los demás.
+ */
 export function PresenceReporter() {
   const match = useMatch('/conversations/:conversationId');
   const conversationId = match?.params.conversationId ?? null;
 
   useEffect(() => {
+    let active = true;
     const report = () => {
-      emitPresence({ conversationId, visible: document.visibilityState === 'visible' });
+      emitPresence({
+        conversationId,
+        visible: document.visibilityState === 'visible',
+        endpoint: knownEndpoint,
+      });
     };
-    report();
-    document.addEventListener('visibilitychange', report);
+    // Al volver a la pestaña puede haber cambiado la suscripción (activada o desactivada).
+    const refresh = () => {
+      report();
+      void currentPushSubscription()
+        .catch(() => null)
+        .then((subscription) => {
+          const next = subscription?.endpoint ?? null;
+          if (next === knownEndpoint) return;
+          knownEndpoint = next;
+          if (active) report();
+        });
+    };
+    refresh();
+    document.addEventListener('visibilitychange', refresh);
     return () => {
-      document.removeEventListener('visibilitychange', report);
-      emitPresence({ conversationId: null, visible: document.visibilityState === 'visible' });
+      active = false;
+      document.removeEventListener('visibilitychange', refresh);
+      emitPresence({
+        conversationId: null,
+        visible: document.visibilityState === 'visible',
+        endpoint: knownEndpoint,
+      });
     };
   }, [conversationId]);
 

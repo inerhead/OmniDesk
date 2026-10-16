@@ -26,7 +26,7 @@ export interface SocketLike {
 const RETRY_AFTER_SERVER_DISCONNECT_MS = 5_000;
 
 let activeSocket: { emit(event: string, payload: PresenceEvent): void } | null = null;
-let lastPresence: PresenceEvent = { conversationId: null, visible: true };
+let lastPresence: PresenceEvent = { conversationId: null, visible: true, endpoint: null };
 
 /** Avisa qué conversación está abierta y si la pestaña se ve. El API suprime el aviso de mensaje. */
 export function emitPresence(event: PresenceEvent): void {

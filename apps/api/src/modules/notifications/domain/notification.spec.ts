@@ -51,11 +51,18 @@ describe('buildPushPayload', () => {
     ).toBe('+57');
   });
 
+  it('sin teléfono, el título es solo el nombre', () => {
+    expect(
+      buildPushPayload('assigned', { displayName: 'Ana', externalId: '' }, null, 'c1', 't1', '/')
+        .title,
+    ).toBe('Ana');
+  });
+
   it('arma título, cuerpo y la ruta de la conversación', () => {
     expect(
       buildPushPayload('assigned', contact, null, 'c1', 't1', '/omnidesk'),
     ).toMatchObject({
-      title: 'Ana',
+      title: 'Ana · +573001112233',
       body: 'Te asignaron esta conversación',
       tag: 'c1',
       url: '/omnidesk/conversations/c1',
@@ -143,21 +150,35 @@ describe('resolveRecipients', () => {
 });
 
 describe('shouldSuppress', () => {
+  const mac = 'https://push.example/mac';
+  const phone = 'https://push.example/phone';
   const presence: PresenceMap = new Map([
-    ['s1', { memberId: 'laura', conversationId: 'c1', visible: true }],
-    ['s2', { memberId: 'laura', conversationId: 'c1', visible: false }],
+    ['s1', { memberId: 'laura', conversationId: 'c1', visible: true, endpoint: mac }],
+    ['s2', { memberId: 'laura', conversationId: 'c1', visible: false, endpoint: phone }],
   ]);
 
-  it('calla el mensaje del cliente si algún socket lo está viendo', () => {
-    expect(shouldSuppress('customer_message', 'laura', 'c1', presence)).toBe(true);
-    expect(shouldSuppress('customer_message', 'laura', 'otra', presence)).toBe(false);
-    expect(shouldSuppress('assigned', 'laura', 'c1', presence)).toBe(false);
+  it('calla el mensaje del cliente solo en el dispositivo que lo está viendo', () => {
+    expect(shouldSuppress('customer_message', 'laura', 'c1', mac, presence)).toBe(true);
+    expect(shouldSuppress('customer_message', 'laura', 'c1', phone, presence)).toBe(false);
+    expect(shouldSuppress('customer_message', 'laura', 'otra', mac, presence)).toBe(false);
+    expect(shouldSuppress('assigned', 'laura', 'c1', mac, presence)).toBe(false);
   });
 
   it('con la pestaña oculta sí se notifica', () => {
     const hidden: PresenceMap = new Map([
-      ['s2', { memberId: 'laura', conversationId: 'c1', visible: false }],
+      ['s1', { memberId: 'laura', conversationId: 'c1', visible: false, endpoint: mac }],
     ]);
-    expect(shouldSuppress('customer_message', 'laura', 'c1', hidden)).toBe(false);
+    expect(shouldSuppress('customer_message', 'laura', 'c1', mac, hidden)).toBe(false);
+  });
+
+  it('un socket sin suscripción en ese navegador no calla a los demás dispositivos', () => {
+    const noPush: PresenceMap = new Map([
+      ['s1', { memberId: 'laura', conversationId: 'c1', visible: true, endpoint: null }],
+    ]);
+    expect(shouldSuppress('customer_message', 'laura', 'c1', phone, noPush)).toBe(false);
+  });
+
+  it('otro miembro con el mismo navegador no calla el aviso', () => {
+    expect(shouldSuppress('customer_message', 'owner', 'c1', mac, presence)).toBe(false);
   });
 });

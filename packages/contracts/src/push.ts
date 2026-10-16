@@ -24,9 +24,13 @@ export const NotificationPreferencesSchema = z.object({
 });
 export type NotificationPreferences = z.infer<typeof NotificationPreferencesSchema>;
 
-/** Lo que la web emite por Socket.IO al abrir un chat o cambiar de pestaña. */
+/**
+ * Lo que la web emite por Socket.IO al abrir un chat o cambiar de pestaña. `endpoint` es la
+ * suscripción push de ese navegador (null sin suscripción): solo ese dispositivo se calla.
+ */
 export const PresenceEventSchema = z.object({
   conversationId: z.uuid().nullable(),
   visible: z.boolean(),
+  endpoint: z.url().nullable().default(null),
 });
 export type PresenceEvent = z.infer<typeof PresenceEventSchema>;

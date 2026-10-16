@@ -1,6 +1,6 @@
 # SPEC 21 — Diseño web en ajustes, plataforma y login; icono con aviso; Agent ve Todas
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:** SPEC 04, SPEC 06, SPEC 16, SPEC 17, SPEC 18, SPEC 20
 > **Date:** 2026-10-15
 > **Objective:** Empresa, Notificaciones y Perfil pasan a ajustes en dos columnas, `/platform` a una tabla con columnas, login, onboarding e invitación a pantalla partida, el icono de Conversaciones solo se anima cuando entra un mensaje de un cliente, y un Agent ve las pestañas "Todas" y "Cerradas" completas en solo lectura.

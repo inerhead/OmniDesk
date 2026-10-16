@@ -10,7 +10,7 @@ describe('previewSource', () => {
     expect(
       previewSource({
         text: 'Mi factura',
-        attachment: { kind: 'IMAGE', mimeType: 'image/jpeg', status: 'PENDING' },
+        attachment: { kind: 'IMAGE' },
       }),
     ).toBe('Foto · Mi factura');
   });
@@ -19,19 +19,21 @@ describe('previewSource', () => {
     expect(
       previewSource({
         text: '',
-        attachment: {
-          kind: 'DOCUMENT',
-          mimeType: 'application/pdf',
-          status: 'PENDING',
-          fileName: 'cotización.pdf',
-        },
+        attachment: { kind: 'DOCUMENT', fileName: 'cotización.pdf' },
       }),
     ).toBe('Documento: cotización.pdf');
     expect(
       previewSource({
         text: '',
-        attachment: { kind: 'AUDIO', mimeType: 'audio/ogg', status: 'PENDING', voice: true },
+        attachment: { kind: 'AUDIO', voice: true },
       }),
     ).toBe('Nota de voz');
+  });
+
+  it('con la fila de la base: documento sin nombre y adjunto nulo', () => {
+    expect(previewSource({ text: '', attachment: { kind: 'DOCUMENT', fileName: null } })).toBe(
+      'Documento',
+    );
+    expect(previewSource({ text: 'Hola', attachment: null })).toBe('Hola');
   });
 });

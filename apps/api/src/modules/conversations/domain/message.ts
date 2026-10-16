@@ -116,7 +116,10 @@ const KIND_LABELS: Record<AttachmentKind, string> = {
 };
 
 /** Texto del que sale la vista previa de la lista: el texto o, con adjunto, su tipo y el pie. */
-export function previewSource(message: Pick<NewMessage, 'text' | 'attachment'>): string {
+export function previewSource(message: {
+  text: string;
+  attachment?: { kind: AttachmentKind; voice?: boolean; fileName?: string | null } | null;
+}): string {
   const { attachment, text } = message;
   if (!attachment) return text;
   const label = attachment.voice

@@ -51,7 +51,7 @@ Las notificaciones se generan como eventos del Outbox, en la misma transacción 
   - **Título:** nombre del contacto y teléfono ("Ana · +573001112233") o, si no tiene nombre, solo el teléfono.
   - **Cuerpo:**
     - `assigned`: "Te asignaron esta conversación".
-    - `customer_message` y `new_ai_conversation`: el preview del mensaje, de 80 caracteres como máximo, con "…".
+    - `customer_message` y `new_ai_conversation`: el preview del mensaje, de 80 caracteres como máximo, con "…". Es el mismo texto que la bandeja (`previewSource`): con adjunto, su tipo y el pie ("Foto", "Foto · pie", "Nota de voz").
     - `send_failed`: "No se pudo enviar tu mensaje".
   - `tag` = `conversationId` (agrupa en el dispositivo), y el icono es el de la app.
   - Al tocarla, se enfoca una ventana existente de la PWA y se navega a `/omnidesk/conversations/:id`, o se abre una nueva.

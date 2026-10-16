@@ -7,6 +7,10 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
+import {
+  NOTIFICATION_REPOSITORY,
+  type NotificationRepository,
+} from '../src/modules/notifications/application/ports/notification.repository';
 import { PrismaService } from '../src/shared/infrastructure/prisma/prisma.service';
 import { devLogin, WEB_ORIGIN } from './support/session';
 import { E2E_DEMO_KEY, testEnv } from './support/test-env';
@@ -184,6 +188,43 @@ describe('Web Push (e2e)', () => {
         }),
       ]);
       expect(forConversation(taken.body.conversationId)).toHaveLength(0);
+    });
+
+    it('el aviso de una foto sin pie usa la vista previa de la bandeja, no un texto vacío', async () => {
+      const inbound = await http()
+        .post('/api/v1/integrations/messages/inbound')
+        .set('Authorization', `Bearer ${E2E_DEMO_KEY}`)
+        .send({
+          externalMessageId: randomUUID(),
+          from: { externalId: phone(), displayName: 'Cliente' },
+          text: 'pie',
+          sentAt: new Date().toISOString(),
+        })
+        .expect(201);
+      // El endpoint de integración exige texto; un entrante de WhatsApp con foto llega sin pie.
+      const message = await prisma.message.update({
+        where: { id: inbound.body.messageId },
+        data: { text: '' },
+      });
+      await prisma.messageAttachment.create({
+        data: {
+          tenantId: message.tenantId,
+          messageId: message.id,
+          kind: 'IMAGE',
+          mimeType: 'image/jpeg',
+          status: 'PENDING',
+        },
+      });
+
+      const context = await app.get<NotificationRepository>(NOTIFICATION_REPOSITORY).loadDelivery({
+        kind: 'customer_message',
+        tenantId: message.tenantId,
+        conversationId: inbound.body.conversationId,
+        recipientMemberIds: [laura],
+        messageId: message.id,
+      });
+
+      expect(context?.preview).toBe('Foto');
     });
 
     it('la prueba sin dispositivos responde 503', async () => {

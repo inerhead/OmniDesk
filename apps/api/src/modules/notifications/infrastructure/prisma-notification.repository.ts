@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { NotificationPreferences } from '@omnidesk/contracts';
 import { PrismaDb } from '../../../shared/infrastructure/prisma/prisma-transaction-runner';
+import { previewSource } from '../../conversations/domain/message';
 import type { MemberPrefs } from '../domain/notification';
 import type {
   DeliveryContext,
@@ -141,14 +142,17 @@ export class PrismaNotificationRepository implements NotificationRepository {
     });
     if (!conversation) return null;
 
-    const preview = event.messageId
-      ? ((
-          await this.db.client.message.findFirst({
-            where: { id: event.messageId, conversationId: event.conversationId },
-            select: { text: true },
-          })
-        )?.text ?? null)
+    // La misma vista previa que la bandeja: una foto sin pie no deja el aviso vacío.
+    const message = event.messageId
+      ? await this.db.client.message.findFirst({
+          where: { id: event.messageId, conversationId: event.conversationId },
+          select: {
+            text: true,
+            attachment: { select: { kind: true, voice: true, fileName: true } },
+          },
+        })
       : null;
+    const preview = message ? previewSource(message) : null;
 
     const members = await this.db.client.tenantMember.findMany({
       where: { tenantId: event.tenantId, id: { in: event.recipientMemberIds }, removedAt: null },

@@ -1,0 +1,193 @@
+{
+  "name": "OmniDesk — entrada",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "omnidesk",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "91aa120c-954d-429d-8d72-f4dd4173ea0b",
+      "name": "OmniDesk",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        2624,
+        720
+      ],
+      "webhookId": "omnidesk"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "5Cx5Z1iiS9eDfZde",
+          "mode": "list",
+          "cachedResultName": "Credentials",
+          "cachedResultUrl": "/projects/GiBzROGbG83mhghA/datatables/5Cx5Z1iiS9eDfZde"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "=clientId",
+              "condition": "=eq",
+              "keyValue": "={{ $json.headers['x-client-id'] }}"
+            },
+            {
+              "keyName": "clientSecret",
+              "keyValue": "={{ $json.headers['x-client-secret'] }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "id": "61144d7a-5714-4820-b0d8-4ae0a3becf09",
+      "name": "Buscar cliente",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2768,
+        432
+      ],
+      "settings": {
+        "alwaysOutputData": true
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify(!$json.clientId ? { ok: false } : $('OmniDesk').item.json.body.type === 'ping' ? { ok: true } : { ok: false }) }}",
+        "options": {
+          "responseCode": "={{ !$json.clientId ? 401 : $('OmniDesk').item.json.body.type === 'ping' ? 200 : $('OmniDesk').item.json.body.type === 'ai.reply' ? 501 : 400 }}"
+        }
+      },
+      "id": "eec6ca04-7f86-497a-8b51-82c7a5e46835",
+      "name": "Responder a OmniDesk",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        3200,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "54553ab4-17cf-4af6-bc68-997e04d9c08e",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2944,
+        704
+      ],
+      "id": "d21eabbc-684a-4c1c-b246-9ef9647c4f99",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify(!$json.clientId ? { ok: false } : $('OmniDesk').item.json.body.type === 'ping' ? { ok: true } : { ok: false }) }}",
+        "options": {
+          "responseCode": "={{ !$json.clientId ? 401 : $('OmniDesk').item.json.body.type === 'ping' ? 200 : $('OmniDesk').item.json.body.type === 'ai.reply' ? 501 : 400 }}"
+        }
+      },
+      "id": "e4fe2075-cd19-4ae4-986a-519e107bf32a",
+      "name": "Responder a OmniDesk1",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        3200,
+        864
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "OmniDesk": {
+      "main": [
+        [
+          {
+            "node": "Buscar cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar cliente": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Responder a OmniDesk": {
+      "main": [
+        []
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Responder a OmniDesk",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder a OmniDesk1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "7331ceb2-5c54-4c16-85c2-34acae08db6b",
+  "meta": {
+    "instanceId": "63a2d636d880c69beaf6b24abb4135e00a0f74e454fdd2b333ffbd4c826c1cfd"
+  },
+  "nodeGroups": [],
+  "id": "QdXtwNDNUYrhurHj",
+  "tags": []
+}

@@ -29,7 +29,7 @@ export class N8nMessagingProvider implements MessagingProvider {
   async send(request: SendMessageRequest): Promise<{ providerMessageId: string }> {
     if (request.attachment) throw new ChannelNotConfiguredError('el canal n8n no admite adjuntos');
     const { channel } = request;
-    if (!channel.n8nClientId || !channel.n8nClientSecretEnc) {
+    if (!channel.n8nClientSecretEnc) {
       throw new ChannelNotConfiguredError(
         `el canal ${channel.id} no tiene credenciales de cliente de n8n`,
       );
@@ -52,7 +52,7 @@ export class N8nMessagingProvider implements MessagingProvider {
         timeoutMs: this.timeoutMs,
         headers: {
           'idempotency-key': request.messageId,
-          ...n8nClientHeaders(channel.n8nClientId, this.cipher.decrypt(channel.n8nClientSecretEnc)),
+          ...n8nClientHeaders(channel.id, this.cipher.decrypt(channel.n8nClientSecretEnc)),
         },
       });
     } catch (error) {

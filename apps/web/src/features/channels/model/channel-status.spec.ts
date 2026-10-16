@@ -6,7 +6,6 @@ const cloud = {
   webhookUrl: null,
   aiEnabled: false,
   hasWhatsAppCredentials: false,
-  n8nClientId: null,
   hasN8nClientSecret: false,
 };
 
@@ -23,7 +22,6 @@ describe('channelBadges', () => {
     const full = {
       ...cloud,
       webhookUrl: 'https://n8n.example.com/webhook/ai',
-      n8nClientId: 'acme',
       hasN8nClientSecret: true,
       aiEnabled: true,
       hasWhatsAppCredentials: true,
@@ -45,12 +43,11 @@ describe('channelBadges', () => {
 });
 
 describe('channelSteps', () => {
-  it('WhatsApp Cloud: dos pasos; la IA cuenta con webhook, credenciales de cliente e interruptor', () => {
+  it('WhatsApp Cloud: dos pasos; la IA cuenta con webhook, secreto de cliente e interruptor', () => {
     const half = {
       ...cloud,
       hasWhatsAppCredentials: true,
       webhookUrl: 'https://n8n.example.com/w',
-      n8nClientId: 'acme',
       hasN8nClientSecret: true,
     };
     expect(channelSteps(half).map((step) => [step.number, step.key, step.done])).toEqual([
@@ -68,17 +65,18 @@ describe('channelSteps', () => {
     ).toEqual([true, false]);
   });
 
-  it('n8n (legado): un solo paso, completo con webhook y credenciales de cliente', () => {
+  it('n8n (legado): un solo paso, completo con webhook y secreto de cliente', () => {
     const n8n = {
       ...cloud,
       provider: 'N8N' as const,
       webhookUrl: 'https://n8n.example.com/w',
-      n8nClientId: 'acme',
       hasN8nClientSecret: true,
     };
     expect(channelSteps(n8n).map((step) => [step.number, step.title, step.done])).toEqual([
       [1, 'IA con n8n', true],
     ]);
-    expect(channelSteps({ ...n8n, n8nClientId: null }).map((step) => step.done)).toEqual([false]);
+    expect(channelSteps({ ...n8n, hasN8nClientSecret: false }).map((step) => step.done)).toEqual([
+      false,
+    ]);
   });
 });

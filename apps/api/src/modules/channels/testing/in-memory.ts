@@ -14,10 +14,10 @@ interface StoredChannel extends ChannelSummary {
   n8nClientSecretEnc: SecretBlob | null;
 }
 
-/** Solo lo que usan las credenciales de cliente de n8n (SPEC 22). */
+/** Solo lo que usa el secreto de cliente de n8n (SPEC 22). */
 export class InMemoryChannels implements Pick<
   ChannelRepository,
-  'findSummary' | 'setN8nClient' | 'clearN8nClient'
+  'findSummary' | 'setN8nClientSecret' | 'clearN8nClientSecret'
 > {
   readonly byId = new Map<string, StoredChannel>();
 
@@ -32,7 +32,6 @@ export class InMemoryChannels implements Pick<
       credentialsRotatedAt: null,
       aiEnabled: false,
       hasWhatsAppCredentials: true,
-      n8nClientId: null,
       hasN8nClientSecret: false,
       n8nClientSecretEnc: null,
       ...channel,
@@ -53,22 +52,21 @@ export class InMemoryChannels implements Pick<
     return { ...summary, hasN8nClientSecret: n8nClientSecretEnc !== null };
   }
 
-  async setN8nClient(
+  async setN8nClientSecret(
     tenantId: string,
     channelId: string,
-    { clientId, clientSecretEnc }: { clientId: string; clientSecretEnc?: SecretBlob },
+    secretEnc: SecretBlob,
   ): Promise<boolean> {
     const channel = this.find(tenantId, channelId);
     if (!channel) return false;
-    channel.n8nClientId = clientId;
-    if (clientSecretEnc) channel.n8nClientSecretEnc = clientSecretEnc;
+    channel.n8nClientSecretEnc = secretEnc;
     return true;
   }
 
-  async clearN8nClient(tenantId: string, channelId: string): Promise<boolean> {
+  async clearN8nClientSecret(tenantId: string, channelId: string): Promise<boolean> {
     const channel = this.find(tenantId, channelId);
     if (!channel) return false;
-    Object.assign(channel, { n8nClientId: null, n8nClientSecretEnc: null, aiEnabled: false });
+    Object.assign(channel, { n8nClientSecretEnc: null, aiEnabled: false });
     return true;
   }
 }

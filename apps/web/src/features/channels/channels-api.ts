@@ -2,17 +2,16 @@ import {
   ChannelSchema,
   ListChannelsResponseSchema,
   ChannelTestResponseSchema,
+  N8nClientCredentialsResponseSchema,
   type CreateChannelRequest,
   type UpdateChannelRequest,
   type ConfigureWhatsAppRequest,
-  type ConfigureN8nClientRequest,
 } from '@omnidesk/contracts';
 import {
   deleteJson,
   getJson,
   patchJson,
   postJson,
-  putJson,
   type ApiResponse,
 } from '@/shared/api/http-client';
 
@@ -39,8 +38,10 @@ export async function updateChannel(id: string, body: UpdateChannelRequest) {
 export async function configureWhatsApp(id: string, body: ConfigureWhatsAppRequest) {
   checked(await patchJson(`/api/v1/channels/${id}/whatsapp`, body));
 }
-export async function configureN8nClient(id: string, body: ConfigureN8nClientRequest) {
-  return ChannelSchema.parse(checked(await putJson(`/api/v1/channels/${id}/n8n-client`, body)));
+export async function generateN8nClientSecret(id: string) {
+  return N8nClientCredentialsResponseSchema.parse(
+    checked(await postJson(`/api/v1/channels/${id}/n8n-client`, {})),
+  );
 }
 export async function removeN8nClient(id: string) {
   return ChannelSchema.parse(checked(await deleteJson(`/api/v1/channels/${id}/n8n-client`)));

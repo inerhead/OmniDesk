@@ -25,15 +25,16 @@ export interface ChannelSummary extends Channel {
   credentialsRotatedAt: Date | null;
   aiEnabled?: boolean;
   hasWhatsAppCredentials?: boolean;
-  /** `X-Client-Id` hacia n8n (SPEC 22). */
-  n8nClientId: string | null;
-  /** Tiene `clientSecret` guardado; el valor nunca sale del servidor. */
+  /** Tiene `clientSecret` para n8n; el valor solo sale al generarlo (SPEC 22). */
   hasN8nClientSecret: boolean;
 }
 
-/** Cabeceras con las que OmniDesk se autentica ante n8n en cada llamada (SPEC 22). */
-export function n8nClientHeaders(clientId: string, clientSecret: string): Record<string, string> {
-  return { 'X-Client-Id': clientId, 'X-Client-Secret': clientSecret };
+/**
+ * Cabeceras con las que OmniDesk se autentica ante n8n en cada llamada (SPEC 22): el `clientId` es el
+ * id del canal.
+ */
+export function n8nClientHeaders(channelId: string, clientSecret: string): Record<string, string> {
+  return { 'X-Client-Id': channelId, 'X-Client-Secret': clientSecret };
 }
 
 /** Secretos HMAC cifrados de un canal. */

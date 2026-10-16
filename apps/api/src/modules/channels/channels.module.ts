@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { IdentityModule } from '../identity/identity.module';
 import {
-  ConfigureN8nClientUseCase,
   CreateChannelUseCase,
+  GenerateN8nClientSecretUseCase,
   ListChannelsUseCase,
   ListInboxChannelsUseCase,
   RemoveN8nClientUseCase,
@@ -37,7 +37,7 @@ import { PrismaChannelRepository } from './infrastructure/prisma-channel.reposit
     CreateChannelUseCase,
     UpdateChannelUseCase,
     TestChannelConnectionUseCase,
-    ConfigureN8nClientUseCase,
+    GenerateN8nClientSecretUseCase,
     RemoveN8nClientUseCase,
   ],
   exports: [CHANNEL_REPOSITORY, CHANNEL_SECRET_CIPHER, ChannelCredentialGuard],

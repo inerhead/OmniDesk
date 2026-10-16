@@ -17,9 +17,7 @@ export const ChannelSchema = z.object({
   webhookUrl: z.url().nullable(),
   aiEnabled: z.boolean().default(false),
   hasWhatsAppCredentials: z.boolean().default(false),
-  /** `X-Client-Id` que OmniDesk envía a n8n (SPEC 22). */
-  n8nClientId: z.string().nullable(),
-  /** Tiene un `clientSecret` guardado; el valor nunca se devuelve (SPEC 22). */
+  /** Tiene `clientSecret` para n8n; el `clientId` es `id` (SPEC 22). El secreto nunca se devuelve. */
   hasN8nClientSecret: z.boolean(),
   whatsappWebhookUrl: z.url().nullable().default(null),
   credentialsRotatedAt: z.iso.datetime().nullable(),
@@ -61,12 +59,16 @@ export const UpdateChannelRequestSchema = z
   });
 export type UpdateChannelRequest = z.infer<typeof UpdateChannelRequestSchema>;
 
-/** `PUT /api/v1/channels/:id/n8n-client`: omitir `clientSecret` conserva el guardado (SPEC 22). */
-export const ConfigureN8nClientRequestSchema = z.object({
-  clientId: z.string().trim().min(1).max(200),
-  clientSecret: z.string().trim().min(16).max(512).optional(),
+/**
+ * `POST /api/v1/channels/:id/n8n-client`: genera (o regenera) el secreto que OmniDesk envía a n8n en
+ * `X-Client-Secret`. Solo aparece en esta respuesta (SPEC 22).
+ */
+export const N8nClientCredentialsResponseSchema = z.object({
+  /** El id del canal: va en `X-Client-Id`. */
+  clientId: z.uuid(),
+  clientSecret: z.string(),
 });
-export type ConfigureN8nClientRequest = z.infer<typeof ConfigureN8nClientRequestSchema>;
+export type N8nClientCredentialsResponse = z.infer<typeof N8nClientCredentialsResponseSchema>;
 
 /** `POST /api/v1/channels/:id/test`: un `ping` firmado al webhook, sin reintentos. */
 export const ChannelTestResponseSchema = z.object({

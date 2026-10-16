@@ -34,7 +34,6 @@ const channel: ChannelForSend = {
   provider: 'N8N',
   externalId: 'pnid-1',
   webhookUrl: 'https://n8n.example.com/webhook/send',
-  n8nClientId: null,
   n8nClientSecretEnc: null,
 };
 

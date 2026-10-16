@@ -104,15 +104,6 @@ export function patchJson(
   return requestJson('PATCH', path, body, options);
 }
 
-/** PUT con cuerpo JSON. */
-export function putJson(
-  path: string,
-  body: unknown,
-  options: RequestOptions = {},
-): Promise<ApiResponse> {
-  return requestJson('PUT', path, body, options);
-}
-
 /** DELETE sin cuerpo. */
 export function deleteJson(path: string, options: RequestOptions = {}): Promise<ApiResponse> {
   return requestJson('DELETE', path, options.body, options);

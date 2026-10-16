@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { CLOCK, type Clock } from '../../../shared/application/clock.port';
 import type { ActorContext } from '../../../shared/application/request-context';
@@ -118,44 +119,41 @@ export class UpdateChannelUseCase {
   }
 }
 
+/** Secreto de cliente para n8n (`ncs_…`): 32 bytes aleatorios (SPEC 22). */
+export function newN8nClientSecret(): string {
+  return `ncs_${randomBytes(32).toString('base64url')}`;
+}
+
 /**
- * Guarda el `clientId` y el `clientSecret` que OmniDesk envía a n8n (SPEC 22). El secreto es de solo
- * escritura: omitirlo conserva el guardado, pero la primera vez es obligatorio.
+ * Genera (o regenera) el secreto que OmniDesk envía a n8n en `X-Client-Secret`; el `clientId` es el
+ * id del canal (SPEC 22). Se devuelve una sola vez y el anterior deja de valer al instante.
  */
 @Injectable()
-export class ConfigureN8nClientUseCase {
+export class GenerateN8nClientSecretUseCase {
   constructor(
     @Inject(CHANNEL_REPOSITORY) private readonly channels: ChannelRepository,
     @Inject(CHANNEL_SECRET_CIPHER) private readonly cipher: ChannelSecretCipher,
-    @Inject(CLOCK) private readonly clock: Clock,
   ) {}
 
   async execute(
     actor: ActorContext,
     channelId: string,
-    input: { clientId: string; clientSecret?: string },
   ): Promise<
-    { kind: 'ok'; channel: ChannelSummary } | Forbidden | NotFound | { kind: 'secret-required' }
+    { kind: 'ok'; credentials: { clientId: string; clientSecret: string } } | Forbidden | NotFound
   > {
     if (!canManageChannels(actor.role)) return { kind: 'forbidden' };
-    const now = this.clock.now();
-    const current = await this.channels.findSummary(actor.tenantId, channelId, now);
-    if (!current) return { kind: 'not-found' };
-    if (input.clientSecret === undefined && !current.hasN8nClientSecret) {
-      return { kind: 'secret-required' };
-    }
-    await this.channels.setN8nClient(actor.tenantId, channelId, {
-      clientId: input.clientId,
-      ...(input.clientSecret !== undefined && {
-        clientSecretEnc: this.cipher.encrypt(input.clientSecret),
-      }),
-    });
-    const channel = await this.channels.findSummary(actor.tenantId, channelId, now);
-    return { kind: 'ok', channel: channel! };
+    const clientSecret = newN8nClientSecret();
+    const saved = await this.channels.setN8nClientSecret(
+      actor.tenantId,
+      channelId,
+      this.cipher.encrypt(clientSecret),
+    );
+    if (!saved) return { kind: 'not-found' };
+    return { kind: 'ok', credentials: { clientId: channelId, clientSecret } };
   }
 }
 
-/** Quita las credenciales de cliente de n8n y apaga la IA del canal (SPEC 22). */
+/** Quita el secreto de cliente de n8n y apaga la IA del canal (SPEC 22). */
 @Injectable()
 export class RemoveN8nClientUseCase {
   constructor(
@@ -168,7 +166,7 @@ export class RemoveN8nClientUseCase {
     channelId: string,
   ): Promise<{ kind: 'ok'; channel: ChannelSummary } | Forbidden | NotFound> {
     if (!canManageChannels(actor.role)) return { kind: 'forbidden' };
-    if (!(await this.channels.clearN8nClient(actor.tenantId, channelId))) {
+    if (!(await this.channels.clearN8nClientSecret(actor.tenantId, channelId))) {
       return { kind: 'not-found' };
     }
     const channel = await this.channels.findSummary(actor.tenantId, channelId, this.clock.now());
@@ -193,7 +191,7 @@ export class TestChannelConnectionUseCase {
     if (!canManageChannels(actor.role)) return { kind: 'forbidden' };
     const channel = await this.channels.findForSend(actor.tenantId, channelId);
     if (!channel) return { kind: 'not-found' };
-    if (!channel.webhookUrl || !channel.n8nClientId || !channel.n8nClientSecretEnc) {
+    if (!channel.webhookUrl || !channel.n8nClientSecretEnc) {
       return {
         kind: 'ok',
         result: {
@@ -211,7 +209,6 @@ export class TestChannelConnectionUseCase {
       result: await this.tester.ping({
         channelId: channel.id,
         webhookUrl: channel.webhookUrl,
-        clientId: channel.n8nClientId,
         clientSecret: this.cipher.decrypt(channel.n8nClientSecretEnc),
         now: this.clock.now(),
       }),

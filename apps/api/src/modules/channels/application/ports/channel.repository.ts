@@ -14,8 +14,7 @@ export interface ChannelForSend {
   provider: ChannelProvider;
   externalId: string;
   webhookUrl: string | null;
-  /** Credenciales de cliente hacia n8n (SPEC 22); el secreto va cifrado. */
-  n8nClientId: string | null;
+  /** Secreto de cliente hacia n8n, cifrado (SPEC 22); el `clientId` es `id`. */
   n8nClientSecretEnc: SecretBlob | null;
 }
 
@@ -35,16 +34,12 @@ export interface ChannelRepository {
     patch: { name?: string; webhookUrl?: string | null },
   ): Promise<Channel | null>;
   /**
-   * Guarda el `clientId` y, si viene, el `clientSecret` cifrado (SPEC 22). `false` si el canal no
+   * Guarda el secreto de cliente cifrado, sustituyendo al anterior (SPEC 22). `false` si el canal no
    * existe en la empresa.
    */
-  setN8nClient(
-    tenantId: string,
-    channelId: string,
-    client: { clientId: string; clientSecretEnc?: SecretBlob },
-  ): Promise<boolean>;
-  /** Borra las credenciales de cliente y apaga la IA. `false` si el canal no existe en la empresa. */
-  clearN8nClient(tenantId: string, channelId: string): Promise<boolean>;
+  setN8nClientSecret(tenantId: string, channelId: string, secretEnc: SecretBlob): Promise<boolean>;
+  /** Borra el secreto de cliente y apaga la IA. `false` si el canal no existe en la empresa. */
+  clearN8nClientSecret(tenantId: string, channelId: string): Promise<boolean>;
   upsertChannel(tenantId: string, channel: NewChannel): Promise<Channel>;
   /** Deja `keyHash` como única credencial activa del canal (revoca las demás). */
   setOnlyActiveCredential(tenantId: string, channelId: string, keyHash: string): Promise<void>;

@@ -41,13 +41,7 @@ export class AiReplyWorker {
   async process(tenantId: string, raw: unknown): Promise<void> {
     const payload = Payload.parse(raw);
     const channel = await this.settings.find(payload.channelId, tenantId);
-    if (
-      !channel?.aiEnabled ||
-      !channel.webhookUrl ||
-      !channel.n8nClientId ||
-      !channel.n8nClientSecretEnc
-    )
-      return;
+    if (!channel?.aiEnabled || !channel.webhookUrl || !channel.n8nClientSecretEnc) return;
     const conversation = await this.conversations.findById(tenantId, payload.conversationId);
     if (
       !conversation ||
@@ -74,7 +68,7 @@ export class AiReplyWorker {
       headers: {
         'content-type': 'application/json',
         'Idempotency-Key': payload.messageId,
-        ...n8nClientHeaders(channel.n8nClientId, this.cipher.decrypt(channel.n8nClientSecretEnc)),
+        ...n8nClientHeaders(channel.id, this.cipher.decrypt(channel.n8nClientSecretEnc)),
       },
       body,
     });

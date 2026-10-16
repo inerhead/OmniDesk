@@ -79,11 +79,10 @@ describe('Adjuntos de WhatsApp (e2e)', () => {
       .send({ webhookUrl: 'https://n8n.example.com/webhook/ai' })
       .expect(200);
     await http()
-      .put(`/api/v1/channels/${channelId}/n8n-client`)
+      .post(`/api/v1/channels/${channelId}/n8n-client`)
       .set('Cookie', cookie)
       .set('Origin', WEB_ORIGIN)
-      .send({ clientId: 'acme-omnidesk', clientSecret: 'n8n-client-secret-for-e2e' })
-      .expect(200);
+      .expect(201);
     await manage(`/api/v1/channels/${channelId}/whatsapp`).send({ aiEnabled: true }).expect(200);
   };
   const countEvents = (type: string) => db.outboxEvent.count({ where: { tenantId, type } });

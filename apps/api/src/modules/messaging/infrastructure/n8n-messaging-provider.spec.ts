@@ -9,8 +9,7 @@ import {
 } from '../application/ports/messaging-provider.port';
 import { N8nMessagingProvider } from './n8n-messaging-provider';
 
-const CLIENT_ID = 'acme-omnidesk';
-const SECRET = 'client-secret-n8n-test';
+const SECRET = 'ncs_client-secret-n8n-test';
 /** "Cifrado" de prueba: el blob es el propio texto. */
 const cipher: ChannelSecretCipher = {
   encrypt: (plain) => new Uint8Array(Buffer.from(plain)),
@@ -36,7 +35,6 @@ describe('N8nMessagingProvider', () => {
       provider: 'N8N',
       externalId: '1234567890',
       webhookUrl: url,
-      n8nClientId: CLIENT_ID,
       n8nClientSecretEnc: cipher.encrypt(SECRET),
       ...overrides,
     },
@@ -81,7 +79,7 @@ describe('N8nMessagingProvider', () => {
     const [{ headers, body }] = received as [Received];
     expect(headers['idempotency-key']).toBe('0199c0de-0000-7000-8000-000000000001');
     expect(headers['content-type']).toBe('application/json');
-    expect(headers['x-client-id']).toBe(CLIENT_ID);
+    expect(headers['x-client-id']).toBe('0199c0de-0000-7000-8000-0000000000c1');
     expect(headers['x-client-secret']).toBe(SECRET);
     expect(headers['x-omnidesk-signature']).toBeUndefined();
     expect(JSON.parse(body)).toEqual({
@@ -123,11 +121,8 @@ describe('N8nMessagingProvider', () => {
     ).rejects.toThrow(/n8n no respondió/);
   });
 
-  it('sin credenciales de cliente: CHANNEL_NOT_CONFIGURED y no llama al webhook', async () => {
+  it('sin secreto de cliente: CHANNEL_NOT_CONFIGURED y no llama al webhook', async () => {
     await expect(provider.send(request({ n8nClientSecretEnc: null }))).rejects.toBeInstanceOf(
-      ChannelNotConfiguredError,
-    );
-    await expect(provider.send(request({ n8nClientId: null }))).rejects.toBeInstanceOf(
       ChannelNotConfiguredError,
     );
     await expect(provider.send(request({ webhookUrl: null }))).rejects.toThrow(

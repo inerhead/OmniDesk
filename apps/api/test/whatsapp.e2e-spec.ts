@@ -15,8 +15,6 @@ import { testEnv } from './support/test-env';
 
 const appSecret = 'meta-app-secret-for-e2e';
 const verifyToken = 'meta-verify-token-for-e2e-123456';
-const clientId = 'acme-omnidesk';
-const clientSecret = 'n8n-client-secret-for-e2e';
 describe('WhatsApp directo e IA opcional (e2e)', () => {
   let app: NestExpressApplication;
   let db: PrismaService;
@@ -67,13 +65,13 @@ describe('WhatsApp directo e IA opcional (e2e)', () => {
     await manage(`/api/v1/channels/${channelId}`)
       .send({ webhookUrl: 'https://n8n.example.com/webhook/ai' })
       .expect(200);
-    await http()
-      .put(`/api/v1/channels/${channelId}/n8n-client`)
+    const client = await http()
+      .post(`/api/v1/channels/${channelId}/n8n-client`)
       .set('Cookie', cookie)
       .set('Origin', WEB_ORIGIN)
-      .send({ clientId, clientSecret })
-      .expect(200);
+      .expect(201);
     await manage(`/api/v1/channels/${channelId}/whatsapp`).send({ aiEnabled: true }).expect(200);
+    return client.body.clientSecret as string;
   };
   const aiEvent = () =>
     db.outboxEvent.findFirstOrThrow({ where: { tenantId, type: 'ai.reply_requested' } });
@@ -200,11 +198,11 @@ describe('WhatsApp directo e IA opcional (e2e)', () => {
       .send({ aiEnabled: false })
       .expect(404);
   });
-  it('exige URL y credenciales de cliente para activar la IA', async () => {
+  it('exige URL y secreto de cliente para activar la IA', async () => {
     await manage(`/api/v1/channels/${channelId}/whatsapp`).send({ aiEnabled: true }).expect(400);
   });
   it('envía inbound a n8n con credenciales de cliente, registra la respuesta completa y la envía por Graph', async () => {
-    await enableAi();
+    const clientSecret = await enableAi();
     const body = envelope();
     await post(body).expect(200);
     await post(body).expect(200);
@@ -216,7 +214,7 @@ describe('WhatsApp directo e IA opcional (e2e)', () => {
       calls.push({ url, body: payload });
       if (url.includes('n8n')) {
         const headers = init.headers as Record<string, string>;
-        expect(headers['X-Client-Id']).toBe(clientId);
+        expect(headers['X-Client-Id']).toBe(channelId);
         expect(headers['X-Client-Secret']).toBe(clientSecret);
         expect(headers['X-OmniDesk-Signature']).toBeUndefined();
         expect(headers['Idempotency-Key']).toBe(payload.messageId);

@@ -152,9 +152,7 @@ model Channel {
   hmacSecretPrevEnc       Bytes?          @map("hmac_secret_prev_enc")
   hmacSecretPrevUntil     DateTime?       @map("hmac_secret_prev_until") @db.Timestamptz(3)
   credentialsRotatedAt    DateTime?       @map("credentials_rotated_at") @db.Timestamptz(3)
-  /// Identificador que n8n espera en `X-Client-Id` (SPEC 22).
-  n8nClientId             String?         @map("n8n_client_id")
-  /// AES-256-GCM: iv (12 B) || ciphertext || tag (16 B). Se envía en `X-Client-Secret` (SPEC 22).
+  /// AES-256-GCM: iv (12 B) || ciphertext || tag (16 B). Se envía en `X-Client-Secret`; `X-Client-Id` es `id` (SPEC 22).
   n8nClientSecretEnc      Bytes?          @map("n8n_client_secret_enc")
   createdAt               DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt               DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)

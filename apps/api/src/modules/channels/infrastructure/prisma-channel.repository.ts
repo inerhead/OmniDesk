@@ -34,7 +34,6 @@ const summarySelect = {
   whatsappAppSecretEnc: true,
   whatsappVerifyTokenHash: true,
   credentialsRotatedAt: true,
-  n8nClientId: true,
   n8nClientSecretEnc: true,
 } satisfies Prisma.ChannelSelect;
 
@@ -95,7 +94,6 @@ export class PrismaChannelRepository implements ChannelRepository {
         provider: true,
         externalId: true,
         webhookUrl: true,
-        n8nClientId: true,
         n8nClientSecretEnc: true,
       },
     });
@@ -145,25 +143,22 @@ export class PrismaChannelRepository implements ChannelRepository {
     return this.db.client.channel.findUnique({ where: { id: channelId }, select: channelSelect });
   }
 
-  async setN8nClient(
+  async setN8nClientSecret(
     tenantId: string,
     channelId: string,
-    { clientId, clientSecretEnc }: { clientId: string; clientSecretEnc?: SecretBlob },
+    secretEnc: SecretBlob,
   ): Promise<boolean> {
     const { count } = await this.db.client.channel.updateMany({
       where: { id: channelId, tenantId },
-      data: {
-        n8nClientId: clientId,
-        ...(clientSecretEnc && { n8nClientSecretEnc: clientSecretEnc }),
-      },
+      data: { n8nClientSecretEnc: secretEnc },
     });
     return count > 0;
   }
 
-  async clearN8nClient(tenantId: string, channelId: string): Promise<boolean> {
+  async clearN8nClientSecret(tenantId: string, channelId: string): Promise<boolean> {
     const { count } = await this.db.client.channel.updateMany({
       where: { id: channelId, tenantId },
-      data: { n8nClientId: null, n8nClientSecretEnc: null, aiEnabled: false },
+      data: { n8nClientSecretEnc: null, aiEnabled: false },
     });
     return count > 0;
   }

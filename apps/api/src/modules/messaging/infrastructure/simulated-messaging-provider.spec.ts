@@ -10,7 +10,6 @@ const request = {
     provider: 'SIMULATED' as const,
     externalId: 'demo-whatsapp',
     webhookUrl: null,
-    n8nClientId: null,
     n8nClientSecretEnc: null,
   },
   conversationId: '0199c0de-0000-7000-8000-0000000000aa',

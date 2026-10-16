@@ -2,12 +2,7 @@ import type { Channel } from '@omnidesk/contracts';
 
 type ChannelState = Pick<
   Channel,
-  | 'provider'
-  | 'webhookUrl'
-  | 'aiEnabled'
-  | 'hasWhatsAppCredentials'
-  | 'n8nClientId'
-  | 'hasN8nClientSecret'
+  'provider' | 'webhookUrl' | 'aiEnabled' | 'hasWhatsAppCredentials' | 'hasN8nClientSecret'
 >;
 
 export interface ChannelBadge {
@@ -30,7 +25,7 @@ const isCloud = (channel: ChannelState) => channel.provider === 'WHATSAPP_CLOUD'
 
 /** n8n tiene a dónde llamar y con qué autenticarse (SPEC 22). */
 export const n8nReady = (channel: ChannelState) =>
-  channel.webhookUrl !== null && channel.n8nClientId !== null && channel.hasN8nClientSecret;
+  channel.webhookUrl !== null && channel.hasN8nClientSecret;
 
 /** IA activa: el interruptor en WhatsApp Cloud; en un canal n8n, que tenga webhook. */
 const aiActive = (channel: ChannelState) =>

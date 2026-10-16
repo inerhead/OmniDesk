@@ -10,7 +10,6 @@ export interface ChannelWebhookTester {
   ping(input: {
     channelId: string;
     webhookUrl: string;
-    clientId: string;
     clientSecret: string;
     now: Date;
   }): Promise<ChannelTestResult>;

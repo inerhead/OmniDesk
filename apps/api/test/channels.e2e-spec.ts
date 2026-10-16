@@ -4,7 +4,12 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
-import { ChannelSchema, ListChannelsResponseSchema, type Message } from '@omnidesk/contracts';
+import {
+  ChannelSchema,
+  ListChannelsResponseSchema,
+  N8nClientCredentialsResponseSchema,
+  type Message,
+} from '@omnidesk/contracts';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
@@ -243,12 +248,8 @@ describe('Canales: API de gestión y envío por n8n (e2e)', () => {
       http().post(path).set('Cookie', cookie).set('Origin', WEB_ORIGIN).send(body),
     patch: (path: string, body: object) =>
       http().patch(path).set('Cookie', cookie).set('Origin', WEB_ORIGIN).send(body),
-    put: (path: string, body: object) =>
-      http().put(path).set('Cookie', cookie).set('Origin', WEB_ORIGIN).send(body),
     delete: (path: string) => http().delete(path).set('Cookie', cookie).set('Origin', WEB_ORIGIN),
   });
-
-  const CLIENT_SECRET = 'client-secret-0123456789';
 
   const newChannel = (overrides: object = {}) => ({
     name: 'WhatsApp Ventas',
@@ -288,21 +289,24 @@ describe('Canales: API de gestión y envío por n8n (e2e)', () => {
       },
     });
     const legacy = await issueLegacyCredentials(app, tenantId, row.id);
-    const clientId = `acme-${randomUUID().slice(0, 8)}`;
-    const channel = ChannelSchema.parse(
-      (
-        await as(ownerCookie)
-          .put(`/api/v1/channels/${row.id}/n8n-client`, { clientId, clientSecret: CLIENT_SECRET })
-          .expect(200)
-      ).body,
-    );
-    return { channel, clientId, ...legacy };
+    const { clientSecret } = await generateClient(row.id);
+    return { channel: row, clientSecret, ...legacy };
   }
 
-  /** Cabeceras de cliente presentes y sin firma saliente (SPEC 22). */
-  function expectClientHeaders(headers: IncomingMessage['headers'], clientId: string) {
-    expect(headers['x-client-id']).toBe(clientId);
-    expect(headers['x-client-secret']).toBe(CLIENT_SECRET);
+  /** `POST …/n8n-client` como OWNER: el secreto nuevo, que solo aparece aquí. */
+  const generateClient = async (channelId: string) =>
+    N8nClientCredentialsResponseSchema.parse(
+      (await as(ownerCookie).post(`/api/v1/channels/${channelId}/n8n-client`).expect(201)).body,
+    );
+
+  /** `X-Client-Id` = id del canal, el secreto generado y sin firma saliente (SPEC 22). */
+  function expectClientHeaders(
+    headers: IncomingMessage['headers'],
+    channelId: string,
+    clientSecret: string,
+  ) {
+    expect(headers['x-client-id']).toBe(channelId);
+    expect(headers['x-client-secret']).toBe(clientSecret);
     expect(headers['x-omnidesk-signature']).toBeUndefined();
   }
 
@@ -415,7 +419,6 @@ describe('Canales: API de gestión y envío por n8n (e2e)', () => {
         phoneNumber: body.phoneNumber,
         externalId: body.externalId,
         webhookUrl: null,
-        n8nClientId: null,
         hasN8nClientSecret: false,
         aiEnabled: false,
       });
@@ -470,73 +473,55 @@ describe('Canales: API de gestión y envío por n8n (e2e)', () => {
     });
   });
 
-  describe('credenciales de cliente de n8n (SPEC 22)', () => {
+  describe('secreto de cliente de n8n (SPEC 22)', () => {
     const cloudChannel = async () =>
       ChannelSchema.parse(
         (await as(ownerCookie).post('/api/v1/channels', newChannel()).expect(201)).body,
       );
-    const putClient = (cookie: string, id: string, body: object) =>
-      as(cookie).put(`/api/v1/channels/${id}/n8n-client`, body);
+    const withWebhook = async (channelId: string) =>
+      as(ownerCookie)
+        .patch(`/api/v1/channels/${channelId}`, { webhookUrl: 'https://n8n.example.com/w' })
+        .expect(200);
 
-    it('el OWNER las guarda; el secreto no sale de la API y se guarda cifrado', async () => {
+    it('el OWNER lo genera: clientId = id del canal, ncs_ y solo en esta respuesta; cifrado en la base', async () => {
       const channel = await cloudChannel();
-      const res = await putClient(ownerCookie, channel.id, {
-        clientId: 'acme',
-        clientSecret: '0123456789abcdef',
-      }).expect(200);
-      expect(res.body).toMatchObject({ n8nClientId: 'acme', hasN8nClientSecret: true });
+      const { clientId, clientSecret } = await generateClient(channel.id);
+      expect(clientId).toBe(channel.id);
+      expect(clientSecret).toMatch(/^ncs_[A-Za-z0-9_-]{43}$/);
 
       const list = await as(ownerCookie).get('/api/v1/channels').expect(200);
-      expect(JSON.stringify(list.body)).not.toContain('0123456789abcdef');
+      expect(JSON.stringify(list.body)).not.toContain(clientSecret);
+      const listed = (list.body.items as Array<{ id: string }>).find((c) => c.id === channel.id);
+      expect(listed).toMatchObject({ hasN8nClientSecret: true });
+      expect(listed).not.toHaveProperty('hasCredentials');
       const row = await prisma.channel.findUniqueOrThrow({ where: { id: channel.id } });
       expect(row.n8nClientSecretEnc).not.toBeNull();
-      expect(Buffer.from(row.n8nClientSecretEnc!).includes(Buffer.from('0123456789abcdef'))).toBe(
-        false,
-      );
+      expect(Buffer.from(row.n8nClientSecretEnc!).includes(Buffer.from(clientSecret))).toBe(false);
     });
 
     it('un AGENT recibe 403; un canal de otra empresa, 404', async () => {
       const channel = await cloudChannel();
-      const body = { clientId: 'acme', clientSecret: '0123456789abcdef' };
-      await putClient(agentCookie, channel.id, body).expect(403);
+      await as(agentCookie).post(`/api/v1/channels/${channel.id}/n8n-client`).expect(403);
       await as(agentCookie).delete(`/api/v1/channels/${channel.id}/n8n-client`).expect(403);
-      await putClient(ownerCookie, randomUUID(), body).expect(404);
+      await as(ownerCookie).post(`/api/v1/channels/${randomUUID()}/n8n-client`).expect(404);
     });
 
-    it('valida el formato y exige el secreto la primera vez', async () => {
-      const channel = await cloudChannel();
-      await putClient(ownerCookie, channel.id, {
-        clientId: 'acme',
-        clientSecret: 'x'.repeat(15),
-      }).expect(400);
-      await putClient(ownerCookie, channel.id, {
-        clientId: 'x'.repeat(201),
-        clientSecret: '0123456789abcdef',
-      }).expect(400);
-      const res = await putClient(ownerCookie, channel.id, { clientId: 'acme' }).expect(400);
-      expect(res.body.code).toBe('N8N_CLIENT_SECRET_REQUIRED');
-    });
-
-    it('omitir el secreto cambia el id y conserva el secreto: el ping lleva el anterior', async () => {
-      const { channel } = await channelWithCredentials();
-      await putClient(ownerCookie, channel.id, { clientId: 'otro' }).expect(200);
+    it('regenerar da otro secreto y el ping lleva el nuevo', async () => {
+      const { channel, clientSecret: first } = await channelWithCredentials();
+      const { clientSecret: second } = await generateClient(channel.id);
+      expect(second).not.toBe(first);
       await as(ownerCookie).post(`/api/v1/channels/${channel.id}/test`).expect(200);
       const [ping] = received as [Received];
-      expectClientHeaders(ping.headers, 'otro');
+      expectClientHeaders(ping.headers, channel.id, second);
     });
 
-    it('activar la IA exige webhook y credenciales; el HMAC ya no hace falta', async () => {
+    it('activar la IA exige webhook y secreto; el HMAC ya no hace falta', async () => {
       const channel = await cloudChannel();
-      await as(ownerCookie)
-        .patch(`/api/v1/channels/${channel.id}`, { webhookUrl: 'https://n8n.example.com/w' })
-        .expect(200);
+      await withWebhook(channel.id);
       await as(ownerCookie)
         .patch(`/api/v1/channels/${channel.id}/whatsapp`, { aiEnabled: true })
         .expect(400);
-      await putClient(ownerCookie, channel.id, {
-        clientId: 'acme',
-        clientSecret: '0123456789abcdef',
-      }).expect(200);
+      await generateClient(channel.id);
       await as(ownerCookie)
         .patch(`/api/v1/channels/${channel.id}/whatsapp`, { aiEnabled: true })
         .expect(200);
@@ -544,15 +529,10 @@ describe('Canales: API de gestión y envío por n8n (e2e)', () => {
       expect(row).toMatchObject({ aiEnabled: true, hmacSecretEnc: null });
     });
 
-    it('DELETE las quita y apaga la IA; repetirlo responde 200', async () => {
+    it('DELETE lo quita y apaga la IA; repetirlo responde 200', async () => {
       const channel = await cloudChannel();
-      await as(ownerCookie)
-        .patch(`/api/v1/channels/${channel.id}`, { webhookUrl: 'https://n8n.example.com/w' })
-        .expect(200);
-      await putClient(ownerCookie, channel.id, {
-        clientId: 'acme',
-        clientSecret: '0123456789abcdef',
-      }).expect(200);
+      await withWebhook(channel.id);
+      await generateClient(channel.id);
       await as(ownerCookie)
         .patch(`/api/v1/channels/${channel.id}/whatsapp`, { aiEnabled: true })
         .expect(200);
@@ -560,22 +540,18 @@ describe('Canales: API de gestión y envío por n8n (e2e)', () => {
       const res = await as(ownerCookie)
         .delete(`/api/v1/channels/${channel.id}/n8n-client`)
         .expect(200);
-      expect(res.body).toMatchObject({
-        n8nClientId: null,
-        hasN8nClientSecret: false,
-        aiEnabled: false,
-      });
+      expect(res.body).toMatchObject({ hasN8nClientSecret: false, aiEnabled: false });
       await as(ownerCookie).delete(`/api/v1/channels/${channel.id}/n8n-client`).expect(200);
     });
 
     it('probar conexión: ping con credenciales de cliente y sin firma; con el webhook caído, el error', async () => {
-      const { channel, clientId } = await channelWithCredentials();
+      const { channel, clientSecret } = await channelWithCredentials();
       const ok = await as(ownerCookie).post(`/api/v1/channels/${channel.id}/test`).expect(200);
       expect(ok.body).toMatchObject({ ok: true, httpStatus: 200, error: null });
       expect(ok.body.latencyMs).toBeGreaterThanOrEqual(0);
       const [ping] = received as [Received];
       expect(JSON.parse(ping.body)).toMatchObject({ type: 'ping', channelId: channel.id });
-      expectClientHeaders(ping.headers, clientId);
+      expectClientHeaders(ping.headers, channel.id, clientSecret);
 
       await as(ownerCookie)
         .patch(`/api/v1/channels/${channel.id}`, { webhookUrl: 'http://127.0.0.1:1/caido' })
@@ -585,7 +561,7 @@ describe('Canales: API de gestión y envío por n8n (e2e)', () => {
       expect(down.body.error).toBeTruthy();
     });
 
-    it('probar conexión sin credenciales de cliente: error y ninguna petición', async () => {
+    it('probar conexión sin secreto de cliente: error y ninguna petición', async () => {
       const { channel } = await channelWithCredentials();
       await as(ownerCookie).delete(`/api/v1/channels/${channel.id}/n8n-client`).expect(200);
       const res = await as(ownerCookie).post(`/api/v1/channels/${channel.id}/test`).expect(200);
@@ -600,7 +576,7 @@ describe('Canales: API de gestión y envío por n8n (e2e)', () => {
 
   describe('envío por n8n', () => {
     it('un mensaje de agente se envía con credenciales de cliente e Idempotency-Key y queda SENT', async () => {
-      const { channel, clientId, apiKey, hmacSecret } = await channelWithCredentials();
+      const { channel, clientSecret, apiKey, hmacSecret } = await channelWithCredentials();
       const conversationId = await ownedConversation(apiKey, hmacSecret);
       const message = await sendAgentMessage(conversationId);
 
@@ -612,7 +588,7 @@ describe('Canales: API de gestión y envío por n8n (e2e)', () => {
 
       const call = received.find((r) => r.body.includes(message.id))!;
       expect(call.headers['idempotency-key']).toBe(message.id);
-      expectClientHeaders(call.headers, clientId);
+      expectClientHeaders(call.headers, channel.id, clientSecret);
       expect(JSON.parse(call.body)).toMatchObject({
         type: 'message.send',
         messageId: message.id,
@@ -636,7 +612,7 @@ describe('Canales: API de gestión y envío por n8n (e2e)', () => {
       expect((await messageRow(message.id)).status).toBe('DELIVERED');
     });
 
-    it('un canal N8N sin credenciales de cliente deja el mensaje FAILED (CHANNEL_NOT_CONFIGURED) sin llamar al webhook', async () => {
+    it('un canal N8N sin secreto de cliente deja el mensaje FAILED (CHANNEL_NOT_CONFIGURED) sin llamar al webhook', async () => {
       const { channel, apiKey, hmacSecret } = await channelWithCredentials();
       const conversationId = await ownedConversation(apiKey, hmacSecret);
       await as(ownerCookie).delete(`/api/v1/channels/${channel.id}/n8n-client`).expect(200);

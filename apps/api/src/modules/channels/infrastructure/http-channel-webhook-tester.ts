@@ -14,13 +14,11 @@ export class HttpChannelWebhookTester implements ChannelWebhookTester {
   async ping({
     channelId,
     webhookUrl,
-    clientId,
     clientSecret,
     now,
   }: {
     channelId: string;
     webhookUrl: string;
-    clientId: string;
     clientSecret: string;
     now: Date;
   }): Promise<ChannelTestResult> {
@@ -29,7 +27,7 @@ export class HttpChannelWebhookTester implements ChannelWebhookTester {
     try {
       const res = await postJson(webhookUrl, body, {
         timeoutMs: CHANNEL_TEST_TIMEOUT_MS,
-        headers: n8nClientHeaders(clientId, clientSecret),
+        headers: n8nClientHeaders(channelId, clientSecret),
       });
       const ok = res.status >= 200 && res.status < 300;
       return {

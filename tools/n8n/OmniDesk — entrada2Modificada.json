@@ -1,0 +1,552 @@
+{
+  "name": "OmniDesk — entrada",
+  "nodes": [
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "54553ab4-17cf-4af6-bc68-997e04d9c08e",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1248,
+        560
+      ],
+      "id": "ed0c3f1f-8a07-45e0-b011-dab46e6e7f16",
+      "name": "¿Cliente válido?"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false }) }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "09230079-850c-44d9-af2a-3d750a1991f9",
+      "name": "Responder 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1472,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "401a195d-2ecd-418c-a2b5-12f6528ad064",
+                    "leftValue": "={{ $('OmniDesk1').item.json.body.type }}",
+                    "rightValue": "ping",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ping"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "140ddb4d-bc92-4be7-b675-3687504fafdc",
+                    "leftValue": "={{ $('OmniDesk1').item.json.body.type }}",
+                    "rightValue": "ai.reply",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ai.reply"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Otro"
+        }
+      },
+      "id": "e2f9f4f3-8105-4c90-b9ff-7934fef7b81c",
+      "name": "Tipo",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1472,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "7b151a27-ebd1-4723-bb31-cba4c9241818",
+      "name": "Responder ping",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1696,
+        256
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false }) }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "6781ce4e-b963-4e26-9c33-ede309d68bb9",
+      "name": "Responder 400",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1696,
+        656
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "MghjS97L1tKqAKPf",
+          "mode": "list",
+          "cachedResultName": "omnidesk_ai_replies",
+          "cachedResultUrl": "/projects/GiBzROGbG83mhghA/datatables/MghjS97L1tKqAKPf"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "idempotencyKey",
+              "keyValue": "={{ $('OmniDesk1').item.json.headers['idempotency-key'] }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "id": "6a1f0292-4667-4009-a39d-9ae89bab7020",
+      "name": "Buscar respuesta previa",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1696,
+        448
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "647cf126-d7fe-41d4-9c35-785e2c57d34d",
+              "leftValue": "={{ $json.text }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ea4a4941-b9b7-4a1a-8c24-21948058e8c1",
+      "name": "¿Ya respondida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1920,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ text: $json.text }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "410cd86f-bbaf-49c5-ba46-02bf2e25dbe7",
+      "name": "Responder respuesta previa",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2128,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('OmniDesk1').item.json.body.text }}",
+        "options": {
+          "systemMessage": "Eres el asistente virtual de Sésamo, un restaurante.\n\nTu función principal es atender clientes exclusivamente para ayudarles con pedidos relacionados con Sésamo.\n\nOBJETIVO\n- Dar una bienvenida cordial cuando corresponda.\n- Ayudar al cliente a consultar opciones disponibles para realizar un pedido.\n- Guiar al cliente durante el proceso de pedido.\n- Recopilar únicamente la información necesaria para completar el pedido.\n- Derivar la conversación a un agente humano cuando sea necesario.\n\nALCANCE\nSolo debes responder preguntas relacionadas con:\n- Sésamo restaurante.\n- El menú.\n- Productos y opciones disponibles.\n- Pedidos.\n- Información necesaria para realizar o continuar un pedido.\n- Consultas directamente relacionadas con la atención del restaurante.\n\nNo respondas preguntas generales que no tengan relación con Sésamo.\n\nSi el cliente pregunta algo fuera de tu alcance, responde brevemente indicando que solo puedes ayudar con pedidos o información relacionada con Sésamo.\n\nEjemplo:\n\"Puedo ayudarte con el menú y los pedidos de Sésamo. ¿Qué te gustaría ordenar?\"\n\nINFORMACIÓN DEL NEGOCIO\nNunca inventes información.\n\nNo inventes:\n- Precios.\n- Productos.\n- Ingredientes.\n- Promociones.\n- Horarios.\n- Dirección.\n- Disponibilidad.\n- Tiempo de entrega.\n- Costos de domicilio.\n- Métodos de pago.\n- Políticas del restaurante.\n- Estado de un pedido.\n\nSolo utiliza información que haya sido proporcionada explícitamente en el contexto de la conversación o mediante las herramientas disponibles.\n\nSi necesitas un dato y no está disponible, dilo con naturalidad.\n\nEjemplo:\n\"No tengo ese dato disponible en este momento. Si quieres, puedo pasarte con un agente.\"\n\nPEDIDOS\nCuando el cliente quiera realizar un pedido:\n- Ayúdalo a identificar qué desea ordenar.\n- Haz una sola pregunta a la vez cuando necesites información adicional.\n- Confirma la selección antes de considerar terminado el pedido.\n- No asumas cantidades, tamaños, sabores, adicionales ni variantes.\n- No confirmes que un producto está disponible si no tienes información que lo demuestre.\n- No inventes precios ni totales.\n\nATENCIÓN HUMANA\nDebes ofrecer pasar la conversación a un agente humano cuando:\n- El cliente lo solicite directamente.\n- No conozcas la respuesta.\n- La información necesaria no esté disponible.\n- El cliente tenga un problema que no puedas resolver dentro del proceso normal de pedido.\n- La solicitud esté fuera de tu alcance pero pueda ser atendida por el restaurante.\n\nCuando esto ocurra, responde brevemente.\n\nEjemplo:\n\"Claro, voy a pasarte con un agente para que pueda ayudarte.\"\n\nNo continúes intentando resolver el problema después de decidir que requiere atención humana.\n\nIDIOMA\nResponde siempre en el mismo idioma que esté utilizando el cliente.\n\nSi el cliente cambia de idioma, adapta tus respuestas al nuevo idioma.\n\nESTILO\n- Sé cordial, natural y directo.\n- Usa mensajes breves.\n- Máximo 3 frases por respuesta.\n- Evita explicaciones largas.\n- No uses Markdown.\n- No uses tablas.\n- No uses listas largas.\n- No uses títulos.\n- No menciones que eres un modelo de IA.\n- No inventes información para intentar ser útil.\n\nBIENVENIDA\nSi es el inicio de una conversación o corresponde dar una bienvenida, utiliza un saludo breve.\n\nEjemplo:\n\"¡Hola! Bienvenido a Sésamo 👋 ¿Qué te gustaría ordenar hoy?\"\n\nSi el cliente ya hizo una pregunta concreta, responde directamente y evita repetir innecesariamente la bienvenida.\n\nREGLA PRINCIPAL\nSi una respuesta requiere información que no tienes disponible, nunca la adivines. Indica que no tienes ese dato y, cuando sea apropiado, ofrece atención de un agente humano.\nCuando necesites información sobre productos, precios, disponibilidad o cualquier dato del restaurante, consulta primero las herramientas disponibles.\n\nConsidera la información devuelta por esas herramientas como la única fuente válida para esos datos.\n\nSi una herramienta no devuelve información suficiente, no completes ni infieras el dato."
+        }
+      },
+      "id": "727d7263-d47d-4590-be2e-4525ffabfe55",
+      "name": "Agente IA",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        2128,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "idempotencyKey": "={{ $('OmniDesk1').item.json.headers['idempotency-key'] }}",
+            "text": "={{ $json.output }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "idempotencyKey",
+              "displayName": "idempotencyKey",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "ada7b705-6105-4564-bac2-ae90a4404ba0",
+      "name": "Guardar respuesta",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2480,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ text: $('Agente IA').item.json.output }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "ca1ac4b6-0414-4d5a-a504-66faab576634",
+      "name": "Responder IA",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2688,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "omnidesk",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "781958b7-8291-46f1-a1f2-fd02bf9411d3",
+      "name": "OmniDesk1",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        816,
+        560
+      ],
+      "webhookId": "omnidesk"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "5Cx5Z1iiS9eDfZde",
+          "mode": "list",
+          "cachedResultName": "Credentials",
+          "cachedResultUrl": "/projects/GiBzROGbG83mhghA/datatables/5Cx5Z1iiS9eDfZde"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "=clientId",
+              "condition": "=eq",
+              "keyValue": "={{ $json.headers['x-client-id'] }}"
+            },
+            {
+              "keyName": "clientSecret",
+              "keyValue": "={{ $json.headers['x-client-secret'] }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "id": "177a2847-aca2-4651-adb5-3499e7569ebf",
+      "name": "Buscar cliente1",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1040,
+        560
+      ],
+      "settings": {
+        "alwaysOutputData": true
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1952,
+        752
+      ],
+      "id": "d1eae609-8ffc-44f8-9b54-903e83a3c8d0",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "0Th2JaWs8aL1Z8WW",
+          "name": "OpenAI account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "¿Cliente válido?": {
+      "main": [
+        [
+          {
+            "node": "Tipo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tipo": {
+      "main": [
+        [
+          {
+            "node": "Responder ping",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Buscar respuesta previa",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder 400",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar respuesta previa": {
+      "main": [
+        [
+          {
+            "node": "¿Ya respondida?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Ya respondida?": {
+      "main": [
+        [
+          {
+            "node": "Responder respuesta previa",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Agente IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente IA": {
+      "main": [
+        [
+          {
+            "node": "Guardar respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar respuesta": {
+      "main": [
+        [
+          {
+            "node": "Responder IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OmniDesk1": {
+      "main": [
+        [
+          {
+            "node": "Buscar cliente1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar cliente1": {
+      "main": [
+        [
+          {
+            "node": "¿Cliente válido?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente IA",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "saveExecutionProgress": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "ebfb10aa-3ad8-4db4-91e7-935ed0702f55",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "63a2d636d880c69beaf6b24abb4135e00a0f74e454fdd2b333ffbd4c826c1cfd"
+  },
+  "nodeGroups": [],
+  "id": "QdXtwNDNUYrhurHj",
+  "tags": []
+}

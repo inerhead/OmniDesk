@@ -65,7 +65,8 @@ export class PrismaChannelRepository implements ChannelRepository {
 
   async findActiveCredential(keyHash: string, now: Date): Promise<IntegrationContext | null> {
     return this.db.client.integrationCredential.findFirst({
-      where: { keyHash, ...activeCredentialWhere(now) },
+      // Con la empresa en borrado (SPEC 20), sus canales cuentan como desconocidos.
+      where: { keyHash, ...activeCredentialWhere(now), tenant: { deletionRequestedAt: null } },
       select: { tenantId: true, channelId: true },
     });
   }

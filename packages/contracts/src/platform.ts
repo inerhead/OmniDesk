@@ -39,3 +39,39 @@ export type PlatformTenantRow = z.infer<typeof PlatformTenantRowSchema>;
 /** Respuesta de `GET /api/v1/platform/tenants`. */
 export const PlatformTenantsResponseSchema = z.array(PlatformTenantRowSchema);
 export type PlatformTenantsResponse = z.infer<typeof PlatformTenantsResponseSchema>;
+
+/** `POST /api/v1/platform/tenants/:id/delete` (SPEC 20): el slug exacto confirma el borrado. */
+export const DeleteTenantRequestSchema = z.object({ confirmSlug: z.string() });
+export type DeleteTenantRequest = z.infer<typeof DeleteTenantRequestSchema>;
+
+/** `GET /api/v1/platform/tenants/:id/deletion-preview`: lo que se borraría. */
+export const TenantDeletionPreviewSchema = z.object({
+  members: z.number().int(),
+  /** Cuentas que quedarían sin empresa y se borrarían. */
+  accountsToDelete: z.number().int(),
+  conversations: z.number().int(),
+  messages: z.number().int(),
+  attachments: z.number().int(),
+});
+export type TenantDeletionPreview = z.infer<typeof TenantDeletionPreviewSchema>;
+
+/** Constancia de una empresa borrada o en borrado. */
+export const PlatformTenantDeletionRowSchema = z.object({
+  id: z.uuid(),
+  tenantName: z.string(),
+  tenantSlug: z.string(),
+  requestedByEmail: z.string(),
+  requestedAt: z.iso.datetime(),
+  /** null = el borrado sigue en curso. */
+  completedAt: z.iso.datetime().nullable(),
+  membersDeleted: z.number().int(),
+  usersDeleted: z.number().int(),
+  conversationsDeleted: z.number().int(),
+  messagesDeleted: z.number().int(),
+  attachmentsDeleted: z.number().int(),
+});
+export type PlatformTenantDeletionRow = z.infer<typeof PlatformTenantDeletionRowSchema>;
+
+/** Respuesta de `GET /api/v1/platform/tenant-deletions`, de la más reciente a la más antigua. */
+export const PlatformTenantDeletionsResponseSchema = z.array(PlatformTenantDeletionRowSchema);
+export type PlatformTenantDeletionsResponse = z.infer<typeof PlatformTenantDeletionsResponseSchema>;

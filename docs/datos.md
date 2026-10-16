@@ -44,6 +44,21 @@ El mismo job borra, en todas las empresas, lo que ya no sirve:
 
 Además borra los **rechazos de solicitudes de empresa** (`tenant_rejections`, SPEC 18) a los **20 días** de rechazarse. Al rechazar, la empresa en revisión y su membresía se borran al momento: solo queda esa fila, con el nombre, el slug, el contacto (móvil y email) y el motivo, para el aviso del solicitante y la pestaña **Rechazadas** de `/platform`. No lleva `tenant_id` ni RLS: solo la leen los caminos de sistema.
 
+## Borrado de una empresa
+
+Un admin de plataforma borra una empresa desde `/platform` (SPEC 20). Solo una empresa **suspendida**, escribiendo su identificador exacto, y nunca la demo con `DEMO_MODE`. Es irreversible.
+
+Al pedirlo, la empresa queda **en borrado** (`tenants.deletion_requested_at`): sale de `/me` y del selector de todos sus miembros, sus sesiones la sueltan, sus canales cuentan como desconocidos para WhatsApp y n8n, y el dispatcher descarta sus eventos. Después, un job (cada minuto y al pedir un borrado, con el lock `omnidesk:tenant-purge`) borra, en este orden:
+
+1. Las conversaciones, de 200 en 200, con sus mensajes, eventos y adjuntos.
+2. Todo el bucket de la empresa: `tenants/<id>/` (adjuntos entrantes, salientes y logo).
+3. En una transacción: contactos, canales, credenciales, invitaciones, Outbox, `deletion_log`, miembros, las **cuentas huérfanas** y la fila de la empresa. El identificador queda libre.
+4. Las fotos de esas cuentas (`users/<id>/`).
+
+Una cuenta es huérfana si no le queda ninguna empresa activa: una baja en otra empresa no la salva. Se borra con sus sesiones, sus suscripciones push y sus rechazos. La cuenta de un admin de plataforma nunca se borra.
+
+Si un paso falla (por ejemplo, MinIO caído), la empresa sigue en borrado y la siguiente pasada retoma. Queda una constancia en `tenant_deletions`, que se conserva siempre: nombre, identificador, quién lo pidió, cuándo, cuándo terminó, el último error y cuántos miembros, cuentas, conversaciones, mensajes, adjuntos y objetos se borraron. No lleva RLS: solo la leen los caminos de sistema y la pestaña **Borradas** de `/platform`.
+
 ## `deletion_log`
 
 Deja constancia de cada borrado **sin datos personales**: empresa, tipo (`contact` o `retention`), quién (el miembro, o vacío en el job), cuándo y cuántas conversaciones y mensajes. No guarda nombres, teléfonos ni contenido.
@@ -56,7 +71,7 @@ Deja constancia de cada borrado **sin datos personales**: empresa, tipo (`contac
 
 ## Aislamiento entre empresas
 
-Además de los filtros por `tenant_id` del código, PostgreSQL aplica Row Level Security en las 12 tablas con `tenant_id`. El API atiende cada petición de una empresa con un rol sin `BYPASSRLS` y con la empresa fijada en la transacción: aunque una consulta olvide el filtro, la base no devuelve filas de otra empresa.
+Además de los filtros por `tenant_id` del código, PostgreSQL aplica Row Level Security en las 12 tablas de negocio con `tenant_id` (`tenant_deletions` no lleva: es la constancia de una empresa que ya no existe). El API atiende cada petición de una empresa con un rol sin `BYPASSRLS` y con la empresa fijada en la transacción: aunque una consulta olvide el filtro, la base no devuelve filas de otra empresa.
 
 ## Fuera de alcance por ahora
 

@@ -3,8 +3,10 @@ import {
   BucketAlreadyOwnedByYou,
   CreateBucketCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   HeadBucketCommand,
+  ListObjectsV2Command,
   NotFound,
   PutObjectCommand,
   S3Client,
@@ -87,5 +89,35 @@ export class S3AttachmentStorage implements AttachmentStorage {
 
   async delete(key: string): Promise<void> {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+  }
+
+  /**
+   * Lista de 1000 en 1000 y borra cada página con `DeleteObjects` (máximo 1000 claves por llamada).
+   * Siempre pide la primera página: lo ya borrado no vuelve a aparecer.
+   */
+  async deletePrefix(prefix: string): Promise<number> {
+    if (!prefix.endsWith('/')) throw new Error(`Prefijo sin "/" final: ${prefix}`);
+    let deleted = 0;
+    for (;;) {
+      const page = await this.client.send(
+        new ListObjectsV2Command({ Bucket: this.bucket, Prefix: prefix, MaxKeys: 1000 }),
+      );
+      const keys = (page.Contents ?? []).flatMap((object) => (object.Key ? [object.Key] : []));
+      if (keys.length === 0) return deleted;
+      const result = await this.client.send(
+        new DeleteObjectsCommand({
+          Bucket: this.bucket,
+          Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
+        }),
+      );
+      const failed = result.Errors ?? [];
+      if (failed.length > 0) {
+        const first = failed[0];
+        throw new Error(
+          `${failed.length} objetos sin borrar bajo ${prefix}: ${first?.Key} (${first?.Code})`,
+        );
+      }
+      deleted += keys.length;
+    }
   }
 }

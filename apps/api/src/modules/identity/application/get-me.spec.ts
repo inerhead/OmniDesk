@@ -109,6 +109,17 @@ describe('GetMeUseCase', () => {
     expect(activeChanges).toEqual([null]);
   });
 
+  it('una empresa en borrado no llega como membresía: la sesión que la tenía activa pasa a otra', async () => {
+    // El repositorio excluye las empresas con `deletionRequestedAt` (SPEC 20).
+    const { run, activeChanges } = setup([membership('b', 'active')]);
+
+    const me = await run('en-borrado');
+
+    expect(me!.memberships.map((m) => m.tenantId)).toEqual(['b']);
+    expect(me!.activeTenantId).toBe('b');
+    expect(activeChanges).toEqual(['b']);
+  });
+
   it('un admin de plataforma ve el contador; los demás reciben null', async () => {
     const admin = setup([], { admins: ['ANA@example.com'], pending: 3 });
     const other = setup([], { admins: ['otro@example.com'], pending: 3 });

@@ -147,19 +147,23 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
   }
 
   /**
-   * Empresa no activa (SPEC 16 y 18): no sale nada. Los envíos pasan a `FAILED` sin llamar al
+   * Empresa no activa (SPEC 16, 18 y 20): no sale nada. Los envíos pasan a `FAILED` sin llamar al
    * proveedor (también los que ya estaban en cola): con `TENANT_SUSPENDED` si la suspendió la
    * plataforma y con `TENANT_INACTIVE` en otro caso. La IA y el push se dan por publicados.
+   * Con la empresa en borrado o ya borrada se descarta todo, salvo el push de plataforma.
    * Devuelve `true` si el evento queda resuelto así.
    */
   private async cutForInactiveTenant(event: PendingOutboxEvent): Promise<boolean> {
+    // SPEC 18: el push de plataforma sale aunque la empresa esté en revisión o borrada.
+    if (!this.tenantStatus || event.type === PLATFORM_PUSH_REQUESTED) return false;
+    const state = await this.tenantStatus.state(event.tenantId);
+    // SPEC 20: el job de borrado se lleva sus filas; no hay a quién publicar ni qué enviar.
+    if (state === null || state === 'deleting') return true;
     const outgoing =
       event.type === MESSAGE_SEND_REQUESTED ||
       event.type === 'ai.reply_requested' ||
       event.type === 'notification.requested';
-    if (!outgoing || !this.tenantStatus) return false;
-    const state = await this.tenantStatus.state(event.tenantId);
-    if (state === 'active') return false;
+    if (!outgoing || state === 'active') return false;
     if (event.type === MESSAGE_SEND_REQUESTED) {
       const reason = state === 'suspended' ? TENANT_SUSPENDED_REASON : TENANT_INACTIVE_REASON;
       await this.sender.fail(event.tenantId, event.payload, reason);
@@ -194,7 +198,7 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
         if (!this.pushes) throw new Error('Envío de notificaciones no disponible');
         await this.pushes.deliver(event.payload);
         return;
-      // SPEC 18: no pasa por `cutForInactiveTenant`; la empresa puede estar en revisión o borrada.
+      // SPEC 18: `cutForInactiveTenant` lo deja pasar; la empresa puede estar en revisión o borrada.
       case PLATFORM_PUSH_REQUESTED:
         if (!this.pushes) throw new Error('Envío de notificaciones no disponible');
         await this.pushes.deliverPlatform(event.payload);

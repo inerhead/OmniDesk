@@ -15,15 +15,19 @@ import {
   ApiBadRequestResponse,
   ApiConflictResponse,
   ApiNotFoundResponse,
+  ApiAcceptedResponse,
   ApiOkResponse,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import {
+  DeleteTenantRequestSchema,
   PlatformReasonRequestSchema,
   PlatformTenantsQuerySchema,
   PlatformTenantsResponseSchema,
+  TenantDeletionPreviewSchema,
   type PlatformTenantRow,
+  type TenantDeletionPreview,
 } from '@omnidesk/contracts';
 import { createZodDto } from 'nestjs-zod';
 import type { SessionContext } from '../../../../shared/application/request-context';
@@ -39,11 +43,18 @@ import {
   type PlatformActionResult,
   type PlatformListItem,
 } from '../../application/platform.use-cases';
+import {
+  PreviewTenantDeletionUseCase,
+  RequestTenantDeletionUseCase,
+  type RequestTenantDeletionResult,
+} from '../../application/tenant-deletion.use-cases';
 import { PlatformAdminGuard } from './platform-admin.guard';
 
 class PlatformTenantsQueryDto extends createZodDto(PlatformTenantsQuerySchema) {}
 class PlatformTenantsResponseDto extends createZodDto(PlatformTenantsResponseSchema) {}
 class PlatformReasonRequestDto extends createZodDto(PlatformReasonRequestSchema) {}
+class DeleteTenantRequestDto extends createZodDto(DeleteTenantRequestSchema) {}
+class TenantDeletionPreviewDto extends createZodDto(TenantDeletionPreviewSchema) {}
 
 function toRow(item: PlatformListItem): PlatformTenantRow {
   if (item.kind === 'rejection') {
@@ -77,7 +88,8 @@ function toRow(item: PlatformListItem): PlatformTenantRow {
     approvedAt: tenant.approvedAt?.toISOString() ?? null,
     rejectedAt: null,
     rejectionReason: null,
-    state: tenant.state === 'pending' ? null : tenant.state,
+    // Aprobadas no lista las que están en borrado (SPEC 20); en revisión no lleva estado.
+    state: tenant.state === 'pending' || tenant.state === 'deleting' ? null : tenant.state,
     suspensionReason: tenant.suspensionReason,
   };
 }
@@ -90,9 +102,31 @@ function check(result: PlatformActionResult): void {
   if (result.kind === 'not-approved') {
     throw apiError(HttpStatus.CONFLICT, 'NOT_APPROVED', 'La empresa no está aprobada');
   }
+  if (result.kind === 'deleting') {
+    throw apiError(HttpStatus.CONFLICT, 'TENANT_DELETING', 'La empresa se está borrando');
+  }
 }
 
-/** Panel de plataforma (SPEC 18): revisar solicitudes y suspender empresas. */
+function checkDeletion(result: RequestTenantDeletionResult): void {
+  switch (result.kind) {
+    case 'not-found':
+      throw new NotFoundException('La empresa no existe');
+    case 'demo-locked':
+      throw apiError(HttpStatus.CONFLICT, 'DEMO_TENANT_LOCKED', 'La empresa demo no se borra');
+    case 'not-suspended':
+      throw apiError(HttpStatus.CONFLICT, 'NOT_SUSPENDED', 'Solo se borra una empresa suspendida');
+    case 'confirmation-mismatch':
+      throw apiError(
+        HttpStatus.BAD_REQUEST,
+        'CONFIRMATION_MISMATCH',
+        'El identificador no coincide con el de la empresa',
+      );
+    case 'ok':
+      return;
+  }
+}
+
+/** Panel de plataforma (SPEC 18 y 20): revisar solicitudes, suspender y borrar empresas. */
 @ApiTags('platform')
 @ApiUnauthorizedResponse({ description: 'Sin sesión (`UNAUTHENTICATED`).' })
 @ApiNotFoundResponse({ description: 'No es admin de plataforma, o la empresa no existe.' })
@@ -105,6 +139,8 @@ export class PlatformController {
     private readonly rejectTenant: RejectTenantUseCase,
     private readonly suspendTenant: SuspendTenantUseCase,
     private readonly unsuspendTenant: UnsuspendTenantUseCase,
+    private readonly requestDeletion: RequestTenantDeletionUseCase,
+    private readonly previewDeletion: PreviewTenantDeletionUseCase,
   ) {}
 
   @Get()
@@ -141,7 +177,9 @@ export class PlatformController {
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({ description: 'Suspendida (o ya lo estaba).' })
   @ApiBadRequestResponse({ description: 'Motivo de menos de 5 o más de 500 caracteres.' })
-  @ApiConflictResponse({ description: 'No está aprobada (`NOT_APPROVED`).' })
+  @ApiConflictResponse({
+    description: 'No está aprobada (`NOT_APPROVED`) o se está borrando (`TENANT_DELETING`).',
+  })
   async suspend(
     @CurrentSession() session: SessionContext,
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -153,8 +191,35 @@ export class PlatformController {
   @Post(':id/unsuspend')
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({ description: 'Sin suspensión (o ya no la tenía).' })
-  @ApiConflictResponse({ description: 'No está aprobada (`NOT_APPROVED`).' })
+  @ApiConflictResponse({
+    description: 'No está aprobada (`NOT_APPROVED`) o se está borrando (`TENANT_DELETING`).',
+  })
   async unsuspend(@Param('id', new ParseUUIDPipe()) id: string): Promise<void> {
     check(await this.unsuspendTenant.execute(id));
+  }
+
+  @Get(':id/deletion-preview')
+  @ApiOkResponse({ type: TenantDeletionPreviewDto.Output })
+  async deletionPreview(
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<TenantDeletionPreview> {
+    const preview = await this.previewDeletion.execute(id);
+    if (!preview) throw new NotFoundException('La empresa no existe');
+    return preview;
+  }
+
+  @Post(':id/delete')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiAcceptedResponse({ description: 'Borrado pedido (o ya en curso): sigue en segundo plano.' })
+  @ApiBadRequestResponse({ description: 'El slug no coincide (`CONFIRMATION_MISMATCH`).' })
+  @ApiConflictResponse({
+    description: 'No está suspendida (`NOT_SUSPENDED`) o es la demo (`DEMO_TENANT_LOCKED`).',
+  })
+  async delete(
+    @CurrentSession() session: SessionContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() body: DeleteTenantRequestDto,
+  ): Promise<void> {
+    checkDeletion(await this.requestDeletion.execute(session.userId, id, body.confirmSlug));
   }
 }

@@ -7,7 +7,7 @@ import type { PlatformTenant } from '../../domain/platform-tenant';
 export interface PlatformTenantRepository {
   /** En revisión, la más antigua primero. */
   listPending(): Promise<PlatformTenant[]>;
-  /** Aprobadas, la más reciente primero. */
+  /** Aprobadas y no en borrado (SPEC 20), la más reciente primero. */
   listApproved(): Promise<PlatformTenant[]>;
   /** Con la fila bloqueada: dos admins a la vez no deciden dos veces. */
   findForUpdate(tenantId: string): Promise<PlatformTenant | null>;

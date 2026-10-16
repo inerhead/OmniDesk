@@ -1,7 +1,9 @@
 import {
   BucketAlreadyOwnedByYou,
   CreateBucketCommand,
+  DeleteObjectsCommand,
   HeadBucketCommand,
+  ListObjectsV2Command,
   NotFound,
   S3Client,
   S3ServiceException,
@@ -73,5 +75,56 @@ describe('S3AttachmentStorage.ensureBucket', () => {
     });
 
     await expect(new S3AttachmentStorage(env).ensureBucket()).resolves.toBeUndefined();
+  });
+});
+
+describe('S3AttachmentStorage.deletePrefix', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /** Bucket falso: `ListObjectsV2` devuelve hasta 1000 claves; `DeleteObjects` las quita. */
+  function fakeBucket(keys: string[], deleteErrors: unknown[] = []) {
+    const stored = new Set(keys);
+    const deletes: string[][] = [];
+    vi.spyOn(S3Client.prototype, 'send').mockImplementation(async (command: unknown) => {
+      if (command instanceof ListObjectsV2Command) {
+        const prefix = command.input.Prefix ?? '';
+        const page = [...stored].filter((key) => key.startsWith(prefix)).slice(0, 1000);
+        return { Contents: page.map((Key) => ({ Key })) };
+      }
+      if (command instanceof DeleteObjectsCommand) {
+        const batch = (command.input.Delete?.Objects ?? []).map((object) => object.Key!);
+        deletes.push(batch);
+        if (deleteErrors.length > 0) return { Errors: deleteErrors };
+        for (const key of batch) stored.delete(key);
+        return {};
+      }
+      throw new Error('comando no esperado');
+    });
+    return { stored, deletes };
+  }
+
+  it('borra en lotes de 1000 hasta vaciar el prefijo y no toca el resto', async () => {
+    const keys = Array.from({ length: 2500 }, (_, index) => `tenants/a/attachments/${index}`);
+    const bucket = fakeBucket([...keys, 'tenants/ab/logo-1', 'users/u1/avatar-1']);
+
+    expect(await new S3AttachmentStorage(env).deletePrefix('tenants/a/')).toBe(2500);
+
+    expect(bucket.deletes.map((batch) => batch.length)).toEqual([1000, 1000, 500]);
+    expect([...bucket.stored]).toEqual(['tenants/ab/logo-1', 'users/u1/avatar-1']);
+  });
+
+  it('con el prefijo vacío devuelve 0 sin borrar nada', async () => {
+    const bucket = fakeBucket(['users/u1/avatar-1']);
+
+    expect(await new S3AttachmentStorage(env).deletePrefix('tenants/a/')).toBe(0);
+    expect(bucket.deletes).toEqual([]);
+  });
+
+  it('falla si S3 informa objetos sin borrar', async () => {
+    fakeBucket(['tenants/a/logo-1'], [{ Key: 'tenants/a/logo-1', Code: 'AccessDenied' }]);
+
+    await expect(new S3AttachmentStorage(env).deletePrefix('tenants/a/')).rejects.toThrow(
+      /AccessDenied/,
+    );
   });
 });

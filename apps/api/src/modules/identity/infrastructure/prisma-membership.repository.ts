@@ -39,11 +39,17 @@ type Row = {
     approval: 'PENDING' | 'APPROVED';
     suspendedAt: Date | null;
     deactivatedAt: Date | null;
+    deletionRequestedAt: Date | null;
   };
 };
 
-const toMembership = (row: Row): Membership => {
+/** Una empresa en borrado deja de contar como membresía (SPEC 20). */
+const notDeleting = { tenant: { deletionRequestedAt: null } } as const;
+
+/** `null` si la empresa está en borrado: las consultas ya la excluyen, esto lo garantiza en el tipo. */
+const toMembership = (row: Row): Membership | null => {
   const state = tenantState(row.tenant);
+  if (state === 'deleting') return null;
   return {
     memberId: row.id,
     tenantId: row.tenantId,
@@ -65,16 +71,16 @@ export class PrismaMembershipRepository implements MembershipRepository {
 
   async listForUser(userId: string): Promise<Membership[]> {
     const rows = await this.db.client.tenantMember.findMany({
-      where: { userId, removedAt: null },
+      where: { userId, removedAt: null, ...notDeleting },
       orderBy: [{ tenant: { name: 'asc' } }, { tenantId: 'asc' }],
       select,
     });
-    return rows.map(toMembership);
+    return rows.flatMap((row) => toMembership(row) ?? []);
   }
 
   async findForUser(userId: string, tenantId: string): Promise<Membership | null> {
     const row = await this.db.client.tenantMember.findFirst({
-      where: { userId, tenantId, removedAt: null },
+      where: { userId, tenantId, removedAt: null, ...notDeleting },
       select,
     });
     return row ? toMembership(row) : null;
@@ -82,17 +88,24 @@ export class PrismaMembershipRepository implements MembershipRepository {
 
   async findByMemberId(memberId: string): Promise<(Membership & { userId: string | null }) | null> {
     const row = await this.db.client.tenantMember.findFirst({
-      where: { id: memberId, removedAt: null },
+      where: { id: memberId, removedAt: null, ...notDeleting },
       select,
     });
-    return row ? { ...toMembership(row), userId: row.userId } : null;
+    const membership = row && toMembership(row);
+    return membership ? { ...membership, userId: row.userId } : null;
   }
 
   async listLoginMembersOfTenant(tenantSlug: string) {
     const rows = await this.db.client.tenantMember.findMany({
       // Una empresa inactiva (SPEC 16) o suspendida (SPEC 18) no ofrece login de desarrollo.
       where: {
-        tenant: { slug: tenantSlug, deactivatedAt: null, suspendedAt: null, approval: 'APPROVED' },
+        tenant: {
+          slug: tenantSlug,
+          deactivatedAt: null,
+          suspendedAt: null,
+          deletionRequestedAt: null,
+          approval: 'APPROVED',
+        },
         removedAt: null,
         userId: { not: null },
       },

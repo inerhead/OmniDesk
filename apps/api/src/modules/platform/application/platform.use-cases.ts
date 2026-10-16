@@ -27,7 +27,12 @@ export type PlatformListItem =
     };
 
 export type PlatformActionResult =
-  { kind: 'ok' } | { kind: 'not-found' } | { kind: 'not-pending' } | { kind: 'not-approved' };
+  | { kind: 'ok' }
+  | { kind: 'not-found' }
+  | { kind: 'not-pending' }
+  | { kind: 'not-approved' }
+  /** En borrado (SPEC 20): ya no se suspende ni se levanta la suspensión. */
+  | { kind: 'deleting' };
 
 /** Las apps abiertas de la empresa vuelven a pedir `/me` (SPEC 16 y 18). */
 async function enqueueStatusChanged(
@@ -161,6 +166,7 @@ export class SuspendTenantUseCase {
     return this.tx.run(async () => {
       const tenant = await this.tenants.findForUpdate(tenantId);
       if (!tenant) return { kind: 'not-found' };
+      if (tenant.state === 'deleting') return { kind: 'deleting' };
       if (tenant.approval !== 'APPROVED') return { kind: 'not-approved' };
       const now = this.clock.now();
       if (await this.tenants.suspend(tenantId, { byUserId: adminUserId, reason, at: now })) {
@@ -190,6 +196,7 @@ export class UnsuspendTenantUseCase {
     return this.tx.run(async () => {
       const tenant = await this.tenants.findForUpdate(tenantId);
       if (!tenant) return { kind: 'not-found' };
+      if (tenant.state === 'deleting') return { kind: 'deleting' };
       if (tenant.approval !== 'APPROVED') return { kind: 'not-approved' };
       const now = this.clock.now();
       if (await this.tenants.unsuspend(tenantId)) {

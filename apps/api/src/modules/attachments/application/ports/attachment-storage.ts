@@ -15,6 +15,8 @@ export interface AttachmentStorage {
   ): Promise<void>;
   get(key: string, range?: ByteRange): Promise<StoredObject>;
   delete(key: string): Promise<void>;
+  /** Borra todos los objetos bajo el prefijo y devuelve cuántos borró. Idempotente (SPEC 20). */
+  deletePrefix(prefix: string): Promise<number>;
 }
 
 export const ATTACHMENT_STORAGE = Symbol('ATTACHMENT_STORAGE');
@@ -22,6 +24,11 @@ export const ATTACHMENT_STORAGE = Symbol('ATTACHMENT_STORAGE');
 /** Entrantes: determinista, un reintento de la descarga sobrescribe el mismo objeto. */
 export function attachmentStorageKey(tenantId: string, attachmentId: string): string {
   return `tenants/${tenantId}/attachments/${attachmentId}`;
+}
+
+/** Todo lo de una empresa vive bajo este prefijo: adjuntos entrantes, salientes y logo (SPEC 20). */
+export function tenantStoragePrefix(tenantId: string): string {
+  return `tenants/${tenantId}/`;
 }
 
 /** Salientes: se suben antes de que exista la fila. */

@@ -26,7 +26,7 @@ export interface CredentialRotation {
 }
 
 export interface ChannelRepository {
-  /** Credencial no revocada ni vencida con ese hash, o `null`. */
+  /** Credencial no revocada ni vencida con ese hash, o `null` (también con la empresa en borrado). */
   findActiveCredential(keyHash: string, now: Date): Promise<IntegrationContext | null>;
   findSigningSecrets(channelId: string): Promise<ChannelSigningSecrets | null>;
   findForSend(tenantId: string, channelId: string): Promise<ChannelForSend | null>;

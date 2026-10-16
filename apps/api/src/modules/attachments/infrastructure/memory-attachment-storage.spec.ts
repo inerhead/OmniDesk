@@ -25,4 +25,22 @@ describe('MemoryAttachmentStorage', () => {
       storage.put('k', Buffer.from('abc'), { contentType: 'text/plain', contentLength: 5 }),
     ).rejects.toThrow(/tamaño/);
   });
+
+  it('borra por prefijo solo lo que está debajo y es idempotente', async () => {
+    const storage = new MemoryAttachmentStorage();
+    const put = (key: string) =>
+      storage.put(key, Buffer.from('x'), { contentType: 'text/plain', contentLength: 1 });
+    await put('tenants/a/attachments/1');
+    await put('tenants/a/logo-1');
+    await put('tenants/ab/attachments/1');
+    await put('users/u1/avatar-1');
+
+    expect(await storage.deletePrefix('tenants/a/')).toBe(2);
+    expect(await storage.deletePrefix('tenants/a/')).toBe(0);
+    expect(storage.keys()).toEqual(['tenants/ab/attachments/1', 'users/u1/avatar-1']);
+  });
+
+  it('exige un prefijo terminado en "/" para no borrar empresas con id parecido', async () => {
+    await expect(new MemoryAttachmentStorage().deletePrefix('tenants/a')).rejects.toThrow(/\//);
+  });
 });

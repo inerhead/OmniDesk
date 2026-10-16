@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DeleteTenantRequestSchema,
   PlatformReasonRequestSchema,
+  PlatformTenantDeletionRowSchema,
   PlatformTenantRowSchema,
   PlatformTenantsQuerySchema,
 } from './platform';
@@ -42,6 +44,35 @@ describe('PlatformTenantRowSchema', () => {
         rejectionReason: null,
         state: null,
         suspensionReason: null,
+      }).success,
+    ).toBe(true);
+  });
+});
+
+describe('DeleteTenantRequestSchema', () => {
+  it('exige el slug de confirmación sin recortarlo', () => {
+    expect(DeleteTenantRequestSchema.parse({ confirmSlug: ' acme ' })).toEqual({
+      confirmSlug: ' acme ',
+    });
+    expect(DeleteTenantRequestSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('PlatformTenantDeletionRowSchema', () => {
+  it('acepta un borrado en curso', () => {
+    expect(
+      PlatformTenantDeletionRowSchema.safeParse({
+        id: '0199c0de-0000-7000-8000-000000000002',
+        tenantName: 'Acme',
+        tenantSlug: 'acme',
+        requestedByEmail: 'admin@example.com',
+        requestedAt: '2026-10-15T10:00:00.000Z',
+        completedAt: null,
+        membersDeleted: 0,
+        usersDeleted: 0,
+        conversationsDeleted: 12,
+        messagesDeleted: 340,
+        attachmentsDeleted: 5,
       }).success,
     ).toBe(true);
   });

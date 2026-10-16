@@ -27,4 +27,16 @@ export class MemoryAttachmentStorage implements AttachmentStorage {
   async delete(key: string): Promise<void> {
     this.objects.delete(key);
   }
+
+  async deletePrefix(prefix: string): Promise<number> {
+    if (!prefix.endsWith('/')) throw new Error(`Prefijo sin "/" final: ${prefix}`);
+    const keys = [...this.objects.keys()].filter((key) => key.startsWith(prefix));
+    for (const key of keys) this.objects.delete(key);
+    return keys.length;
+  }
+
+  /** Claves guardadas, para las pruebas. */
+  keys(): string[] {
+    return [...this.objects.keys()].sort();
+  }
 }

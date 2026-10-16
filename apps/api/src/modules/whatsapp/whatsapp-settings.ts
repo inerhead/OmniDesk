@@ -32,9 +32,15 @@ export class WhatsAppSettings {
     @Inject(CHANNEL_SECRET_CIPHER) private readonly cipher: ChannelSecretCipher,
   ) {}
 
+  /** Con la empresa en borrado (SPEC 20), el canal cuenta como desconocido. */
   find(channelId: string, tenantId?: string) {
     return this.db.client.channel.findFirst({
-      where: { id: channelId, ...(tenantId && { tenantId }), provider: 'WHATSAPP_CLOUD' },
+      where: {
+        id: channelId,
+        ...(tenantId && { tenantId }),
+        provider: 'WHATSAPP_CLOUD',
+        tenant: { deletionRequestedAt: null },
+      },
     });
   }
 

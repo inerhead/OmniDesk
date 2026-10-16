@@ -71,7 +71,8 @@ export class PrismaInvitationRepository implements InvitationRepository {
         },
       },
     });
-    if (!row) return null;
+    // Una empresa en borrado (SPEC 20) ya no tiene invitaciones: el job las borra.
+    if (!row || tenantState(row.tenant) === 'deleting') return null;
     const { tenant, ...invitation } = row;
     return {
       ...toInvitation(invitation),

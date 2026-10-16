@@ -35,6 +35,7 @@ type Row = {
   approval: 'PENDING' | 'APPROVED';
   suspendedAt: Date | null;
   deactivatedAt: Date | null;
+  deletionRequestedAt: Date | null;
   members: Array<{ userId: string | null; displayName: string; email: string }>;
 };
 
@@ -68,7 +69,8 @@ export class PrismaPlatformTenantRepository implements PlatformTenantRepository 
 
   async listApproved(): Promise<PlatformTenant[]> {
     const rows = await this.db.client.tenant.findMany({
-      where: { approval: 'APPROVED' },
+      // Las que están en borrado salen de Aprobadas (SPEC 20): están en Borradas.
+      where: { approval: 'APPROVED', deletionRequestedAt: null },
       orderBy: [{ approvedAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
       select,
     });

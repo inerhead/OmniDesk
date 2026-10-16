@@ -212,25 +212,25 @@ export const PlatformTenantDeletionRowSchema = z.object({
 
 ## Criterios de aceptación
 
-- [ ] Borrar una empresa activa, inactiva o en revisión responde `409 NOT_SUSPENDED` y no cambia nada.
-- [ ] Con `DEMO_MODE=true`, borrar la empresa demo responde `409 DEMO_TENANT_LOCKED`.
-- [ ] Un `confirmSlug` distinto del slug responde `400 CONFIRMATION_MISMATCH` y no cambia nada.
-- [ ] Un usuario que no es admin recibe `404` en `POST /platform/tenants/:id/delete`, en la vista previa y en `GET /platform/tenant-deletions`.
-- [ ] Pedir el borrado de una empresa suspendida responde `202`, y repetirlo responde `202` sin crear otra constancia.
-- [ ] Justo después de pedirlo, la empresa no aparece en `/me` de ningún miembro, y una sesión que la tenía activa pasa a otra empresa o a `/onboarding`.
-- [ ] Justo después de pedirlo, suspender o levantar la suspensión responde `409 TENANT_DELETING`.
-- [ ] Un WhatsApp entrante a un canal de la empresa en borrado no crea ninguna fila.
-- [ ] Al terminar el job, no queda ninguna fila con ese `tenant_id` en `channels`, `integration_credentials`, `contacts`, `contact_identities`, `conversations`, `messages`, `message_attachments`, `conversation_events`, `invitations`, `tenant_members`, `outbox_events` ni `deletion_log`, ni la fila de `tenants`.
-- [ ] Al terminar el job, el bucket no tiene ningún objeto bajo `tenants/<tenantId>/`.
-- [ ] Tras el borrado, un alta nueva con el mismo slug responde `201`.
-- [ ] Un miembro que solo pertenecía a esa empresa pierde su cuenta: su fila de `users`, sus sesiones, sus suscripciones push y su foto bajo `users/<userId>/`. Su app abierta vuelve a `/login`.
-- [ ] Un miembro que también pertenece a otra empresa conserva su cuenta y entra a la otra empresa.
-- [ ] Un admin de plataforma que era miembro de la empresa conserva su cuenta.
-- [ ] La vista previa devuelve los mismos conteos de miembros y cuentas que luego registra la constancia.
-- [ ] Si el bucket falla en medio del job, la constancia guarda `lastError`, la empresa sigue en borrado y la siguiente pasada termina el borrado sin duplicar conteos.
+- [x] Borrar una empresa activa, inactiva o en revisión responde `409 NOT_SUSPENDED` y no cambia nada.
+- [x] Con `DEMO_MODE=true`, borrar la empresa demo responde `409 DEMO_TENANT_LOCKED`.
+- [x] Un `confirmSlug` distinto del slug responde `400 CONFIRMATION_MISMATCH` y no cambia nada.
+- [x] Un usuario que no es admin recibe `404` en `POST /platform/tenants/:id/delete`, en la vista previa y en `GET /platform/tenant-deletions`.
+- [x] Pedir el borrado de una empresa suspendida responde `202`, y repetirlo responde `202` sin crear otra constancia.
+- [x] Justo después de pedirlo, la empresa no aparece en `/me` de ningún miembro, y una sesión que la tenía activa pasa a otra empresa o a `/onboarding`.
+- [x] Justo después de pedirlo, suspender o levantar la suspensión responde `409 TENANT_DELETING`.
+- [x] Un WhatsApp entrante a un canal de la empresa en borrado no crea ninguna fila.
+- [x] Al terminar el job, no queda ninguna fila con ese `tenant_id` en `channels`, `integration_credentials`, `contacts`, `contact_identities`, `conversations`, `messages`, `message_attachments`, `conversation_events`, `invitations`, `tenant_members`, `outbox_events` ni `deletion_log`, ni la fila de `tenants`.
+- [x] Al terminar el job, el bucket no tiene ningún objeto bajo `tenants/<tenantId>/`.
+- [x] Tras el borrado, un alta nueva con el mismo slug responde `201`.
+- [x] Un miembro que solo pertenecía a esa empresa pierde su cuenta: su fila de `users`, sus sesiones, sus suscripciones push y su foto bajo `users/<userId>/`. Su app abierta vuelve a `/login`.
+- [x] Un miembro que también pertenece a otra empresa conserva su cuenta y entra a la otra empresa.
+- [x] Un admin de plataforma que era miembro de la empresa conserva su cuenta.
+- [x] La vista previa devuelve los mismos conteos de miembros y cuentas que luego registra la constancia.
+- [x] Si el bucket falla en medio del job, la constancia guarda `lastError`, la empresa sigue en borrado y la siguiente pasada termina el borrado sin duplicar conteos.
 - [ ] En `/platform`, una empresa suspendida muestra "Borrar", y el botón "Borrar empresa" del diálogo está deshabilitado hasta escribir el slug exacto.
 - [ ] La pestaña "Borradas" muestra la empresa como "Borrando…" mientras corre el job y como "Borrada" con la fecha y los conteos al terminar.
-- [ ] Lint, typecheck, test, build y e2e pasan.
+- [x] Lint, typecheck, test, build y e2e pasan.
 
 ## Decisiones tomadas y descartadas
 
@@ -275,3 +275,33 @@ export const PlatformTenantDeletionRowSchema = z.object({
 - Borrado en lote.
 
 Cada uno de esos, si llega, va en su propio spec.
+
+## Verificación de implementación
+
+2026-10-15, rama `spec-20-borrar-empresa`.
+
+Automatizado, en verde:
+
+- `pnpm lint`, `pnpm typecheck`, `pnpm test` y `pnpm build` en todo el monorepo: 428 unitarias del API, 168 de la web y 119 de contratos. El único aviso de lint (`main.tsx`) ya estaba en `main`.
+- `pnpm --filter @omnidesk/api test:e2e` desde el host contra el Postgres local (`_e2e`) y MinIO (`S3_E2E_ENDPOINT`): 260 pasaron y ninguno se saltó. `test/tenant-deletion.e2e-spec.ts` aporta 14 pruebas, y `test/s3-storage.e2e-spec.ts` una más de `deletePrefix` contra MinIO.
+- La migración `20261025000000_tenant_deletion` se aplicó sobre una base vacía, y `prisma migrate diff` contra `schema.prisma` sale vacío.
+
+Los criterios marcados arriba los cubren esas pruebas. Los demás dependen de la web y quedan para la revisión manual:
+
+- **Diálogo:** "Borrar" en una empresa suspendida, el resumen de la vista previa y el botón "Borrar empresa" deshabilitado hasta escribir el slug exacto. La regla del slug y el resumen tienen pruebas unitarias (`tenant-deletion.spec.ts`), pero la página no se abrió en un navegador.
+- **Pestaña "Borradas":** "Borrando…" mientras corre el job y "Borrada" con los conteos al terminar.
+- **Vuelta a `/login`:** el API responde `401` a la sesión de una cuenta borrada (probado). La redirección de la web es el mecanismo existente para un `401`.
+
+No se tocó el stack que corre en esta máquina: la migración se aplica en el próximo despliegue con `prisma migrate deploy`.
+
+Decisiones tomadas al implementar, dentro del alcance:
+
+- **Miembros que se cuentan y cuentas que se evalúan:** todas las filas de `tenant_members` de la empresa, también las dadas de baja. Así la vista previa coincide con lo que borra el job. Una cuenta que solo tenía una baja en esta empresa y nada más también es huérfana.
+- **Otra empresa en borrado no salva una cuenta:** la regla solo cuenta membresías activas en empresas sin `deletionRequestedAt`.
+- **Invitaciones:** el enlace de una invitación de una empresa en borrado responde como si no existiera. El job las borra después.
+- **Dispatcher:** ahora consulta el estado de la empresa para todo evento, no solo para los salientes, y descarta los de una empresa en borrado o inexistente. Es una lectura por clave primaria por evento. El push de plataforma sigue saliendo siempre.
+- **Respuesta de los entrantes:** el webhook de WhatsApp Cloud responde `404` (canal desconocido) y los endpoints de integración `401` (credencial desconocida), las mismas respuestas que ya daban.
+- **Fotos de las cuentas borradas:** se borra el prefijo `users/<userId>/` de cada cuenta huérfana, tenga o no foto. Así caen también fotos viejas que hubieran quedado.
+- **`objectsDeleted`:** `deletePrefix` devuelve el total solo al terminar. Si el bucket falla a mitad, los objetos ya borrados en esa pasada no se suman, así que el conteo puede quedar por debajo, nunca duplicado. No se muestra en la web.
+- **`PgJobLock`:** se reutiliza el de SPEC 12 (`modules/retention`); el módulo de plataforma lo registra con su propio `JOB_LOCK`.
+- **Web:** la pestaña "Borradas" se vuelve a pedir cada 5 s mientras alguna sigue en curso. El botón "Borrar empresa" también espera a que cargue la vista previa.

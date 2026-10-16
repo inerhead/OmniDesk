@@ -501,6 +501,45 @@ describe('OutboxDispatcher con la empresa inactiva (SPEC 16)', () => {
   });
 });
 
+describe('OutboxDispatcher con la empresa en borrado o ya borrada (SPEC 20)', () => {
+  it.each([
+    ['en borrado', 'deleting' as const],
+    ['ya borrada', null],
+  ])('con la empresa %s descarta todo sin publicar, enviar ni descargar', async (_label, state) => {
+    const store = new InMemoryStore();
+    const publisher = new FakePublisher();
+    const sender = new FakeSender();
+    const push = new FakePush();
+    push.error = null;
+    const downloader = new FakeDownloader();
+    const dispatcher = new OutboxDispatcher(
+      noTransaction,
+      store,
+      publisher,
+      sender,
+      undefined,
+      downloader,
+      push,
+      { state: async () => state, isActive: async () => false },
+    );
+    const events = [
+      store.add(),
+      store.add({ type: 'message.send_requested', payload: { messageId: 'm1' } }),
+      store.add({ type: 'notification.requested', payload: { kind: 'assigned' } }),
+      store.add({ type: 'attachment.download_requested', payload: { attachmentId: 'a1' } }),
+    ];
+
+    expect(await dispatcher.tick(T0)).toBe(4);
+
+    expect(events.map((event) => event.publishedAt)).toEqual([T0, T0, T0, T0]);
+    expect(publisher.published).toEqual([]);
+    expect(sender.calls).toBe(0);
+    expect(sender.failed).toEqual([]);
+    expect(push.calls).toBe(0);
+    expect(downloader.calls).toBe(0);
+  });
+});
+
 describe('OutboxDispatcher: push de plataforma (SPEC 18)', () => {
   const platformPush = {
     userIds: ['0199c0de-0000-7000-8000-0000000000b1'],
@@ -512,6 +551,7 @@ describe('OutboxDispatcher: push de plataforma (SPEC 18)', () => {
 
   it.each([
     ['en revisión', 'pending' as const],
+    ['en borrado', 'deleting' as const],
     ['borrada', null],
   ])('se entrega con la empresa %s', async (_label, state) => {
     const store = new InMemoryStore();

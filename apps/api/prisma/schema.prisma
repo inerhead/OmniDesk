@@ -110,6 +110,8 @@ model Tenant {
   contactPhone          String?        @map("contact_phone")
   /// Email de login del solicitante al pedir el alta; null en empresas anteriores a SPEC 18.
   contactEmail          String?        @map("contact_email")
+  /// Borrado pedido por la plataforma (SPEC 20); null = no se está borrando.
+  deletionRequestedAt   DateTime?      @map("deletion_requested_at") @db.Timestamptz(3)
   createdAt             DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
 
   deactivatedBy TenantMember? @relation("TenantDeactivatedBy", fields: [deactivatedByMemberId], references: [id], onDelete: Restrict)
@@ -297,6 +299,7 @@ model User {
   suspendedTenants  Tenant[]           @relation("TenantSuspendedBy")
   tenantRejections  TenantRejection[]  @relation("TenantRejectionUser")
   rejectionsMade    TenantRejection[]  @relation("TenantRejectionBy")
+  tenantDeletions   TenantDeletion[]   @relation("TenantDeletionBy")
 
   @@map("users")
 }
@@ -323,6 +326,33 @@ model TenantRejection {
   @@index([userId])
   @@index([rejectedAt])
   @@map("tenant_rejections")
+}
+
+/// Constancia de una empresa borrada (SPEC 20). Sobrevive a la empresa: `tenant_id` sin FK y sin
+/// RLS. Solo la leen y escriben caminos de sistema. Se conserva indefinidamente.
+model TenantDeletion {
+  id                   String    @id @default(uuid(7)) @db.Uuid
+  tenantId             String    @unique @map("tenant_id") @db.Uuid
+  tenantName           String    @map("tenant_name")
+  tenantSlug           String    @map("tenant_slug")
+  requestedByUserId    String?   @map("requested_by_user_id") @db.Uuid
+  /// Copia: se conserva aunque la cuenta del admin desaparezca.
+  requestedByEmail     String    @map("requested_by_email")
+  requestedAt          DateTime  @map("requested_at") @db.Timestamptz(3)
+  /// null = el job aún no terminó.
+  completedAt          DateTime? @map("completed_at") @db.Timestamptz(3)
+  lastError            String?   @map("last_error")
+  membersDeleted       Int       @default(0) @map("members_deleted")
+  usersDeleted         Int       @default(0) @map("users_deleted")
+  conversationsDeleted Int       @default(0) @map("conversations_deleted")
+  messagesDeleted      Int       @default(0) @map("messages_deleted")
+  attachmentsDeleted   Int       @default(0) @map("attachments_deleted")
+  objectsDeleted       Int       @default(0) @map("objects_deleted")
+
+  requestedBy User? @relation("TenantDeletionBy", fields: [requestedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([requestedAt])
+  @@map("tenant_deletions")
 }
 
 /// Suscripción Web Push de un dispositivo. Pertenece al usuario, no a una empresa.

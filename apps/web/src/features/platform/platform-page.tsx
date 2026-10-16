@@ -1,6 +1,10 @@
-import type { PlatformTenantRow, PlatformTenantStatus } from '@omnidesk/contracts';
+import type {
+  PlatformTenantDeletionRow,
+  PlatformTenantRow,
+  PlatformTenantStatus,
+} from '@omnidesk/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Building2, LogOut, Phone, Plus, X } from 'lucide-react';
+import { ArrowLeft, Building2, LogOut, Phone, Plus, Trash2, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useSearchParams } from 'react-router';
 import { ME_QUERY_KEY, useMe } from '@/features/auth/api/use-me';
@@ -18,9 +22,12 @@ import { ConfirmDialog } from '@/shared/ui/confirm-dialog';
 import { EmptyState } from '@/shared/ui/empty-state';
 import { SegmentedControl } from '@/shared/ui/segmented-control';
 import { Skeleton } from '@/shared/ui/skeleton';
+import { DeleteTenantDialog } from './delete-tenant-dialog';
 import {
   approveTenant,
+  deleteTenant,
   fetchPlatformTenants,
+  fetchTenantDeletions,
   PLATFORM_QUERY_KEY,
   rejectTenant,
   suspendTenant,
@@ -28,15 +35,23 @@ import {
 } from './platform-api';
 import { RejectDialog } from './reject-dialog';
 import { SuspendDialog } from './suspend-dialog';
+import { deletionErrorMessage } from './tenant-deletion';
 
 const dateFormat = new Intl.DateTimeFormat('es', { dateStyle: 'medium' });
 const formatDate = (iso: string | null) => (iso ? dateFormat.format(new Date(iso)) : '—');
 
-const TABS: { value: PlatformTenantStatus; label: string; empty: string }[] = [
+/** Pestañas de `/platform`: las tres de SPEC 18 y "Borradas" (SPEC 20). */
+type PlatformTab = PlatformTenantStatus | 'deleted';
+
+const TABS: { value: PlatformTab; label: string; empty: string }[] = [
   { value: 'pending', label: 'Pendientes', empty: 'No hay solicitudes pendientes' },
   { value: 'approved', label: 'Aprobadas', empty: 'No hay empresas aprobadas' },
   { value: 'rejected', label: 'Rechazadas', empty: 'No hay rechazos en los últimos 20 días' },
+  { value: 'deleted', label: 'Borradas', empty: 'No hay empresas borradas' },
 ];
+
+/** Mientras alguna empresa se está borrando, la pestaña se refresca sola. */
+const DELETING_REFETCH_MS = 5_000;
 
 const STATE: Record<
   NonNullable<PlatformTenantRow['state']>,
@@ -47,8 +62,8 @@ const STATE: Record<
   suspended: { label: 'Suspendida', variant: 'destructive' },
 };
 
-function parseTab(value: string | null): PlatformTenantStatus {
-  return value === 'approved' || value === 'rejected' ? value : 'pending';
+function parseTab(value: string | null): PlatformTab {
+  return value === 'approved' || value === 'rejected' || value === 'deleted' ? value : 'pending';
 }
 
 function errorNotice(error: unknown): string {
@@ -56,13 +71,15 @@ function errorNotice(error: unknown): string {
     return 'Esa solicitud ya no está en revisión: otro admin la resolvió.';
   if (error instanceof ApiCodeError && error.code === 'NOT_APPROVED')
     return 'Esa empresa no está aprobada.';
+  if (error instanceof ApiCodeError && error.code === 'TENANT_DELETING')
+    return 'Esa empresa se está borrando.';
   return 'No se pudo completar la acción. Inténtalo de nuevo.';
 }
 
 /**
- * `/platform` (solo admins de plataforma, SPEC 18): pestañas Pendientes, Aprobadas y Rechazadas (la
- * activa en `?tab=`). Aprobar o rechazar solicitudes, y suspender o levantar la suspensión de una
- * empresa aprobada. No necesita empresa activa.
+ * `/platform` (solo admins de plataforma, SPEC 18 y 20): pestañas Pendientes, Aprobadas, Rechazadas
+ * y Borradas (la activa en `?tab=`). Aprobar o rechazar solicitudes, suspender o levantar la
+ * suspensión de una empresa aprobada, y borrar una suspendida. No necesita empresa activa.
  */
 export function PlatformPage() {
   const { data: me } = useMe();
@@ -74,6 +91,7 @@ export function PlatformPage() {
   const [rejecting, setRejecting] = useState<PlatformTenantRow | null>(null);
   const [suspending, setSuspending] = useState<PlatformTenantRow | null>(null);
   const [unsuspending, setUnsuspending] = useState<PlatformTenantRow | null>(null);
+  const [deleting, setDeleting] = useState<PlatformTenantRow | null>(null);
   const isAdmin = me?.isPlatformAdmin === true;
 
   const lists = {
@@ -93,8 +111,15 @@ export function PlatformPage() {
       enabled: isAdmin,
     }),
   };
+  const deletions = useQuery({
+    queryKey: [...PLATFORM_QUERY_KEY, 'deleted'],
+    queryFn: fetchTenantDeletions,
+    enabled: isAdmin,
+    refetchInterval: (query) =>
+      query.state.data?.some((row) => row.completedAt === null) ? DELETING_REFETCH_MS : false,
+  });
 
-  // Tras cada acción: las tres pestañas y el contador de `/me`.
+  // Tras cada acción: las pestañas y el contador de `/me`.
   const onSettled = (_data: unknown, error: Error | null) => {
     setNotice(error ? errorNotice(error) : null);
     return Promise.all([
@@ -112,13 +137,29 @@ export function PlatformPage() {
     onSettled,
   });
   const unsuspend = useMutation({ mutationFn: unsuspendTenant, onSettled });
-  const pending = approve.isPending || reject.isPending || suspend.isPending || unsuspend.isPending;
+  // El error del borrado se queda en su diálogo; al terminar bien, el diálogo se cierra.
+  const remove = useMutation({
+    mutationFn: ({ id, confirmSlug }: { id: string; confirmSlug: string }) =>
+      deleteTenant(id, confirmSlug),
+    onSuccess: () => setDeleting(null),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: PLATFORM_QUERY_KEY }),
+  });
+  const pending =
+    approve.isPending ||
+    reject.isPending ||
+    suspend.isPending ||
+    unsuspend.isPending ||
+    remove.isPending;
 
   if (!me) return null;
   if (!isAdmin) return <Navigate to="/conversations" replace />;
 
-  const current = lists[tab];
-  const rows = current.data ?? [];
+  const current = tab === 'deleted' ? deletions : lists[tab];
+  const count = (value: PlatformTab) =>
+    (value === 'deleted' ? deletions : lists[value]).data?.length;
+  const rows = tab === 'deleted' ? [] : (lists[tab].data ?? []);
+  const deletedRows = deletions.data ?? [];
+  const isEmpty = tab === 'deleted' ? deletedRows.length === 0 : rows.length === 0;
   const emptyLabel = TABS.find((item) => item.value === tab)!.empty;
 
   return (
@@ -127,7 +168,7 @@ export function PlatformPage() {
         <header className="flex flex-col gap-1">
           <h1 className="text-2xl font-semibold tracking-tight">Plataforma</h1>
           <p className="text-muted-foreground text-sm">
-            Empresas que piden el alta en OmniDesk y empresas suspendidas.
+            Empresas que piden el alta en OmniDesk, suspendidas y borradas.
           </p>
         </header>
 
@@ -152,9 +193,9 @@ export function PlatformPage() {
           label="Solicitudes de empresa"
           value={tab}
           options={TABS}
-          className="sm:w-96"
+          className="sm:w-[32rem]"
           renderOption={(option, { className, active }) => {
-            const count = lists[option.value].data?.length;
+            const total = count(option.value);
             return (
               <Link
                 key={option.value}
@@ -164,8 +205,8 @@ export function PlatformPage() {
                 className={cn(className, 'inline-flex items-center justify-center gap-1.5')}
               >
                 {option.label}
-                {count !== undefined && (
-                  <span className="text-muted-foreground text-xs tabular-nums">({count})</span>
+                {total !== undefined && (
+                  <span className="text-muted-foreground text-xs tabular-nums">({total})</span>
                 )}
               </Link>
             );
@@ -195,9 +236,17 @@ export function PlatformPage() {
               }
             />
           </Card>
-        ) : rows.length === 0 ? (
+        ) : isEmpty ? (
           <Card className="py-0">
-            <EmptyState icon={Building2} title={emptyLabel} />
+            <EmptyState icon={tab === 'deleted' ? Trash2 : Building2} title={emptyLabel} />
+          </Card>
+        ) : tab === 'deleted' ? (
+          <Card className="gap-0 py-0">
+            <ul className="divide-y">
+              {deletedRows.map((row) => (
+                <DeletionRow key={row.id} row={row} />
+              ))}
+            </ul>
           </Card>
         ) : (
           <Card className="gap-0 py-0">
@@ -221,14 +270,28 @@ export function PlatformPage() {
                   )}
                   {tab === 'approved' &&
                     (row.state === 'suspended' ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={pending}
-                        onClick={() => setUnsuspending(row)}
-                      >
-                        Levantar suspensión
-                      </Button>
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={pending}
+                          onClick={() => setUnsuspending(row)}
+                        >
+                          Levantar suspensión
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={pending}
+                          className="text-destructive"
+                          onClick={() => {
+                            remove.reset();
+                            setDeleting(row);
+                          }}
+                        >
+                          Borrar
+                        </Button>
+                      </>
                     ) : (
                       <Button
                         size="sm"
@@ -281,8 +344,45 @@ export function PlatformPage() {
             if (!open) setUnsuspending(null);
           }}
         />
+        <DeleteTenantDialog
+          tenant={deleting}
+          pending={remove.isPending}
+          error={remove.isError ? deletionErrorMessage(remove.error) : null}
+          onClose={() => setDeleting(null)}
+          onConfirm={(confirmSlug) => {
+            if (!deleting) return;
+            remove.mutate({ id: deleting.id, confirmSlug });
+          }}
+        />
       </section>
     </PlatformShell>
+  );
+}
+
+/** Constancia de una empresa borrada o en borrado (SPEC 20). Sin acciones. */
+function DeletionRow({ row }: { row: PlatformTenantDeletionRow }) {
+  const done = row.completedAt !== null;
+  const counts = [
+    `${row.membersDeleted} miembros`,
+    `${row.usersDeleted} cuentas`,
+    `${row.conversationsDeleted} conversaciones`,
+    `${row.messagesDeleted} mensajes`,
+    `${row.attachmentsDeleted} archivos`,
+  ].join(' · ');
+  return (
+    <li className="flex flex-col gap-1 px-4 py-4">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className="truncate text-sm font-medium">{row.tenantName}</span>
+        <span className="text-muted-foreground truncate text-xs">{row.tenantSlug}</span>
+        <Badge variant={done ? 'secondary' : 'destructive'}>
+          {done ? `Borrada el ${formatDate(row.completedAt)}` : 'Borrando…'}
+        </Badge>
+      </div>
+      <span className="text-muted-foreground truncate text-xs">
+        Borrada por {row.requestedByEmail} · pedida el {formatDate(row.requestedAt)}
+      </span>
+      <span className="text-muted-foreground text-xs tabular-nums">{counts}</span>
+    </li>
   );
 }
 

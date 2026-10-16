@@ -36,6 +36,9 @@ export interface GoogleIdentity {
 
 export type MemberRole = 'OWNER' | 'ADMIN' | 'AGENT';
 
+/** Estados con los que una empresa aparece como membresía: en borrado deja de contar (SPEC 20). */
+export type MembershipTenantState = Exclude<TenantState, 'deleting'>;
+
 /** Pertenencia activa de un usuario a una empresa. */
 export interface Membership {
   memberId: string;
@@ -47,8 +50,8 @@ export interface Membership {
   tenantLogoUrl: string | null;
   /** `true` solo con `tenantState === 'active'`. */
   tenantActive: boolean;
-  /** Estado efectivo (SPEC 16 y 18). */
-  tenantState: TenantState;
+  /** Estado efectivo (SPEC 16 y 18). Una empresa en borrado (SPEC 20) no da membresía. */
+  tenantState: MembershipTenantState;
   /** Motivo de la suspensión de la plataforma; `null` si no está suspendida. */
   suspensionReason: string | null;
   /** ISO; `null` si no está suspendida. */

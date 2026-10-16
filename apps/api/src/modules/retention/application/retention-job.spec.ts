@@ -67,6 +67,7 @@ function storageFailingOn(failingKey: string): AttachmentStorage & { deleted: st
       if (key === failingKey) throw new Error('bucket caído');
       deleted.push(key);
     },
+    deletePrefix: async () => 0,
   };
 }
 

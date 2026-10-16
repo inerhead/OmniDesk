@@ -23,6 +23,10 @@ export const ApiErrorCodeSchema = z.enum([
   'REQUEST_PENDING',
   'NOT_PENDING',
   'NOT_APPROVED',
+  // SPEC 20: borrado de empresas por la plataforma.
+  'NOT_SUSPENDED',
+  'DEMO_TENANT_LOCKED',
+  'TENANT_DELETING',
 ]);
 export type ApiErrorCode = z.infer<typeof ApiErrorCodeSchema>;
 

@@ -30,6 +30,7 @@ export class HttpChannelWebhookTester implements ChannelWebhookTester {
       const res = await postSignedJson(webhookUrl, secret, body, {
         nowSec: Math.floor(now.getTime() / 1000),
         timeoutMs: CHANNEL_TEST_TIMEOUT_MS,
+        headers: { 'X-Client-Id': channelId, 'X-Client-Secret': secret },
       });
       const ok = res.status >= 200 && res.status < 300;
       return {

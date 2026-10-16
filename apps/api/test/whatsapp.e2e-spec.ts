@@ -224,6 +224,8 @@ describe('WhatsApp directo e IA opcional (e2e)', () => {
           ),
         ).toBe('ok');
         expect((init.headers as Record<string, string>)['Idempotency-Key']).toBe(payload.messageId);
+        expect((init.headers as Record<string, string>)['X-Client-Id']).toBe(channelId);
+        expect((init.headers as Record<string, string>)['X-Client-Secret']).toBe(secret);
         return Response.json({ text: 'Hola Ana. Esta es la respuesta completa.' });
       }
       expect((init.headers as Record<string, string>).authorization).toBe(

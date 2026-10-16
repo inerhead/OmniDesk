@@ -61,6 +61,7 @@ export class AiReplyWorker {
       from: payload.from,
       text: payload.text,
     });
+    const secret = this.cipher.decrypt(channel.hmacSecretEnc);
     const response = await fetch(channel.webhookUrl, {
       method: 'POST',
       redirect: 'error',
@@ -68,11 +69,9 @@ export class AiReplyWorker {
       headers: {
         'content-type': 'application/json',
         'Idempotency-Key': payload.messageId,
-        'X-OmniDesk-Signature': signPayload(
-          this.cipher.decrypt(channel.hmacSecretEnc),
-          body,
-          Math.floor(Date.now() / 1000),
-        ),
+        'X-Client-Id': channel.id,
+        'X-Client-Secret': secret,
+        'X-OmniDesk-Signature': signPayload(secret, body, Math.floor(Date.now() / 1000)),
       },
       body,
     });

@@ -41,6 +41,7 @@ export class N8nMessagingProvider implements MessagingProvider {
       throw new ChannelNotConfiguredError(`el canal ${channel.id} no tiene webhookUrl`);
     }
 
+    const secret = this.cipher.decrypt(channel.hmacSecretEnc);
     const body: N8nSendMessageRequest = {
       type: 'message.send',
       messageId: request.messageId,
@@ -51,16 +52,15 @@ export class N8nMessagingProvider implements MessagingProvider {
     };
     let response;
     try {
-      response = await postSignedJson(
-        channel.webhookUrl,
-        this.cipher.decrypt(channel.hmacSecretEnc),
-        body,
-        {
-          nowSec: Math.floor(this.clock.now().getTime() / 1000),
-          timeoutMs: this.timeoutMs,
-          headers: { 'idempotency-key': request.messageId },
+      response = await postSignedJson(channel.webhookUrl, secret, body, {
+        nowSec: Math.floor(this.clock.now().getTime() / 1000),
+        timeoutMs: this.timeoutMs,
+        headers: {
+          'idempotency-key': request.messageId,
+          'X-Client-Id': channel.id,
+          'X-Client-Secret': secret,
         },
-      );
+      });
     } catch (error) {
       throw new Error(`n8n no respondió: ${describeFetchError(error)}`, { cause: error });
     }

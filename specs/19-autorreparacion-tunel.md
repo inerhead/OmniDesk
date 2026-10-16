@@ -1,6 +1,6 @@
 # SPEC 19 — Autorreparación del túnel y de los servicios de prod
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:** SPEC 08, SPEC 11
 > **Date:** 2026-10-15
 > **Objective:** Un contenedor `autoheal` reinicia solo, en menos de 2 minutos, el túnel `cloudflared` (en prod y en local), el gateway y el API (en prod) cuando su healthcheck falla, y el API pasa a un healthcheck de liveness que no depende de la base.

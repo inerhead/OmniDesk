@@ -12,10 +12,7 @@
       "name": "OmniDesk",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
-      "position": [
-        2624,
-        720
-      ],
+      "position": [0, 400],
       "webhookId": "omnidesk"
     },
     {
@@ -48,31 +45,11 @@
       "name": "Buscar cliente",
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
-      "position": [
-        2768,
-        432
-      ],
+      "position": [220, 400],
       "settings": {
         "alwaysOutputData": true
       },
       "alwaysOutputData": true
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ JSON.stringify(!$json.clientId ? { ok: false } : $('OmniDesk').item.json.body.type === 'ping' ? { ok: true } : { ok: false }) }}",
-        "options": {
-          "responseCode": "={{ !$json.clientId ? 401 : $('OmniDesk').item.json.body.type === 'ping' ? 200 : $('OmniDesk').item.json.body.type === 'ai.reply' ? 501 : 400 }}"
-        }
-      },
-      "id": "eec6ca04-7f86-497a-8b51-82c7a5e46835",
-      "name": "Responder a OmniDesk",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.5,
-      "position": [
-        3200,
-        352
-      ]
     },
     {
       "parameters": {
@@ -101,29 +78,290 @@
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
-      "position": [
-        2944,
-        704
-      ],
+      "position": [440, 400],
       "id": "d21eabbc-684a-4c1c-b246-9ef9647c4f99",
-      "name": "If"
+      "name": "¿Cliente válido?"
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify(!$json.clientId ? { ok: false } : $('OmniDesk').item.json.body.type === 'ping' ? { ok: true } : { ok: false }) }}",
+        "responseBody": "={{ JSON.stringify({ ok: false }) }}",
         "options": {
-          "responseCode": "={{ !$json.clientId ? 401 : $('OmniDesk').item.json.body.type === 'ping' ? 200 : $('OmniDesk').item.json.body.type === 'ai.reply' ? 501 : 400 }}"
+          "responseCode": 401
         }
       },
-      "id": "e4fe2075-cd19-4ae4-986a-519e107bf32a",
-      "name": "Responder a OmniDesk1",
+      "id": "e09894f7-3f34-4024-b1d6-d870509336dc",
+      "name": "Responder 401",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
-      "position": [
-        3200,
-        864
-      ]
+      "position": [660, 560]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "401a195d-2ecd-418c-a2b5-12f6528ad064",
+                    "leftValue": "={{ $('OmniDesk').item.json.body.type }}",
+                    "rightValue": "ping",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ping"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "140ddb4d-bc92-4be7-b675-3687504fafdc",
+                    "leftValue": "={{ $('OmniDesk').item.json.body.type }}",
+                    "rightValue": "ai.reply",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ai.reply"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Otro"
+        }
+      },
+      "id": "c5ee8328-87da-4055-a92b-3f6f02b1c8b2",
+      "name": "Tipo",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: true }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "bf48ff19-6f3f-41a8-9a57-0a06563979d4",
+      "name": "Responder ping",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [880, 100]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false }) }}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "f9f37f4d-e932-4969-a9e5-2209e76d2fff",
+      "name": "Responder 400",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [880, 500]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "idempotencyKey",
+              "keyValue": "={{ $('OmniDesk').item.json.headers['idempotency-key'] }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "id": "453231ba-aa09-4c66-8182-6f34bea17e1f",
+      "name": "Buscar respuesta previa",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [880, 300],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "647cf126-d7fe-41d4-9c35-785e2c57d34d",
+              "leftValue": "={{ $json.text }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "20c8584b-db64-444b-b773-453fae06e747",
+      "name": "¿Ya respondida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ text: $json.text }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "02aa9813-1940-47ee-a076-d56f7e9507a2",
+      "name": "Responder respuesta previa",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1320, 160]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('OmniDesk').item.json.body.text }}",
+        "options": {
+          "systemMessage": "Eres el asistente de atención al cliente de la empresa por WhatsApp.\n- Responde en el idioma del cliente, con mensajes breves y cordiales (máximo 3 frases).\n- No inventes datos del negocio (precios, horarios, direcciones, disponibilidad). Si no los conoces, dilo con naturalidad.\n- Si no sabes la respuesta o el cliente pide hablar con una persona, ofrece pasarle con un agente.\n- No uses Markdown: WhatsApp muestra el texto tal cual."
+        }
+      },
+      "id": "ee868783-4328-434a-ace3-27452fb1aa2f",
+      "name": "Agente IA",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [1320, 400]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-haiku-5-5",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "753ed336-39ae-48bb-81ca-c481bf6d1890",
+      "name": "Anthropic",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [1240, 620]
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('OmniDesk').item.json.body.conversationId }}",
+        "contextWindowLength": 10
+      },
+      "id": "14343e26-ff04-4398-ba14-721c17205a7d",
+      "name": "Memoria por conversación",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [1400, 620]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "idempotencyKey": "={{ $('OmniDesk').item.json.headers['idempotency-key'] }}",
+            "text": "={{ $json.output }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "idempotencyKey",
+              "displayName": "idempotencyKey",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            },
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "readOnly": false,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "4891e510-d1ac-45d2-9e62-95ddb0e05185",
+      "name": "Guardar respuesta",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [1660, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ text: $('Agente IA').item.json.output }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "f53e5083-2435-4574-975a-63a539c177d5",
+      "name": "Responder IA",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1880, 400]
     }
   ],
   "pinData": {},
@@ -143,38 +381,131 @@
       "main": [
         [
           {
-            "node": "If",
+            "node": "¿Cliente válido?",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Responder a OmniDesk": {
-      "main": [
-        []
-      ]
-    },
-    "If": {
+    "¿Cliente válido?": {
       "main": [
         [
           {
-            "node": "Responder a OmniDesk",
+            "node": "Tipo",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Responder a OmniDesk1",
+            "node": "Responder 401",
             "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tipo": {
+      "main": [
+        [
+          {
+            "node": "Responder ping",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Buscar respuesta previa",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder 400",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar respuesta previa": {
+      "main": [
+        [
+          {
+            "node": "¿Ya respondida?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Ya respondida?": {
+      "main": [
+        [
+          {
+            "node": "Responder respuesta previa",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Agente IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente IA": {
+      "main": [
+        [
+          {
+            "node": "Guardar respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar respuesta": {
+      "main": [
+        [
+          {
+            "node": "Responder IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente IA",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memoria por conversación": {
+      "ai_memory": [
+        [
+          {
+            "node": "Agente IA",
+            "type": "ai_memory",
             "index": 0
           }
         ]
       ]
     }
   },
-  "active": true,
+  "active": false,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate",
@@ -183,11 +514,8 @@
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": false
   },
-  "versionId": "7331ceb2-5c54-4c16-85c2-34acae08db6b",
   "meta": {
     "instanceId": "63a2d636d880c69beaf6b24abb4135e00a0f74e454fdd2b333ffbd4c826c1cfd"
   },
-  "nodeGroups": [],
-  "id": "QdXtwNDNUYrhurHj",
   "tags": []
 }

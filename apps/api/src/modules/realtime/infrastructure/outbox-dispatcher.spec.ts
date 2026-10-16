@@ -1,6 +1,8 @@
 import type { RealtimeEvent, TenantStatusChangedEvent } from '@omnidesk/contracts';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { PermanentDownloadError } from '../../attachments/domain/attachment-errors';
+import { PermanentAiReplyError } from '../../whatsapp/ai-reply-errors';
+import type { AiReplyWorker } from '../../whatsapp/ai-reply-worker';
 import type { TransactionRunner } from '../../../shared/application/transaction-runner.port';
 import type { AttachmentDownloader } from '../application/ports/attachment-downloader';
 import type { OutboxEventStore, PendingOutboxEvent } from '../application/ports/outbox-event-store';
@@ -149,6 +151,17 @@ class FakeDownloader implements AttachmentDownloader {
 
   async fail(_tenantId: string, payload: unknown, reason: string) {
     this.failed.push({ payload, reason });
+  }
+}
+
+/** Worker IA falso: lanza `error` mientras no sea `null`. */
+class FakeAiWorker {
+  calls = 0;
+  error: Error | null = null;
+
+  async process() {
+    this.calls += 1;
+    if (this.error) throw this.error;
   }
 }
 
@@ -323,6 +336,72 @@ describe('OutboxDispatcher', () => {
 
       await dispatcher.tick(new Date(now.getTime() + 60_000));
       expect(sender.calls).toBe(6);
+    });
+  });
+
+  describe('ai.reply_requested (SPEC 23)', () => {
+    let ai: FakeAiWorker;
+    const aiEvent = () =>
+      store.add({
+        type: 'ai.reply_requested',
+        payload: { messageId: '0199c0de-0000-7000-8000-0000000000a1' },
+      });
+
+    beforeEach(() => {
+      ai = new FakeAiWorker();
+      dispatcher = new OutboxDispatcher(
+        noTransaction,
+        store,
+        publisher,
+        sender,
+        ai as unknown as AiReplyWorker,
+      );
+    });
+
+    it('un error transitorio se reintenta con backoff de 1 a 16 s y luego cierra el evento', async () => {
+      const event = aiEvent();
+      ai.error = new Error('IA HTTP 503');
+      let now = T0;
+      const waits: number[] = [];
+
+      for (let call = 0; call <= SEND_MAX_RETRIES; call += 1) {
+        await dispatcher.tick(now);
+        if (event.publishedAt === null) {
+          waits.push((event.nextAttemptAt.getTime() - now.getTime()) / 1000);
+          now = event.nextAttemptAt;
+        }
+      }
+
+      expect(ai.calls).toBe(6);
+      expect(waits).toEqual([1, 2, 4, 8, 16]);
+      expect(event.lastError).toBe('IA HTTP 503');
+      expect(event.publishedAt).not.toBeNull();
+      expect(sender.failed).toHaveLength(0);
+    });
+
+    it('un error permanente cierra el evento al primer intento', async () => {
+      const event = aiEvent();
+      ai.error = new PermanentAiReplyError('IA HTTP 501');
+
+      await dispatcher.tick(T0);
+      await dispatcher.tick(new Date(T0.getTime() + HOUR));
+
+      expect(ai.calls).toBe(1);
+      expect(event).toMatchObject({ attempts: 0, lastError: 'IA HTTP 501', publishedAt: T0 });
+      expect(sender.failed).toHaveLength(0);
+    });
+
+    it('se recupera si n8n responde en un reintento', async () => {
+      const event = aiEvent();
+      ai.error = new Error('IA HTTP 429');
+
+      await dispatcher.tick(T0);
+      ai.error = null;
+      await dispatcher.tick(new Date(T0.getTime() + 1_000));
+
+      expect(ai.calls).toBe(2);
+      expect(event).toMatchObject({ attempts: 1 });
+      expect(event.publishedAt).not.toBeNull();
     });
   });
 

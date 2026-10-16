@@ -9,6 +9,7 @@ import { configureApp } from '../src/bootstrap';
 import { PrismaService } from '../src/shared/infrastructure/prisma/prisma.service';
 import { OutboxDispatcher } from '../src/modules/realtime/infrastructure/outbox-dispatcher';
 import { AiReplyWorker } from '../src/modules/whatsapp/ai-reply-worker';
+import { PermanentAiReplyError } from '../src/modules/whatsapp/ai-reply-errors';
 import { DispatchOutboundMessageUseCase } from '../src/modules/messaging/application/dispatch-outbound-message.use-case';
 import { sessionFor, WEB_ORIGIN } from './support/session';
 import { testEnv } from './support/test-env';
@@ -302,6 +303,34 @@ describe('WhatsApp directo e IA opcional (e2e)', () => {
     expect(await db.message.count({ where: { tenantId, senderType: 'CUSTOMER' } })).toBe(1);
     expect(await db.message.count({ where: { tenantId, senderType: 'AI' } })).toBe(0);
   });
+  it('un 501 de n8n no se reintenta y deja el mensaje para atención humana (SPEC 23)', async () => {
+    await enableAi();
+    await post(envelope()).expect(200);
+    let calls = 0;
+    vi.stubGlobal('fetch', async (url: string) => {
+      if (String(url).includes('n8n')) calls += 1;
+      return Response.json({ ok: false }, { status: 501 });
+    });
+    await app.get(OutboxDispatcher).tick();
+    await app.get(OutboxDispatcher).tick(new Date(Date.now() + 60_000));
+    const event = await aiEvent();
+    expect(calls).toBe(1);
+    expect(event.attempts).toBe(0);
+    expect(event.lastError).toBe('IA HTTP 501');
+    expect(event.publishedAt).not.toBeNull();
+    expect(await db.message.count({ where: { tenantId, senderType: 'CUSTOMER' } })).toBe(1);
+    expect(await db.message.count({ where: { tenantId, senderType: 'AI' } })).toBe(0);
+  });
+  it('un 429 de n8n programa un reintento (SPEC 23)', async () => {
+    await enableAi();
+    await post(envelope()).expect(200);
+    vi.stubGlobal('fetch', async () => new Response('', { status: 429 }));
+    await app.get(OutboxDispatcher).tick();
+    const event = await aiEvent();
+    expect(event.attempts).toBe(1);
+    expect(event.lastError).toBe('IA HTTP 429');
+    expect(event.publishedAt).toBeNull();
+  });
   it('dos entregas concurrentes del mismo inbound crean un solo mensaje y trabajo IA', async () => {
     await enableAi();
     const body = envelope();
@@ -317,7 +346,10 @@ describe('WhatsApp directo e IA opcional (e2e)', () => {
       if (mode === 'timeout') throw new DOMException('Timeout', 'TimeoutError');
       return Response.json({ text: '' });
     });
-    await expect(app.get(AiReplyWorker).process(tenantId, event.payload)).rejects.toThrow();
+    const failure = expect(app.get(AiReplyWorker).process(tenantId, event.payload)).rejects;
+    // SPEC 23: un cuerpo inválido es permanente; un timeout se reintenta.
+    if (mode === 'invalid') await failure.toThrow(PermanentAiReplyError);
+    else await failure.not.toBeInstanceOf(PermanentAiReplyError);
     expect(await db.message.count({ where: { tenantId, senderType: 'AI' } })).toBe(0);
     expect(await db.message.count({ where: { tenantId, senderType: 'CUSTOMER' } })).toBe(1);
   });

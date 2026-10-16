@@ -69,6 +69,11 @@ Lo que ya fijaron otros specs y aquí no se reabre:
   - "Ping y límites": qué se reintenta y qué no, con la lista de códigos.
   - Sustituir la referencia a `omnidesk-webhook.json` por `OmniDesk — entrada.json`.
   - Pasos para importar: crear la tabla `omnidesk_ai_replies` (columnas `idempotencyKey` y `text`, ambas texto), seleccionarla en los dos nodos, elegir la credencial de Anthropic y activar el workflow.
+  - Limpieza de `omnidesk_ai_replies` con el workflow de limpieza (abajo).
+- **Workflow de limpieza** `tools/n8n/OmniDesk — limpieza.json` (enmienda del 2026-10-16):
+  - **Schedule Trigger** `Cada día`: una vez al día a las 03:00 (zona horaria del workflow).
+  - Nodo **Data table** `Borrar respuestas antiguas`: operación `deleteRows` sobre `omnidesk_ai_replies`, condición `createdAt` menor que `$now.minus({ days: 1 })`.
+  - Se importa desactivado; el usuario selecciona la tabla y lo activa.
 
 **Fuera de alcance (para futuros specs):**
 
@@ -114,6 +119,7 @@ Tabla de datos nueva en n8n (no en OmniDesk), `omnidesk_ai_replies`:
    - El caso `invalid` (`{ text: '' }`) pasa a esperar `PermanentAiReplyError`.
 5. **Workflow.** Reescribir `tools/n8n/OmniDesk — entrada.json` con los nodos del alcance y borrar `tools/n8n/omnidesk-webhook.json`. Comprobar que es JSON válido y que todas las conexiones apuntan a nodos existentes.
 6. **Docs.** Actualizar `docs/integracion-n8n.md` (reintentos, fichero del workflow, pasos de importación).
+7. **Limpieza (enmienda).** Crear `tools/n8n/OmniDesk — limpieza.json` y documentarlo en `docs/integracion-n8n.md`.
 
 ## Criterios de aceptación
 
@@ -129,6 +135,7 @@ Tabla de datos nueva en n8n (no en OmniDesk), `omnidesk_ai_replies`:
 - [ ] Con el workflow importado y la IA activa, un mensaje del cliente recibe una respuesta de IA en la conversación y n8n muestra una sola ejecución.
 - [ ] Repetir a mano la misma petición `ai.reply` (misma `Idempotency-Key`) contra n8n devuelve el mismo `text` sin ejecutar el nodo AI Agent.
 - [ ] Una petición al workflow con `X-Client-Secret` incorrecto responde `401`; con un `type` desconocido, `400`.
+- [ ] `tools/n8n/OmniDesk — limpieza.json` se importa en n8n sin errores y, ejecutado a mano, borra de `omnidesk_ai_replies` las filas con más de un día y conserva las recientes.
 - [ ] `pnpm lint`, `pnpm typecheck`, `pnpm test` y los e2e de la API pasan.
 
 ## Decisiones
@@ -146,6 +153,8 @@ Tabla de datos nueva en n8n (no en OmniDesk), `omnidesk_ai_replies`:
 - **Sí:** AI Agent con Anthropic y `claude-haiku-5-5`. Es el más rápido, con margen frente al timeout de 10 s. Decisión del usuario.
 - **Sí:** memoria por `conversationId` en n8n (Simple Memory). OmniDesk no envía historial; sin memoria cada respuesta ignora lo anterior.
 - **Sí:** deduplicar en n8n con la tabla `omnidesk_ai_replies` antes de llamar al modelo, como ya pide `docs/integracion-n8n.md`. Un timeout de OmniDesk tras generar la respuesta no vuelve a pagar el modelo. Decisión del usuario.
+- **Sí (enmienda):** workflow de limpieza diario que borra las filas de más de un día. Una fila solo sirve mientras OmniDesk puede reintentar (≈ 31 s más las llamadas); un día deja margen de sobra. Pedido por el usuario tras implementar.
+- **No:** borrar la fila en el propio workflow de entrada tras responder. El reintento llega justo cuando la respuesta ya se envió: es cuando más falta hace la fila.
 - **Sí:** prompt genérico en el nodo, editable tras importar. Decisión del usuario; el prompt por canal queda fuera.
 - **Sí:** si el agente falla, n8n responde `500` y OmniDesk reintenta. Una caída de Anthropic sí puede arreglarse sola.
 
@@ -155,7 +164,7 @@ Tabla de datos nueva en n8n (no en OmniDesk), `omnidesk_ai_replies`:
 | --- | --- |
 | Un `4xx` puntual de un proxy (p. ej. `403` de Cloudflare por un pico) deja un mensaje sin IA. | El mensaje queda en la bandeja para atención humana, como al agotar reintentos. El motivo queda en `last_error` y en el log. |
 | Simple Memory de n8n vive en memoria del proceso: se pierde al reiniciar n8n y no se comparte entre workers en modo cola. | Aceptado para un workflow de ejemplo. Una memoria persistente (Postgres o Redis) es un cambio en n8n, no en OmniDesk. |
-| La tabla `omnidesk_ai_replies` crece sin límite. | Una fila corta por mensaje con IA. Limpiarla es tarea de n8n; se menciona en la documentación. |
+| La tabla `omnidesk_ai_replies` crece sin límite y llena el espacio de tablas de n8n. | El workflow de limpieza borra cada día las filas de más de un día. |
 | El nodo AI Agent tarda más de 10 s con contexto largo. | `claude-haiku-5-5` y ventana de 10 mensajes. Si pasa, es timeout → se reintenta, y la respuesta generada queda en `omnidesk_ai_replies` para el reintento. |
 | El export trae ids de tabla y credenciales de la instancia del usuario. | `Credentials` es de su instancia y se conserva. Los recursos nuevos se seleccionan tras importar; la documentación lo indica. |
 

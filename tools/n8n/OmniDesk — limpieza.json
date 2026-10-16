@@ -1,0 +1,74 @@
+{
+  "name": "OmniDesk — limpieza",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 3
+            }
+          ]
+        }
+      },
+      "id": "fe0e5ae6-2f91-4401-9e7f-d6e6a23ba8c0",
+      "name": "Cada día",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "operation": "deleteRows",
+        "dataTableId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "createdAt",
+              "condition": "lt",
+              "keyValue": "={{ $now.minus({ days: 1 }).toISO() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fe2a4d41-12ad-4a35-832c-df8399a45436",
+      "name": "Borrar respuestas antiguas",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [220, 0]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Cada día": {
+      "main": [
+        [
+          {
+            "node": "Borrar respuestas antiguas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "saveExecutionProgress": true,
+    "availableInMCP": false
+  },
+  "meta": {
+    "instanceId": "63a2d636d880c69beaf6b24abb4135e00a0f74e454fdd2b333ffbd4c826c1cfd"
+  },
+  "tags": []
+}

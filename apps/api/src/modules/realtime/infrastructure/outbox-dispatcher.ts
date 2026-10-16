@@ -7,6 +7,7 @@ import {
   type OnModuleDestroy,
 } from '@nestjs/common';
 import { AiReplyWorker } from '../../whatsapp/ai-reply-worker';
+import { PermanentAiReplyError } from '../../whatsapp/ai-reply-errors';
 import {
   RealtimeEventSchema,
   TENANT_INACTIVE_REASON,
@@ -129,8 +130,9 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
       const message = error instanceof Error ? error.message : String(error);
       if (event.type === ATTACHMENT_DOWNLOAD_REQUESTED)
         return this.failDownload(event, message, error instanceof PermanentDownloadError, now);
-      if (event.type === MESSAGE_SEND_REQUESTED || event.type === 'ai.reply_requested')
-        return this.failSend(event, message, now);
+      if (event.type === 'ai.reply_requested')
+        return this.failAiReply(event, message, error instanceof PermanentAiReplyError, now);
+      if (event.type === MESSAGE_SEND_REQUESTED) return this.failSend(event, message, now);
       if (event.type === 'notification.requested' || event.type === PLATFORM_PUSH_REQUESTED)
         return this.failPush(event, message, now);
 
@@ -224,8 +226,36 @@ export class OutboxDispatcher implements OnApplicationBootstrap, OnModuleDestroy
       return false;
     }
     this.logger.warn(`Outbox ${event.id}: envío abandonado tras ${event.attempts} reintentos`);
-    if (event.type === MESSAGE_SEND_REQUESTED)
-      await this.sender.fail(event.tenantId, event.payload, reason);
+    await this.sender.fail(event.tenantId, event.payload, reason);
+    await this.store.markPublished(event.id, now, reason);
+    return false;
+  }
+
+  /**
+   * Mismo backoff que los envíos (1 a 16 s). Un error permanente de n8n (4xx, 501, cuerpo inválido)
+   * no se reintenta (SPEC 23). En ambos casos el mensaje queda para atención humana.
+   */
+  private async failAiReply(
+    event: PendingOutboxEvent,
+    reason: string,
+    permanent: boolean,
+    now: Date,
+  ): Promise<boolean> {
+    if (!permanent && event.attempts < SEND_MAX_RETRIES) {
+      const attempts = event.attempts + 1;
+      this.logger.warn(`Outbox ${event.id}: IA fallida (reintento ${attempts}): ${reason}`);
+      await this.store.scheduleRetry(event.id, {
+        attempts,
+        error: reason,
+        at: new Date(now.getTime() + 2 ** (attempts - 1) * 1000),
+      });
+      return false;
+    }
+    this.logger.warn(
+      permanent
+        ? `Outbox ${event.id}: IA abandonada sin reintentos: ${reason}`
+        : `Outbox ${event.id}: IA abandonada tras ${event.attempts} reintentos`,
+    );
     await this.store.markPublished(event.id, now, reason);
     return false;
   }

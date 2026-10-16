@@ -19,6 +19,7 @@ import {
 import { decideAiReply } from '../conversations/domain/conversation';
 import { enqueueSendRequested } from '../conversations/application/enqueue-send-requested';
 import { WhatsAppSettings } from './whatsapp-settings';
+import { PermanentAiReplyError } from './ai-reply-errors';
 
 const Payload = z.object({
   channelId: z.uuid(),
@@ -28,6 +29,23 @@ const Payload = z.object({
   from: z.object({ externalId: z.string(), displayName: z.string().optional() }),
   text: z.string(),
 });
+
+/** Códigos HTTP que sí se reintentan; el resto de no `2xx` es permanente (SPEC 23). */
+const TRANSIENT_AI_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+
+/** Un `2xx` sin JSON o sin `text` válido no mejora reintentando. */
+function parseAiReply(raw: string): z.infer<typeof N8nAiReplyResponseSchema> {
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    throw new PermanentAiReplyError('IA respuesta inválida');
+  }
+  const parsed = N8nAiReplyResponseSchema.safeParse(json);
+  if (!parsed.success) throw new PermanentAiReplyError('IA respuesta inválida');
+  return parsed.data;
+}
+
 @Injectable()
 export class AiReplyWorker {
   constructor(
@@ -72,8 +90,13 @@ export class AiReplyWorker {
       },
       body,
     });
-    if (!response.ok) throw new Error(`IA HTTP ${response.status}`);
-    const reply = N8nAiReplyResponseSchema.parse(await response.json());
+    if (!response.ok) {
+      const message = `IA HTTP ${response.status}`;
+      if (TRANSIENT_AI_STATUSES.has(response.status)) throw new Error(message);
+      throw new PermanentAiReplyError(message);
+    }
+    // Leer el cuerpo puede fallar por red o timeout (transitorio); parsearlo, no.
+    const reply = parseAiReply(await response.text());
     await this.tx.run(async () => {
       const current = await this.settings.find(channel.id, tenantId);
       if (!current?.aiEnabled || current.webhookUrl !== channel.webhookUrl) return;

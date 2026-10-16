@@ -65,6 +65,13 @@ Lleva `X-Client-Id` y `X-Client-Secret`, como `ai.reply`. Responde `200 { "ok": 
 
 El timeout de cada llamada es 10 segundos. IA y envíos usan Outbox y hasta cinco reintentos con esperas de 1/2/4/8/16 segundos. Devuelve de forma estable la misma respuesta para la misma `Idempotency-Key`; deduplica antes de invocar el modelo. No se siguen redirecciones.
 
+Desde SPEC 23, `ai.reply` solo se reintenta ante errores transitorios:
+
+- **Se reintenta:** HTTP `408`, `429`, `500`, `502`, `503` y `504`, errores de red, timeout y redirecciones.
+- **No se reintenta:** cualquier otro HTTP no `2xx` (`400`, `401`, `403`, `404`, `501`, `505`…) y una respuesta `2xx` que no es JSON o no trae un `text` válido.
+
+En ambos casos el mensaje queda para atención humana y el motivo en `outbox_events.last_error` (`IA HTTP <status>` o `IA respuesta inválida`). Si tu workflow aún no implementa `ai.reply`, responde `501`: OmniDesk lo llama una sola vez por mensaje. Si el modelo falla, deja que el workflow termine en error (n8n responde `500`) para que OmniDesk reintente. `message.send` sigue reintentando cualquier error.
+
 ## Credenciales de cliente
 
 Desde SPEC 22, OmniDesk se autentica ante n8n con dos cabeceras en **todas** sus llamadas (`ai.reply`, `ping` y `message.send`):
@@ -82,7 +89,37 @@ X-Client-Secret: <clientSecret>
 - No registres `X-Client-Secret` en logs ni lo devuelvas en respuestas del workflow.
 - Al regenerar, OmniDesk envía el secreto nuevo desde ese momento: actualízalo en n8n enseguida (o deja que n8n acepte ambos un momento). Mientras n8n tenga el antiguo, las llamadas fallan y quedan para atención humana tras los reintentos.
 
-`tools/n8n/omnidesk-webhook.json` es un workflow de ejemplo que valida el par contra la tabla de datos `omnidesk_clients` y responde `401` si no existe.
+## Workflow de ejemplo
+
+`tools/n8n/OmniDesk — entrada.json` es un workflow importable que implementa `ping` y `ai.reply`:
+
+1. Valida `X-Client-Id` y `X-Client-Secret` contra la tabla de datos `Credentials` (columnas `clientId` y `clientSecret`). Si no coinciden, responde `401`.
+2. Según `type`: `ping` responde `200 { "ok": true }`; un tipo desconocido, `400`.
+3. `ai.reply` busca la `Idempotency-Key` en la tabla `omnidesk_ai_replies`. Si ya existe, devuelve el mismo `text` sin llamar al modelo.
+4. Si no, un **AI Agent** con Anthropic (`claude-haiku-5-5`) y memoria de 10 mensajes por `conversationId` genera la respuesta. Se guarda en `omnidesk_ai_replies` y se devuelve `200 { "text": "…" }`.
+
+Para importarlo:
+
+1. En n8n, crea la tabla de datos `omnidesk_ai_replies` con dos columnas de texto: `idempotencyKey` y `text`.
+2. Importa el fichero (**Import from File**).
+3. En **Buscar cliente**, comprueba que apunta a tu tabla de credenciales.
+4. En **Buscar respuesta previa** y **Guardar respuesta**, selecciona `omnidesk_ai_replies`.
+5. En **Anthropic**, elige tu credencial de Anthropic.
+6. Ajusta el prompt de sistema del nodo **Agente IA** a tu negocio.
+7. Activa el workflow y usa **Probar conexión** en OmniDesk.
+
+La memoria del agente vive en el proceso de n8n: se pierde al reiniciarlo y no se comparte entre workers en modo cola.
+
+### Limpieza de `omnidesk_ai_replies`
+
+La tabla crece una fila por respuesta de IA y n8n no la vacía solo. Una fila solo sirve mientras OmniDesk puede reintentar ese mensaje (unos 31 s más el tiempo de las llamadas).
+
+`tools/n8n/OmniDesk — limpieza.json` borra cada día a las 03:00 (zona horaria del workflow) las filas con `createdAt` de hace más de un día. Para usarlo:
+
+1. Impórtalo (**Import from File**).
+2. En **Borrar respuestas antiguas**, selecciona `omnidesk_ai_replies`.
+3. Ejecútalo a mano una vez (**Execute workflow**) y comprueba que solo desaparecen filas de más de un día.
+4. Actívalo.
 
 ## Canales N8N legados y simulador
 

@@ -1,6 +1,6 @@
 # SPEC 23 — La IA no reintenta errores permanentes de n8n
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:** SPEC 09, SPEC 22
 > **Date:** 2026-10-16
 > **Objective:** Una llamada `ai.reply` a n8n solo se reintenta ante errores transitorios (408, 429, 500, 502, 503, 504, red o timeout); cualquier otro fallo deja el mensaje para atención humana al primer intento, y el workflow importable de `tools/n8n` responde de verdad a `ai.reply`.

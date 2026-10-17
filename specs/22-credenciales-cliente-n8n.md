@@ -1,6 +1,6 @@
 # SPEC 22 — Credenciales de cliente en las llamadas a n8n
 
-> **Status:** Approved
+> **Status:** Implemented
 > **Depends on:** SPEC 09, SPEC 17
 > **Date:** 2026-10-16
 > **Objective:** Toda llamada de OmniDesk al webhook de n8n (`ai.reply`, `ping` y `message.send`) se autentica con `X-Client-Id` (el id del canal) y un `X-Client-Secret` que OmniDesk genera en el paso "IA con n8n"; sustituyen a la firma `X-OmniDesk-Signature` y reemplazan al paso "Credenciales de n8n", que desaparece.

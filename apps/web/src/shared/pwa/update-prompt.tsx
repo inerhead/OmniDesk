@@ -1,20 +1,39 @@
 import { RefreshCw, X } from 'lucide-react';
+import { useRef } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
+import { applyAppUpdate } from '@/shared/pwa/apply-app-update';
 import { Button } from '@/shared/ui/button';
 
 // Los agentes dejan la app abierta todo el día: se busca una versión nueva cada hora.
 const UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
 export function UpdatePrompt() {
+  const registrationRef = useRef<ServiceWorkerRegistration | undefined>(undefined);
+  const applyingRef = useRef(false);
   const {
     needRefresh: [needRefresh, setNeedRefresh],
-    updateServiceWorker,
   } = useRegisterSW({
     onRegisteredSW(_swUrl, registration) {
+      registrationRef.current = registration;
       if (!registration) return;
       setInterval(() => void registration.update(), UPDATE_CHECK_INTERVAL_MS);
     },
   });
+
+  async function refresh() {
+    if (applyingRef.current) return;
+    applyingRef.current = true;
+    const registration =
+      registrationRef.current ?? (await navigator.serviceWorker.getRegistration());
+    applyAppUpdate(
+      registration,
+      navigator.serviceWorker,
+      () => window.location.reload(),
+      (callback, delayMs) => {
+        window.setTimeout(callback, delayMs);
+      },
+    );
+  }
 
   if (!needRefresh) return null;
 
@@ -26,7 +45,7 @@ export function UpdatePrompt() {
     >
       <span className="text-sm font-medium">Nueva versión disponible</span>
       <div className="flex gap-2">
-        <Button size="sm" onClick={() => void updateServiceWorker(true)}>
+        <Button type="button" size="sm" onClick={() => void refresh()}>
           <RefreshCw aria-hidden />
           Actualizar
         </Button>

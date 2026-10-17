@@ -1,5 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { N8nAiReplyResponseSchema } from '@omnidesk/contracts';
+import {
+  AI_REPLY_HISTORY_LIMIT,
+  N8nAiReplyResponseSchema,
+  type AiReplyHistoryMessage,
+  type N8nAiReplyRequest,
+} from '@omnidesk/contracts';
 import { z } from 'zod';
 import {
   TRANSACTION_RUNNER,
@@ -17,6 +22,7 @@ import {
   type ConversationRepository,
 } from '../conversations/application/ports/conversation.repository';
 import { decideAiReply } from '../conversations/domain/conversation';
+import type { Message } from '../conversations/domain/message';
 import { enqueueSendRequested } from '../conversations/application/enqueue-send-requested';
 import { WhatsAppSettings } from './whatsapp-settings';
 import { PermanentAiReplyError } from './ai-reply-errors';
@@ -32,6 +38,20 @@ const Payload = z.object({
 
 /** Códigos HTTP que sí se reintentan; el resto de no `2xx` es permanente (SPEC 23). */
 const TRANSIENT_AI_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+
+const HISTORY_ROLES = { CUSTOMER: 'customer', AI: 'ai', AGENT: 'agent' } as const;
+
+/** Mensaje previo para n8n (SPEC 24): rol, nombre del agente y tipo de adjunto, sin el archivo. */
+function toHistoryMessage(message: Message): AiReplyHistoryMessage {
+  return {
+    role: HISTORY_ROLES[message.senderType],
+    ...(message.senderType === 'AGENT' &&
+      message.sender && { agentName: message.sender.displayName }),
+    text: message.text,
+    ...(message.attachment && { attachment: message.attachment.kind }),
+    at: message.createdAt.toISOString(),
+  };
+}
 
 /** Un `2xx` sin JSON o sin `text` válido no mejora reintentando. */
 function parseAiReply(raw: string): z.infer<typeof N8nAiReplyResponseSchema> {
@@ -70,7 +90,16 @@ export class AiReplyWorker {
     const idempotencyKey = `ai:${payload.messageId}`;
     if (await this.conversations.findMessageByIdempotencyKey(conversation.id, idempotencyKey))
       return;
-    const body = JSON.stringify({
+    const inbound = await this.conversations.findMessageById(tenantId, payload.messageId);
+    if (!inbound || inbound.conversationId !== conversation.id) return;
+    // Se lee al llamar, no al encolar: un reintento ve los mensajes llegados entretanto.
+    const history = await this.conversations.listAiHistory(
+      tenantId,
+      conversation.id,
+      inbound.sequence,
+      AI_REPLY_HISTORY_LIMIT,
+    );
+    const request: N8nAiReplyRequest = {
       type: 'ai.reply',
       messageId: payload.messageId,
       conversationId: payload.conversationId,
@@ -78,7 +107,9 @@ export class AiReplyWorker {
       channel: { id: channel.id, externalId: channel.externalId },
       from: payload.from,
       text: payload.text,
-    });
+      history: history.map(toHistoryMessage),
+    };
+    const body = JSON.stringify(request);
     const response = await fetch(channel.webhookUrl, {
       method: 'POST',
       redirect: 'error',

@@ -40,13 +40,33 @@ interface PushData {
 
 // La activación inmediata la pide el aviso de actualización (SKIP_WAITING).
 // Si el worker nuevo tomara solo una página congelada en el iPhone, al volver queda en blanco.
+let reloadOpenWindows = false;
+
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(claimAndReload());
 });
 
 self.addEventListener('message', (event) => {
-  if (event.data?.type === 'SKIP_WAITING') void self.skipWaiting();
+  if (event.data?.type !== 'SKIP_WAITING') return;
+  reloadOpenWindows = true;
+  void self.skipWaiting();
 });
+
+async function claimAndReload(): Promise<void> {
+  await self.clients.claim();
+  if (!reloadOpenWindows) return;
+  const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  await Promise.all(
+    windows.map(async (client) => {
+      if (!('navigate' in client)) return;
+      try {
+        await client.navigate(client.url);
+      } catch {
+        // La página también recarga al cambiar el controlador.
+      }
+    }),
+  );
+}
 
 self.addEventListener('push', (event) => {
   const data = event.data?.json() as PushData | undefined;

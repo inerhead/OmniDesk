@@ -72,6 +72,16 @@ export interface ConversationRepository {
   ): Promise<Array<{ id: string; conversationId: string }>>;
   /** Cambia el motivo de los salientes `FAILED` con `from` a `to` (SPEC 18). Devuelve cuántos. */
   relabelFailedOutbound(tenantId: string, from: string, to: string): Promise<number>;
+  /**
+   * Los `limit` mensajes más recientes con `sequence < beforeSequence`, en orden ascendente, sin los
+   * salientes `FAILED` (SPEC 24: historial para la IA).
+   */
+  listAiHistory(
+    tenantId: string,
+    conversationId: string,
+    beforeSequence: number,
+    limit: number,
+  ): Promise<Message[]>;
 }
 
 export const CONVERSATION_REPOSITORY = Symbol('CONVERSATION_REPOSITORY');

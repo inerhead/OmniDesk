@@ -41,9 +41,25 @@ Sin IA, o si n8n falla, el mensaje entrante permanece en la bandeja para atenci�
   "controlVersion": 0,
   "channel": { "id": "0199c0de-0000-7000-8000-000000000003", "externalId": "123456789" },
   "from": { "externalId": "+573001234567", "displayName": "Ana" },
-  "text": "Hola, ¿qué horarios tienen?"
+  "text": "¿y a qué hora llega?",
+  "history": [
+    { "role": "customer", "text": "Quiero dos hamburguesas", "at": "2026-10-16T18:00:00.000Z" },
+    { "role": "ai", "text": "¡Claro! ¿Para domicilio o para recoger?", "at": "2026-10-16T18:00:04.000Z" },
+    { "role": "agent", "agentName": "Laura", "text": "Tu pedido sale en 10 minutos.", "at": "2026-10-16T18:05:00.000Z" },
+    { "role": "customer", "text": "", "attachment": "IMAGE", "at": "2026-10-16T18:06:00.000Z" }
+  ]
 }
 ```
+
+Desde SPEC 24, `history` trae los **20 mensajes anteriores** al actual (`AI_REPLY_HISTORY_LIMIT`), en orden cronológico. Esquema: `N8nAiReplyRequestSchema` de `@omnidesk/contracts`.
+
+- No incluye el mensaje actual: ese va en `text`.
+- `role`: `customer`, `ai` o `agent`. `agentName` (el nombre visible del miembro) solo aparece en `agent`.
+- Incluye lo que escribieron los agentes humanos y los mensajes que llegaron mientras un agente tenía la conversación.
+- No incluye los salientes `FAILED`: el cliente nunca los vio.
+- Un adjunto aparece como `attachment` con su tipo (`IMAGE`, `DOCUMENT`, `AUDIO`, `VIDEO`, `STICKER`) y el pie en `text`. El archivo no se envía.
+- La primera vez que escribe un cliente, `history` es `[]`.
+- OmniDesk lo lee al llamar, no al encolar: un reintento trae los mensajes que hayan llegado entretanto.
 
 n8n responde HTTP `2xx`, JSON:
 
@@ -53,7 +69,7 @@ n8n responde HTTP `2xx`, JSON:
 
 `text` debe cumplir `MessageTextSchema` de `@omnidesk/contracts`. No devuelvas una lista de items de n8n ni un objeto anidado. Configura el nodo de respuesta para devolver este objeto directamente. OmniDesk registra el mensaje de IA y lo envía a Meta; **n8n no lo envía a WhatsApp**.
 
-La petición incluye el mensaje actual y los identificadores para que tu workflow gestione contexto si lo necesita. No incluye tokens de Meta ni todo el historial de conversación.
+Con `history`, el agente de n8n **no necesita memoria propia**: OmniDesk ya le da el contexto, incluido lo que dijeron los agentes humanos, y los mensajes de los clientes no se copian en n8n fuera de la retención de OmniDesk. La petición no incluye tokens de Meta.
 
 ### Ping y límites
 
@@ -98,6 +114,8 @@ X-Client-Secret: <clientSecret>
 3. `ai.reply` busca la `Idempotency-Key` en la tabla `omnidesk_ai_replies`. Si ya existe, devuelve el mismo `text` sin llamar al modelo.
 4. Si no, un **AI Agent** con Anthropic (`claude-haiku-5-5`) y memoria de 10 mensajes por `conversationId` genera la respuesta. Se guarda en `omnidesk_ai_replies` y se devuelve `200 { "text": "…" }`.
 
+Este ejemplo es anterior a `history` (SPEC 24) y conserva la memoria de n8n. Para un negocio real usa el [workflow de Gastromesa](#workflow-de-gastromesa), que no tiene memoria.
+
 Para importarlo:
 
 1. En n8n, crea la tabla de datos `omnidesk_ai_replies` con dos columnas de texto: `idempotencyKey` y `text`.
@@ -109,6 +127,187 @@ Para importarlo:
 7. Activa el workflow y usa **Probar conexión** en OmniDesk.
 
 La memoria del agente vive en el proceso de n8n: se pierde al reiniciarlo y no se comparte entre workers en modo cola.
+
+## Workflow de Gastromesa
+
+`tools/n8n/OmniDesk — entrada Gastromesa.json` (en n8n, "OmniDesk — entrada Gastromesa") atiende a restaurantes que usan Gastromesa. Comparte con el ejemplo la validación de credenciales, `ping`, el `400` y la deduplicación con `omnidesk_ai_replies`. Cambia la generación de la respuesta:
+
+1. **Buscar prompt** lee la fila del canal (`X-Client-Id`) en `omnidesk_prompts`. Si no existe, responde `501`: OmniDesk no reintenta y el mensaje queda para atención humana.
+2. **Buscar endpoint menú** lee la fila `menu` del canal en `omnidesk_endpoints`.
+3. **Preparar conversación** arma la entrada del agente con el nombre del cliente, `history` y el mensaje actual:
+
+   ```text
+   Nombre del cliente en WhatsApp: Gossio
+
+   Conversación hasta ahora:
+   Cliente: Quiero dos hamburguesas
+   Asistente: ¡Claro! ¿Para domicilio o para recoger?
+   Agente (Laura): Tu pedido sale en 10 minutos.
+   Cliente: [imagen]
+
+   Mensaje actual del cliente:
+   ¿y a qué hora llega?
+   ```
+
+4. **Agente IA** responde con OpenAI (`gpt-5-mini`), el `systemPrompt` del canal y **sin memoria**.
+5. El tool **consultar_menu** llama a Gastromesa (`baseUrl` + `ruta`, método `metodo`, cabecera `X-Client-Secret`) cuando el agente necesita productos, precios o disponibilidad. Si falla o el canal no tiene fila `menu`, el agente recibe el error, dice que no tiene el dato y ofrece un agente humano. El workflow responde `200`.
+6. **Guardar respuesta** y **Responder IA**, como en el ejemplo.
+
+### Tablas
+
+Todas las columnas son de tipo texto (String). n8n añade `id`, `createdAt` y `updatedAt`.
+
+`omnidesk_prompts`: una fila por canal.
+
+| Columna        | Contenido                                               |
+| -------------- | ------------------------------------------------------- |
+| `canal`        | Id del canal de OmniDesk (el Client ID).                |
+| `empresa`      | Nombre del negocio (p. ej. `Sésamo`). Solo informativo. |
+| `systemPrompt` | Prompt de sistema del agente para ese canal.            |
+
+`omnidesk_endpoints`: una fila por canal y endpoint.
+
+| Columna        | Contenido                                                             |
+| -------------- | --------------------------------------------------------------------- |
+| `canal`        | Id del canal de OmniDesk.                                             |
+| `nombre`       | Endpoint lógico. Hoy solo `menu`.                                     |
+| `baseUrl`      | Base de la API, sin barra final: `https://dev.gastromesa.com/api/v1`. |
+| `ruta`         | Ruta con barra inicial: `/menu/full`.                                 |
+| `metodo`       | `GET` o `POST`.                                                       |
+| `clientSecret` | Valor de la cabecera `X-Client-Secret` de Gastromesa.                 |
+
+Fila de ejemplo para el menú:
+
+| canal                                  | nombre | baseUrl                             | ruta         | metodo | clientSecret  |
+| -------------------------------------- | ------ | ----------------------------------- | ------------ | ------ | ------------- |
+| `01a142dd-b2f1-705c-8975-085b302aea48` | `menu` | `https://dev.gastromesa.com/api/v1` | `/menu/full` | `GET`  | `<tu secreto>` |
+
+`clientSecret` queda en claro en la tabla: restringe quién accede a n8n. Para pasar de desarrollo a producción en Gastromesa basta con cambiar `baseUrl`.
+
+### Importarlo
+
+1. Crea en n8n las tablas `omnidesk_prompts` y `omnidesk_endpoints` con las columnas de arriba. Si no la tienes, crea también `omnidesk_ai_replies` (ver el [workflow de ejemplo](#workflow-de-ejemplo)).
+2. Añade la fila de cada canal en `omnidesk_prompts` y su fila `menu` en `omnidesk_endpoints`.
+3. Importa el fichero (**Import from File**). Llega desactivado.
+4. Comprueba la tabla de **Buscar cliente** (`Credentials`), de **Buscar respuesta previa** y **Guardar respuesta** (`omnidesk_ai_replies`) y la credencial de **OpenAI Chat Model**.
+5. Selecciona `omnidesk_prompts` en **Buscar prompt** y `omnidesk_endpoints` en **Buscar endpoint menú**.
+6. Este workflow y el de ejemplo escuchan la misma ruta (`/webhook/omnidesk`): **desactiva el otro** antes de activar este.
+7. Activa el workflow y usa **Probar conexión** en OmniDesk.
+
+<details>
+<summary>Ejemplo de <code>systemPrompt</code> (Sésamo)</summary>
+
+```text
+Eres el asistente virtual de Sésamo, un restaurante.
+
+Tu función principal es atender clientes exclusivamente para ayudarles con pedidos relacionados con Sésamo.
+
+OBJETIVO
+- Dar una bienvenida cordial cuando corresponda.
+- Ayudar al cliente a consultar opciones disponibles para realizar un pedido.
+- Guiar al cliente durante el proceso de pedido.
+- Recopilar únicamente la información necesaria para completar el pedido.
+- Derivar la conversación a un agente humano cuando sea necesario.
+
+ALCANCE
+Solo debes responder preguntas relacionadas con:
+- Sésamo restaurante.
+- El menú.
+- Productos y opciones disponibles.
+- Pedidos.
+- Información necesaria para realizar o continuar un pedido.
+- Consultas directamente relacionadas con la atención del restaurante.
+
+No respondas preguntas generales que no tengan relación con Sésamo.
+
+Si el cliente pregunta algo fuera de tu alcance, responde brevemente indicando que solo puedes ayudar con pedidos o información relacionada con Sésamo.
+
+Ejemplo:
+"Puedo ayudarte con el menú y los pedidos de Sésamo. ¿Qué te gustaría ordenar?"
+
+INFORMACIÓN DEL NEGOCIO
+Nunca inventes información.
+
+No inventes:
+- Precios.
+- Productos.
+- Ingredientes.
+- Promociones.
+- Horarios.
+- Dirección.
+- Disponibilidad.
+- Tiempo de entrega.
+- Costos de domicilio.
+- Métodos de pago.
+- Políticas del restaurante.
+- Estado de un pedido.
+
+Solo utiliza información que haya sido proporcionada explícitamente en el contexto de la conversación o mediante las herramientas disponibles.
+
+Si necesitas un dato y no está disponible, dilo con naturalidad.
+
+Ejemplo:
+"No tengo ese dato disponible en este momento. Si quieres, puedo pasarte con un agente."
+
+PEDIDOS
+Cuando el cliente quiera realizar un pedido:
+- Ayúdalo a identificar qué desea ordenar.
+- Haz una sola pregunta a la vez cuando necesites información adicional.
+- Confirma la selección antes de considerar terminado el pedido.
+- No asumas cantidades, tamaños, sabores, adicionales ni variantes.
+- No confirmes que un producto está disponible si no tienes información que lo demuestre.
+- No inventes precios ni totales.
+
+ATENCIÓN HUMANA
+Debes ofrecer pasar la conversación a un agente humano cuando:
+- El cliente lo solicite directamente.
+- No conozcas la respuesta.
+- La información necesaria no esté disponible.
+- El cliente tenga un problema que no puedas resolver dentro del proceso normal de pedido.
+- La solicitud esté fuera de tu alcance pero pueda ser atendida por el restaurante.
+
+Cuando esto ocurra, responde brevemente.
+
+Ejemplo:
+"Claro, voy a pasarte con un agente para que pueda ayudarte."
+
+No continúes intentando resolver el problema después de decidir que requiere atención humana.
+
+IDIOMA
+Responde siempre en el mismo idioma que esté utilizando el cliente.
+
+Si el cliente cambia de idioma, adapta tus respuestas al nuevo idioma.
+
+ESTILO
+- Sé cordial, natural y directo.
+- Usa mensajes breves.
+- Máximo 3 frases por respuesta.
+- Evita explicaciones largas.
+- No uses Markdown.
+- No uses tablas.
+- No uses listas largas.
+- No uses títulos.
+- No menciones que eres un modelo de IA.
+- No inventes información para intentar ser útil.
+
+BIENVENIDA
+Si es el inicio de una conversación o corresponde dar una bienvenida, utiliza un saludo breve.
+
+Ejemplo:
+"¡Hola! Bienvenido a Sésamo 👋 ¿Qué te gustaría ordenar hoy?"
+
+Si el cliente ya hizo una pregunta concreta, responde directamente y evita repetir innecesariamente la bienvenida.
+
+REGLA PRINCIPAL
+Si una respuesta requiere información que no tienes disponible, nunca la adivines. Indica que no tienes ese dato y, cuando sea apropiado, ofrece atención de un agente humano.
+Cuando necesites información sobre productos, precios, disponibilidad o cualquier dato del restaurante, consulta primero las herramientas disponibles.
+
+Considera la información devuelta por esas herramientas como la única fuente válida para esos datos.
+
+Si una herramienta no devuelve información suficiente, no completes ni infieras el dato.
+```
+
+</details>
 
 ### Limpieza de `omnidesk_ai_replies`
 

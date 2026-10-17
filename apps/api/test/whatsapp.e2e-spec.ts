@@ -1,11 +1,13 @@
 import 'reflect-metadata';
 import { createHmac, randomUUID } from 'node:crypto';
+import { N8nAiReplyRequestSchema, type N8nAiReplyRequest } from '@omnidesk/contracts';
 import { Test } from '@nestjs/testing';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/bootstrap';
+import type { Prisma } from '../src/generated/prisma/client';
 import { PrismaService } from '../src/shared/infrastructure/prisma/prisma.service';
 import { OutboxDispatcher } from '../src/modules/realtime/infrastructure/outbox-dispatcher';
 import { AiReplyWorker } from '../src/modules/whatsapp/ai-reply-worker';
@@ -76,6 +78,47 @@ describe('WhatsApp directo e IA opcional (e2e)', () => {
   };
   const aiEvent = () =>
     db.outboxEvent.findFirstOrThrow({ where: { tenantId, type: 'ai.reply_requested' } });
+  /** Procesa el `ai.reply` más reciente y devuelve el cuerpo que recibió n8n (SPEC 24). */
+  const nextAiRequest = async (): Promise<N8nAiReplyRequest> => {
+    const event = await db.outboxEvent.findFirstOrThrow({
+      where: { tenantId, type: 'ai.reply_requested' },
+      orderBy: { createdAt: 'desc' },
+    });
+    let sent: unknown;
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      if (url.includes('n8n')) sent = JSON.parse(init.body as string);
+      return Response.json({ text: 'Respuesta de IA' });
+    });
+    await app.get(AiReplyWorker).process(tenantId, event.payload);
+    return N8nAiReplyRequestSchema.parse(sent);
+  };
+  /** Añade un mensaje a la conversación con el siguiente `sequence`, como lo haría la API. */
+  const addMessage = async (
+    data: Pick<Prisma.MessageUncheckedCreateInput, 'direction' | 'senderType' | 'text' | 'status'> &
+      Partial<Pick<Prisma.MessageUncheckedCreateInput, 'senderMemberId'>>,
+    attachment?: 'IMAGE',
+  ) => {
+    const conversation = await db.conversation.findFirstOrThrow({ where: { tenantId } });
+    const sequence = conversation.lastSequence + 1;
+    await db.conversation.update({
+      where: { id: conversation.id },
+      data: { lastSequence: sequence },
+    });
+    return db.message.create({
+      data: {
+        ...data,
+        tenantId,
+        channelId,
+        conversationId: conversation.id,
+        sequence,
+        ...(attachment && {
+          attachment: {
+            create: { tenantId, kind: attachment, mimeType: 'image/jpeg', status: 'READY' },
+          },
+        }),
+      },
+    });
+  };
   beforeAll(async () => {
     const env = testEnv();
     const module = await Test.createTestingModule({ imports: [AppModule.forRoot(env)] }).compile();
@@ -302,6 +345,67 @@ describe('WhatsApp directo e IA opcional (e2e)', () => {
     expect(event.publishedAt).toBeNull();
     expect(await db.message.count({ where: { tenantId, senderType: 'CUSTOMER' } })).toBe(1);
     expect(await db.message.count({ where: { tenantId, senderType: 'AI' } })).toBe(0);
+  });
+  it('el primer ai.reply de una conversación lleva history vacío (SPEC 24)', async () => {
+    await enableAi();
+    await post(envelope('Hola')).expect(200);
+    const sent = await nextAiRequest();
+    expect(sent.text).toBe('Hola');
+    expect(sent.history).toEqual([]);
+  });
+  it('history trae cliente, IA y agente con su nombre, adjuntos por tipo y sin FAILED (SPEC 24)', async () => {
+    await enableAi();
+    await post(envelope('Quiero dos hamburguesas')).expect(200);
+    const owner = await db.tenantMember.findFirstOrThrow({ where: { tenantId } });
+    await addMessage({
+      direction: 'OUTBOUND',
+      senderType: 'AI',
+      text: '¿Domicilio?',
+      status: 'SENT',
+    });
+    await addMessage({
+      direction: 'OUTBOUND',
+      senderType: 'AGENT',
+      text: 'Sale en 10 minutos',
+      status: 'DELIVERED',
+      senderMemberId: owner.id,
+    });
+    await addMessage({
+      direction: 'OUTBOUND',
+      senderType: 'AGENT',
+      text: 'No llegó',
+      status: 'FAILED',
+      senderMemberId: owner.id,
+    });
+    await addMessage(
+      { direction: 'INBOUND', senderType: 'CUSTOMER', text: '', status: 'RECEIVED' },
+      'IMAGE',
+    );
+    await post(envelope('¿y a qué hora llega?')).expect(200);
+    const sent = await nextAiRequest();
+    expect(sent.text).toBe('¿y a qué hora llega?');
+    expect(sent.history.map(({ at: _at, ...rest }) => rest)).toEqual([
+      { role: 'customer', text: 'Quiero dos hamburguesas' },
+      { role: 'ai', text: '¿Domicilio?' },
+      { role: 'agent', agentName: 'Owner', text: 'Sale en 10 minutos' },
+      { role: 'customer', text: '', attachment: 'IMAGE' },
+    ]);
+  });
+  it('con 25 mensajes previos history trae los 20 más recientes en orden (SPEC 24)', async () => {
+    await enableAi();
+    await post(envelope('m1')).expect(200);
+    for (let n = 2; n <= 25; n += 1)
+      await addMessage({
+        direction: 'INBOUND',
+        senderType: 'CUSTOMER',
+        text: `m${n}`,
+        status: 'RECEIVED',
+      });
+    await post(envelope('actual')).expect(200);
+    const sent = await nextAiRequest();
+    expect(sent.history.map((message) => message.text)).toEqual(
+      Array.from({ length: 20 }, (_, index) => `m${index + 6}`),
+    );
   });
   it('un 501 de n8n no se reintenta y deja el mensaje para atención humana (SPEC 23)', async () => {
     await enableAi();

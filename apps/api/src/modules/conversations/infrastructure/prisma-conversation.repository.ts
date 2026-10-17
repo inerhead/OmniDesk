@@ -281,6 +281,26 @@ export class PrismaConversationRepository implements ConversationRepository {
     return count;
   }
 
+  async listAiHistory(
+    tenantId: string,
+    conversationId: string,
+    beforeSequence: number,
+    limit: number,
+  ): Promise<Message[]> {
+    const rows = await this.db.client.message.findMany({
+      where: {
+        tenantId,
+        conversationId,
+        sequence: { lt: beforeSequence },
+        NOT: { direction: 'OUTBOUND', status: 'FAILED' },
+      },
+      orderBy: { sequence: 'desc' },
+      take: limit,
+      select: messageSelect,
+    });
+    return rows.reverse().map(toMessage);
+  }
+
   async findMessageByIdempotencyKey(
     conversationId: string,
     idempotencyKey: string,

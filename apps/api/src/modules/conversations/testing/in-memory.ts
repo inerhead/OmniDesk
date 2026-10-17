@@ -227,6 +227,24 @@ export class InMemoryConversations implements ConversationRepository {
     for (const { id } of failed) this.messages.find((m) => m.id === id)!.failureReason = to;
     return failed.length;
   }
+
+  async listAiHistory(
+    tenantId: string,
+    conversationId: string,
+    beforeSequence: number,
+    limit: number,
+  ) {
+    if (!(await this.findById(tenantId, conversationId))) return [];
+    return this.messages
+      .filter(
+        (m) =>
+          m.conversationId === conversationId &&
+          m.sequence < beforeSequence &&
+          !(m.direction === 'OUTBOUND' && m.status === 'FAILED'),
+      )
+      .sort((a, b) => a.sequence - b.sequence)
+      .slice(-limit);
+  }
 }
 
 export class InMemoryMembers implements MemberRepository {

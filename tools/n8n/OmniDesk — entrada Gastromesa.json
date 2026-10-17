@@ -1,6 +1,56 @@
 {
-  "name": "OmniDesk — entrada",
+  "name": "OmniDesk — entrada Gastromesa",
   "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "omnidesk",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "781958b7-8291-46f1-a1f2-fd02bf9411d3",
+      "name": "OmniDesk",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 400],
+      "webhookId": "omnidesk"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "5Cx5Z1iiS9eDfZde",
+          "mode": "list",
+          "cachedResultName": "Credentials",
+          "cachedResultUrl": "/projects/GiBzROGbG83mhghA/datatables/5Cx5Z1iiS9eDfZde"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "=clientId",
+              "condition": "=eq",
+              "keyValue": "={{ $json.headers['x-client-id'] }}"
+            },
+            {
+              "keyName": "clientSecret",
+              "keyValue": "={{ $json.headers['x-client-secret'] }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "id": "177a2847-aca2-4651-adb5-3499e7569ebf",
+      "name": "Buscar cliente",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [220, 400],
+      "settings": {
+        "alwaysOutputData": true
+      },
+      "alwaysOutputData": true
+    },
     {
       "parameters": {
         "conditions": {
@@ -28,10 +78,7 @@
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
-      "position": [
-        1248,
-        560
-      ],
+      "position": [440, 400],
       "id": "ed0c3f1f-8a07-45e0-b011-dab46e6e7f16",
       "name": "¿Cliente válido?"
     },
@@ -47,10 +94,7 @@
       "name": "Responder 401",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
-      "position": [
-        1472,
-        720
-      ]
+      "position": [660, 600]
     },
     {
       "parameters": {
@@ -67,7 +111,7 @@
                 "conditions": [
                   {
                     "id": "401a195d-2ecd-418c-a2b5-12f6528ad064",
-                    "leftValue": "={{ $('OmniDesk1').item.json.body.type }}",
+                    "leftValue": "={{ $('OmniDesk').item.json.body.type }}",
                     "rightValue": "ping",
                     "operator": {
                       "type": "string",
@@ -91,7 +135,7 @@
                 "conditions": [
                   {
                     "id": "140ddb4d-bc92-4be7-b675-3687504fafdc",
-                    "leftValue": "={{ $('OmniDesk1').item.json.body.type }}",
+                    "leftValue": "={{ $('OmniDesk').item.json.body.type }}",
                     "rightValue": "ai.reply",
                     "operator": {
                       "type": "string",
@@ -115,10 +159,7 @@
       "name": "Tipo",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.2,
-      "position": [
-        1472,
-        448
-      ]
+      "position": [660, 400]
     },
     {
       "parameters": {
@@ -132,10 +173,7 @@
       "name": "Responder ping",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
-      "position": [
-        1696,
-        256
-      ]
+      "position": [880, 200]
     },
     {
       "parameters": {
@@ -149,10 +187,7 @@
       "name": "Responder 400",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
-      "position": [
-        1696,
-        656
-      ]
+      "position": [880, 600]
     },
     {
       "parameters": {
@@ -169,7 +204,7 @@
           "conditions": [
             {
               "keyName": "idempotencyKey",
-              "keyValue": "={{ $('OmniDesk1').item.json.headers['idempotency-key'] }}"
+              "keyValue": "={{ $('OmniDesk').item.json.headers['idempotency-key'] }}"
             }
           ]
         },
@@ -179,10 +214,7 @@
       "name": "Buscar respuesta previa",
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
-      "position": [
-        1696,
-        448
-      ],
+      "position": [880, 400],
       "alwaysOutputData": true
     },
     {
@@ -214,10 +246,7 @@
       "name": "¿Ya respondida?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
-      "position": [
-        1920,
-        448
-      ]
+      "position": [1100, 400]
     },
     {
       "parameters": {
@@ -231,39 +260,190 @@
       "name": "Responder respuesta previa",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
-      "position": [
-        2128,
-        320
-      ]
+      "position": [1320, 200]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "canal",
+              "keyValue": "={{ $('OmniDesk').item.json.headers['x-client-id'] }}"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "id": "b5dbef40-cf4f-4aec-bd64-f0fd0cd7488f",
+      "name": "Buscar prompt",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [1320, 400],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "54ac6bb0-b0f1-4201-8c91-19179151d729",
+              "leftValue": "={{ $json.systemPrompt }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2f26bfdb-301a-478a-b847-c1ecce4aec88",
+      "name": "¿Tiene prompt?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [1540, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ok: false }) }}",
+        "options": {
+          "responseCode": 501
+        }
+      },
+      "id": "541ca5af-8e78-4397-a868-faf3c0419fb5",
+      "name": "Responder 501",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1760, 600]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "canal",
+              "keyValue": "={{ $('OmniDesk').item.json.headers['x-client-id'] }}"
+            },
+            {
+              "keyName": "nombre",
+              "keyValue": "menu"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "id": "50a21787-2306-42e7-b262-67c175dd0f13",
+      "name": "Buscar endpoint menú",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [1760, 400],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Arma la entrada del agente con el historial que envía OmniDesk (SPEC 24).\nconst body = $('OmniDesk').first().json.body;\nconst ADJUNTOS = { IMAGE: 'imagen', DOCUMENT: 'documento', AUDIO: 'audio', VIDEO: 'video', STICKER: 'sticker' };\n\nfunction quien(mensaje) {\n  if (mensaje.role === 'ai') return 'Asistente';\n  if (mensaje.role === 'agent') return mensaje.agentName ? `Agente (${mensaje.agentName})` : 'Agente';\n  return 'Cliente';\n}\n\nfunction linea(mensaje) {\n  const adjunto = mensaje.attachment ? `[${ADJUNTOS[mensaje.attachment] ?? 'adjunto'}]` : '';\n  return `${quien(mensaje)}: ${[adjunto, mensaje.text].filter(Boolean).join(' ')}`;\n}\n\nconst partes = [];\nif (body.from?.displayName) partes.push(`Nombre del cliente en WhatsApp: ${body.from.displayName}`);\nconst historial = body.history ?? [];\nif (historial.length > 0) partes.push(`Conversación hasta ahora:\\n${historial.map(linea).join('\\n')}`);\npartes.push(`Mensaje actual del cliente:\\n${body.text}`);\n\nreturn [{ json: { prompt: partes.join('\\n\\n') } }];\n"
+      },
+      "id": "7b970d27-1491-4101-9b4b-598dfffbeadd",
+      "name": "Preparar conversación",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1980, 400]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Devuelve el menú completo del restaurante: productos, precios, modificadores y disponibilidad. Úsalo antes de dar cualquier dato de productos o precios.",
+        "method": "={{ $('Buscar endpoint menú').first().json.metodo }}",
+        "url": "={{ $('Buscar endpoint menú').first().json.baseUrl }}{{ $('Buscar endpoint menú').first().json.ruta }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Client-Secret",
+              "value": "={{ $('Buscar endpoint menú').first().json.clientSecret }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6b6d2424-16e4-44be-b573-769d6408892f",
+      "name": "consultar_menu",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [2300, 640]
     },
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $('OmniDesk1').item.json.body.text }}",
+        "text": "={{ $json.prompt }}",
         "options": {
-          "systemMessage": "Eres el asistente virtual de Sésamo, un restaurante.\n\nTu función principal es atender clientes exclusivamente para ayudarles con pedidos relacionados con Sésamo.\n\nOBJETIVO\n- Dar una bienvenida cordial cuando corresponda.\n- Ayudar al cliente a consultar opciones disponibles para realizar un pedido.\n- Guiar al cliente durante el proceso de pedido.\n- Recopilar únicamente la información necesaria para completar el pedido.\n- Derivar la conversación a un agente humano cuando sea necesario.\n\nALCANCE\nSolo debes responder preguntas relacionadas con:\n- Sésamo restaurante.\n- El menú.\n- Productos y opciones disponibles.\n- Pedidos.\n- Información necesaria para realizar o continuar un pedido.\n- Consultas directamente relacionadas con la atención del restaurante.\n\nNo respondas preguntas generales que no tengan relación con Sésamo.\n\nSi el cliente pregunta algo fuera de tu alcance, responde brevemente indicando que solo puedes ayudar con pedidos o información relacionada con Sésamo.\n\nEjemplo:\n\"Puedo ayudarte con el menú y los pedidos de Sésamo. ¿Qué te gustaría ordenar?\"\n\nINFORMACIÓN DEL NEGOCIO\nNunca inventes información.\n\nNo inventes:\n- Precios.\n- Productos.\n- Ingredientes.\n- Promociones.\n- Horarios.\n- Dirección.\n- Disponibilidad.\n- Tiempo de entrega.\n- Costos de domicilio.\n- Métodos de pago.\n- Políticas del restaurante.\n- Estado de un pedido.\n\nSolo utiliza información que haya sido proporcionada explícitamente en el contexto de la conversación o mediante las herramientas disponibles.\n\nSi necesitas un dato y no está disponible, dilo con naturalidad.\n\nEjemplo:\n\"No tengo ese dato disponible en este momento. Si quieres, puedo pasarte con un agente.\"\n\nPEDIDOS\nCuando el cliente quiera realizar un pedido:\n- Ayúdalo a identificar qué desea ordenar.\n- Haz una sola pregunta a la vez cuando necesites información adicional.\n- Confirma la selección antes de considerar terminado el pedido.\n- No asumas cantidades, tamaños, sabores, adicionales ni variantes.\n- No confirmes que un producto está disponible si no tienes información que lo demuestre.\n- No inventes precios ni totales.\n\nATENCIÓN HUMANA\nDebes ofrecer pasar la conversación a un agente humano cuando:\n- El cliente lo solicite directamente.\n- No conozcas la respuesta.\n- La información necesaria no esté disponible.\n- El cliente tenga un problema que no puedas resolver dentro del proceso normal de pedido.\n- La solicitud esté fuera de tu alcance pero pueda ser atendida por el restaurante.\n\nCuando esto ocurra, responde brevemente.\n\nEjemplo:\n\"Claro, voy a pasarte con un agente para que pueda ayudarte.\"\n\nNo continúes intentando resolver el problema después de decidir que requiere atención humana.\n\nIDIOMA\nResponde siempre en el mismo idioma que esté utilizando el cliente.\n\nSi el cliente cambia de idioma, adapta tus respuestas al nuevo idioma.\n\nESTILO\n- Sé cordial, natural y directo.\n- Usa mensajes breves.\n- Máximo 3 frases por respuesta.\n- Evita explicaciones largas.\n- No uses Markdown.\n- No uses tablas.\n- No uses listas largas.\n- No uses títulos.\n- No menciones que eres un modelo de IA.\n- No inventes información para intentar ser útil.\n\nBIENVENIDA\nSi es el inicio de una conversación o corresponde dar una bienvenida, utiliza un saludo breve.\n\nEjemplo:\n\"¡Hola! Bienvenido a Sésamo 👋 ¿Qué te gustaría ordenar hoy?\"\n\nSi el cliente ya hizo una pregunta concreta, responde directamente y evita repetir innecesariamente la bienvenida.\n\nREGLA PRINCIPAL\nSi una respuesta requiere información que no tienes disponible, nunca la adivines. Indica que no tienes ese dato y, cuando sea apropiado, ofrece atención de un agente humano.\nCuando necesites información sobre productos, precios, disponibilidad o cualquier dato del restaurante, consulta primero las herramientas disponibles.\n\nConsidera la información devuelta por esas herramientas como la única fuente válida para esos datos.\n\nSi una herramienta no devuelve información suficiente, no completes ni infieras el dato."
+          "systemMessage": "={{ $('Buscar prompt').first().json.systemPrompt }}"
         }
       },
       "id": "727d7263-d47d-4590-be2e-4525ffabfe55",
       "name": "Agente IA",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 2.2,
-      "position": [
-        2128,
-        560
-      ]
+      "position": [2200, 400]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [2120, 640],
+      "id": "d1eae609-8ffc-44f8-9b54-903e83a3c8d0",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "0Th2JaWs8aL1Z8WW",
+          "name": "OpenAI account"
+        }
+      }
     },
     {
       "parameters": {
         "dataTableId": {
           "__rl": true,
-          "value": "",
-          "mode": "list"
+          "value": "MghjS97L1tKqAKPf",
+          "mode": "list",
+          "cachedResultName": "omnidesk_ai_replies",
+          "cachedResultUrl": "/projects/GiBzROGbG83mhghA/datatables/MghjS97L1tKqAKPf"
         },
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "idempotencyKey": "={{ $('OmniDesk1').item.json.headers['idempotency-key'] }}",
+            "idempotencyKey": "={{ $('OmniDesk').item.json.headers['idempotency-key'] }}",
             "text": "={{ $json.output }}"
           },
           "matchingColumns": [],
@@ -298,10 +478,7 @@
       "name": "Guardar respuesta",
       "type": "n8n-nodes-base.dataTable",
       "typeVersion": 1.1,
-      "position": [
-        2480,
-        560
-      ]
+      "position": [2560, 400]
     },
     {
       "parameters": {
@@ -315,95 +492,33 @@
       "name": "Responder IA",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
-      "position": [
-        2688,
-        560
-      ]
-    },
-    {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "omnidesk",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "id": "781958b7-8291-46f1-a1f2-fd02bf9411d3",
-      "name": "OmniDesk1",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2.1,
-      "position": [
-        816,
-        560
-      ],
-      "webhookId": "omnidesk"
-    },
-    {
-      "parameters": {
-        "operation": "get",
-        "dataTableId": {
-          "__rl": true,
-          "value": "5Cx5Z1iiS9eDfZde",
-          "mode": "list",
-          "cachedResultName": "Credentials",
-          "cachedResultUrl": "/projects/GiBzROGbG83mhghA/datatables/5Cx5Z1iiS9eDfZde"
-        },
-        "matchType": "allConditions",
-        "filters": {
-          "conditions": [
-            {
-              "keyName": "=clientId",
-              "condition": "=eq",
-              "keyValue": "={{ $json.headers['x-client-id'] }}"
-            },
-            {
-              "keyName": "clientSecret",
-              "keyValue": "={{ $json.headers['x-client-secret'] }}"
-            }
-          ]
-        },
-        "limit": 1
-      },
-      "id": "177a2847-aca2-4651-adb5-3499e7569ebf",
-      "name": "Buscar cliente1",
-      "type": "n8n-nodes-base.dataTable",
-      "typeVersion": 1.1,
-      "position": [
-        1040,
-        560
-      ],
-      "settings": {
-        "alwaysOutputData": true
-      },
-      "alwaysOutputData": true
-    },
-    {
-      "parameters": {
-        "model": {
-          "__rl": true,
-          "mode": "list",
-          "value": "gpt-5-mini"
-        },
-        "builtInTools": {},
-        "options": {}
-      },
-      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
-      "typeVersion": 1.3,
-      "position": [
-        1952,
-        752
-      ],
-      "id": "d1eae609-8ffc-44f8-9b54-903e83a3c8d0",
-      "name": "OpenAI Chat Model",
-      "credentials": {
-        "openAiApi": {
-          "id": "0Th2JaWs8aL1Z8WW",
-          "name": "OpenAI account"
-        }
-      }
+      "position": [2780, 400]
     }
   ],
   "pinData": {},
   "connections": {
+    "OmniDesk": {
+      "main": [
+        [
+          {
+            "node": "Buscar cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar cliente": {
+      "main": [
+        [
+          {
+            "node": "¿Cliente válido?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "¿Cliente válido?": {
       "main": [
         [
@@ -469,6 +584,57 @@
         ],
         [
           {
+            "node": "Buscar prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar prompt": {
+      "main": [
+        [
+          {
+            "node": "¿Tiene prompt?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Tiene prompt?": {
+      "main": [
+        [
+          {
+            "node": "Buscar endpoint menú",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder 501",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar endpoint menú": {
+      "main": [
+        [
+          {
+            "node": "Preparar conversación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar conversación": {
+      "main": [
+        [
+          {
             "node": "Agente IA",
             "type": "main",
             "index": 0
@@ -498,34 +664,23 @@
         ]
       ]
     },
-    "OmniDesk1": {
-      "main": [
-        [
-          {
-            "node": "Buscar cliente1",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Buscar cliente1": {
-      "main": [
-        [
-          {
-            "node": "¿Cliente válido?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "OpenAI Chat Model": {
       "ai_languageModel": [
         [
           {
             "node": "Agente IA",
             "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "consultar_menu": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente IA",
+            "type": "ai_tool",
             "index": 0
           }
         ]
@@ -541,12 +696,9 @@
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": false
   },
-  "versionId": "ebfb10aa-3ad8-4db4-91e7-935ed0702f55",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "63a2d636d880c69beaf6b24abb4135e00a0f74e454fdd2b333ffbd4c826c1cfd"
   },
-  "nodeGroups": [],
-  "id": "QdXtwNDNUYrhurHj",
   "tags": []
 }

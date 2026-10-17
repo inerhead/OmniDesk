@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AttachmentKindSchema } from './attachments';
 import { ChannelTypeSchema } from './conversations';
 import { E164Schema, MessageTextSchema } from './integrations';
 
@@ -115,3 +116,31 @@ export const ConfigureWhatsAppRequestSchema = z
   .refine((body) => Object.keys(body).length > 0, { message: 'Indica una configuración' });
 export type ConfigureWhatsAppRequest = z.infer<typeof ConfigureWhatsAppRequestSchema>;
 export const N8nAiReplyResponseSchema = z.object({ text: MessageTextSchema });
+
+/** Mensajes previos que OmniDesk envía en cada `ai.reply` (SPEC 24). */
+export const AI_REPLY_HISTORY_LIMIT = 20;
+
+/** Un mensaje previo de la conversación. El archivo de un adjunto nunca se envía. */
+export const AiReplyHistoryMessageSchema = z.object({
+  role: z.enum(['customer', 'ai', 'agent']),
+  /** `displayName` del miembro; solo en `agent`. */
+  agentName: z.string().optional(),
+  /** Puede ser vacío en un adjunto sin pie. */
+  text: z.string(),
+  attachment: AttachmentKindSchema.optional(),
+  at: z.iso.datetime(),
+});
+export type AiReplyHistoryMessage = z.infer<typeof AiReplyHistoryMessageSchema>;
+
+/** Cuerpo de `POST <webhookUrl>` con `type: 'ai.reply'`. `history` no incluye el mensaje actual. */
+export const N8nAiReplyRequestSchema = z.object({
+  type: z.literal('ai.reply'),
+  messageId: z.uuid(),
+  conversationId: z.uuid(),
+  controlVersion: z.number().int(),
+  channel: z.object({ id: z.uuid(), externalId: z.string() }),
+  from: z.object({ externalId: z.string(), displayName: z.string().optional() }),
+  text: z.string(),
+  history: z.array(AiReplyHistoryMessageSchema).max(AI_REPLY_HISTORY_LIMIT),
+});
+export type N8nAiReplyRequest = z.infer<typeof N8nAiReplyRequestSchema>;

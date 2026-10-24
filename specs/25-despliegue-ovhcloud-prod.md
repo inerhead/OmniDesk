@@ -327,7 +327,7 @@ Regla de versionado: `vMAYOR.MENOR.PARCHE`. El pipeline incrementa el parche del
 | `prisma migrate diff` cambia de flags entre versiones de Prisma | Se confirman contra la versión instalada y el ensayo del paso 1 prueba que el job detecta una deriva real. |
 | Google rechaza el login (`redirect_uri_mismatch`) | Se verifica la URI en la credencial antes de desplegar. |
 | El puerto de MinIO o el gateway quedan expuestos por una regla del firewall de OVH | Criterio de aceptación con comprobación desde fuera. |
-| `METRICS_TOKEN` falta y el endpoint de métricas queda sin proteger | Se revisa en el paso 4 contra `env.ts`. |
+| `METRICS_TOKEN` falta en el `.env.prod` | Revisado en el paso 4 contra `env.ts`: es opcional, y sin él `GET /api/v1/metrics` no existe (no queda sin proteger). Se deja sin definir hasta que haga falta un monitor externo. |
 
 ## Lo que **no** entra en este spec
 

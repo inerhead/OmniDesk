@@ -5,7 +5,9 @@ OmniDesk corre en un VPS propio con Docker Compose, en dos entornos aislados y b
 | Entorno | Proyecto Compose | `.env` | Gateway en el host | URL pública | Se despliega desde |
 | --- | --- | --- | --- | --- | --- |
 | dev | `omnidesk-dev` | `/srv/omnidesk/.env.dev` | `127.0.0.1:8081` | <https://dev.gastromesa.com/omnidesk> | `main` |
-| prod | `omnidesk-prod` | `/srv/omnidesk/.env.prod` | `127.0.0.1:8082` | <https://gastromesa.com/omnidesk> | una etiqueta `vX.Y.Z` |
+| prod | `omnidesk-prod` | `/srv/omnidesk/.env.prod` | `127.0.0.1:8082` | <https://channel.gastromesa.com/omnidesk> (túnel de Cloudflare) | una etiqueta `vX.Y.Z` que crea el pipeline desde `main` |
+
+> **Prod en OVHcloud (SPEC 25).** Prod llega por un túnel de Cloudflare, no por el Nginx que describen los pasos 1.4 y los diagramas de dev. Para prod sigue la sección [Prod en OVHcloud con Cloudflare Tunnel](#prod-en-ovhcloud-con-cloudflare-tunnel-spec-25); el resto de la guía aplica igual (migraciones, backups, restauración, rollback).
 
 ```text
 Internet ──HTTPS──▶ Nginx existente (TLS) ──/omnidesk/*──▶ gateway (Caddy, 127.0.0.1:808x)
@@ -20,9 +22,11 @@ Archivos:
 
 | Archivo | Qué es |
 | --- | --- |
-| `infra/deploy/docker-compose.prod.yml` | Servicios `postgres`, `api`, `gateway` y `backup` |
+| `infra/deploy/docker-compose.prod.yml` | Servicios `postgres`, `api`, `gateway`, `backup`, `minio`, `cloudflared` y `autoheal` |
 | `infra/deploy/.env.dev.example`, `.env.prod.example` | Plantillas de entorno (sin secretos) |
-| `infra/deploy/deploy.sh` | Despliegue manual: `deploy.sh <dev\|prod> <git-ref>` |
+| `infra/deploy/deploy.sh` | Despliegue manual: `deploy.sh <dev\|prod> <git-ref>`. En prod solo acepta un tag `vX.Y.Z` contenido en `origin/main` |
+| `.github/workflows/release.yml` | Pipeline de GitHub: en cada push a `main` comprueba el código y las migraciones y crea el siguiente tag `vX.Y.Z` (SPEC 25) |
+| `.github/scripts/next-version.sh` | Calcula el siguiente tag a partir de los existentes |
 | `infra/deploy/backup.sh` | `pg_dump` diario + rotación de 7 (lo ejecuta el servicio `backup`) |
 | `infra/deploy/nginx-omnidesk.conf.example` | Fragmento para el Nginx existente |
 | `apps/api/Dockerfile` (etapa `prod`) | API: usuario no root; `prisma migrate deploy` y después `node dist/main.js` |
@@ -69,7 +73,7 @@ Requisitos: Docker Engine con el plugin Compose v2, git y el Nginx que ya sirve 
 
    `deploy.sh` se niega a desplegar si queda algún `<…>` sin rellenar.
 
-4. **Nginx.** Añade el fragmento de `infra/deploy/nginx-omnidesk.conf.example` dentro del `server` HTTPS de cada dominio, con el puerto del entorno (8081 en `dev.gastromesa.com`, 8082 en `gastromesa.com`). Incluye el `map $http_upgrade $connection_upgrade` si tu `http {}` no lo tiene. El fragmento solo añade `location`s bajo `/omnidesk`: el sitio de la raíz sigue igual.
+4. **Nginx (solo dev, o prod con Nginx).** Con el túnel de Cloudflare de prod (SPEC 25) este paso **no aplica**: no hay Nginx delante, y el fragmento ni la ruta de `gastromesa.com` se usan. Añade el fragmento de `infra/deploy/nginx-omnidesk.conf.example` dentro del `server` HTTPS de cada dominio, con el puerto del entorno (8081 en `dev.gastromesa.com`, 8082 en `gastromesa.com`). Incluye el `map $http_upgrade $connection_upgrade` si tu `http {}` no lo tiene. El fragmento solo añade `location`s bajo `/omnidesk`: el sitio de la raíz sigue igual.
 
    ```bash
    sudo nginx -t && sudo systemctl reload nginx
@@ -104,11 +108,12 @@ docker compose -p omnidesk-dev --env-file /srv/omnidesk/.env.dev -f infra/deploy
 
 En `ps`, los 4 servicios deben aparecer en marcha y solo `gateway` con un puerto (`127.0.0.1:8081->80/tcp`). Abre <https://dev.gastromesa.com/omnidesk> y entra con Google. El primer login lleva a **Crea tu empresa**. El punto de conexión debe mostrar **En vivo**: es el WebSocket por `wss://…/omnidesk/api/realtime` a través de Nginx.
 
-**Prod**, con la etiqueta:
+**Prod**, con la etiqueta que crea el pipeline (nadie la crea a mano):
 
 ```bash
-git tag v0.1.0 && git push origin v0.1.0     # desde tu máquina
-infra/deploy/deploy.sh prod v0.1.0           # en el VPS
+cd /srv/omnidesk/repo
+git fetch --tags && git tag --sort=-v:refname | head -3   # el primero es el último tag
+infra/deploy/deploy.sh prod v0.1.0                       # en el VPS
 ```
 
 La página **Estado** muestra `v0.1.0`. Las bases de dev y prod son independientes: un usuario creado en dev no existe en prod.
@@ -128,10 +133,18 @@ infra/deploy/deploy.sh dev main          # dev: lo último de main
 Para prod:
 
 1. Haz un **backup manual** (ver §5).
-2. Crea y sube la etiqueta nueva (`vX.Y.Z`).
-3. Ejecuta `infra/deploy/deploy.sh prod vX.Y.Z`.
+2. Espera a que el pipeline termine en verde: en GitHub, pestaña **Actions → release**. Si pasa, crea el tag nuevo sobre ese commit de `main` (`v0.1.1`, `v0.1.2`, …). Si falla, ese commit no tiene tag y no se puede desplegar: corrige `main` y espera al siguiente.
+3. Mira el tag nuevo y despliégalo:
 
-`deploy.sh` rechaza en prod cualquier ref que no sea una etiqueta `vX.Y.Z`.
+   ```bash
+   cd /srv/omnidesk/repo
+   git fetch --tags && git tag --sort=-v:refname | head -3
+   infra/deploy/deploy.sh prod vX.Y.Z
+   ```
+
+`deploy.sh` rechaza en prod cualquier ref que no sea una etiqueta `vX.Y.Z`, y también una etiqueta que no esté contenida en `origin/main` (por ejemplo, una puesta a mano sobre otra rama).
+
+**Subir el menor o el mayor.** El pipeline solo sube el parche (`v0.1.4` → `v0.1.5`). Para pasar a `v0.2.0` o `v1.0.0`, crea el tag a mano sobre un commit de `main` ya verificado y súbelo (`git tag v0.2.0 <commit> && git push origin v0.2.0`); el siguiente push a `main` sigue desde él (`v0.2.1`).
 
 El despliegue tiene una caída breve mientras se recrean los contenedores (no hay blue/green). La PWA instalada muestra **Nueva versión disponible** y no se recarga sola.
 
@@ -147,12 +160,15 @@ APP_VERSION=v0.1.0 docker compose -p omnidesk-prod --env-file /srv/omnidesk/.env
 
 ## 4. Rollback
 
-Para volver atrás, despliega el ref anterior:
+Para volver atrás, despliega el ref anterior. En prod es una etiqueta anterior:
 
 ```bash
-infra/deploy/deploy.sh prod v0.1.0       # la etiqueta anterior
-infra/deploy/deploy.sh dev <commit>      # dev acepta cualquier commit
+git fetch --tags && git tag --sort=-v:refname | head -5   # busca la anterior a la desplegada
+infra/deploy/deploy.sh prod v0.1.0                       # la etiqueta anterior
+infra/deploy/deploy.sh dev <commit>                      # dev acepta cualquier commit
 ```
+
+Volver a una etiqueta antigua es válido siempre que siga contenida en `origin/main`. La página **Estado** (y `/health`) muestran la versión que corre.
 
 Las migraciones solo avanzan. Si la versión nueva aplicó una migración que la anterior no tolera (por ejemplo, borró o renombró una columna), hay dos pasos: restaura el backup previo al despliegue (§5) y después despliega el ref anterior.
 
@@ -228,6 +244,10 @@ Todos los servicios tienen `restart: unless-stopped`: vuelven solos tras reinici
 
 | Síntoma | Causa probable |
 | --- | --- |
+| `deploy.sh` dice «prod solo se despliega desde una etiqueta vX.Y.Z…» | Pasaste `main`, una rama o un commit. Usa el último tag (`git fetch --tags && git tag --sort=-v:refname \| head -3`). |
+| `deploy.sh` dice «La etiqueta … no está contenida en origin/main» | El tag está sobre otra rama. Despliega uno que haya creado el pipeline desde `main`. |
+| `deploy.sh` dice «repite estas claves» o «BACKUP_DIR … no existe» o «CORS_ORIGINS de prod no puede incluir localhost» | Corrige `/srv/omnidesk/.env.prod`: una sola línea por clave, `BACKUP_DIR=/srv/omnidesk/backups/prod` (créala) y `CORS_ORIGINS=https://channel.gastromesa.com`. |
+| Hay commits en `main` sin tag nuevo | El pipeline falló en ese commit (lint, tests, build o migraciones). Mira **Actions → release**. |
 | `502` en `/omnidesk/` | El gateway no está arriba (`$C ps`) o el puerto del `proxy_pass` no es el del entorno. |
 | El badge no pasa a **En vivo** (se queda en reconectando) | Nginx no reenvía el upgrade: faltan `Upgrade`/`Connection` o el `map`. La app sigue usable con el polling de respaldo de 15 s. |
 | Tras el login de Google se vuelve a `/login` | La cookie no se guarda. Revisa que `SESSION_COOKIE_SECURE=true` y `TRUST_PROXY=2`, que Nginx envía `X-Forwarded-Proto` y que `APP_URL` y `PUBLIC_BASE_PATH` terminan en `/omnidesk`. |
@@ -345,3 +365,241 @@ pmset -g | grep -E ' sleep|disksleep'   # comprueba: sleep 0
 
 Con la tapa cerrada se suspende igual, salvo con pantalla externa y cargador conectados.
 
+
+## Prod en OVHcloud con Cloudflare Tunnel (SPEC 25)
+
+Prod corre en un VPS de OVHcloud y se publica en <https://channel.gastromesa.com/omnidesk> a través de un túnel de Cloudflare. No hay Nginx ni certificados en el VPS: `cloudflared` abre una conexión **saliente** hacia Cloudflare, que termina el TLS.
+
+```text
+Internet ──HTTPS──▶ Cloudflare ◀──túnel (saliente, 443)── cloudflared ──http://localhost:80──▶ gateway (Caddy)
+                                                          (comparte la red del gateway)           ├─ /omnidesk/*      → web (PWA)
+                                                                                                  └─ /omnidesk/api/*  → api:5001 ──▶ postgres
+```
+
+Consecuencias:
+
+- El firewall del VPS solo deja entrar **SSH**. No se abren 80 ni 443.
+- El gateway publica `127.0.0.1:8082` y MinIO `127.0.0.1:${MINIO_HOST_PORT}`, solo en el propio servidor.
+- Los pasos 1.4 (Nginx) y el sitio raíz de `gastromesa.com` no se usan en prod.
+- Las versiones son tags `vX.Y.Z` que crea el pipeline de GitHub (ver más abajo). El despliegue sigue siendo manual con `deploy.sh`.
+
+### Valores del `.env.prod`
+
+El `.env.prod` se prepara en tu máquina y se copia al VPS. **Nunca va a git** (`.env.*` está ignorado). Un archivo armado para correr en un portátil necesita estos cambios antes de subirlo:
+
+| Variable | Valor en el VPS |
+| --- | --- |
+| `BACKUP_DIR` | `/srv/omnidesk/backups/prod` (en un portátil apunta a una ruta local; en el VPS debe existir) |
+| `CORS_ORIGINS` | `https://channel.gastromesa.com`, **una sola línea**, sin `/omnidesk`, sin barra final y sin `localhost` |
+| `APP_URL` | `https://channel.gastromesa.com/omnidesk` |
+| `GOOGLE_CALLBACK_URL` | `https://channel.gastromesa.com/omnidesk/api/v1/auth/google/callback` |
+| `BASE_PATH`, `PUBLIC_BASE_PATH` | `/omnidesk` |
+| `GATEWAY_HOST_PORT` | `8082` |
+| `MINIO_HOST_PORT` | el del archivo (`9150`) |
+| `CLOUDFLARE_TUNNEL_TOKEN` | el token del túnel de Cloudflare (ver paso 4) |
+| `NODE_ENV`, `DEMO_MODE`, `SESSION_COOKIE_SECURE`, `TRUST_PROXY`, `OMNIDESK_ENV` | `production`, `false`, `true`, `2`, `prod` |
+
+Comprobaciones, sin arrancar nada:
+
+```bash
+# Ninguna clave repetida (no debe imprimir nada)
+grep -E '^[A-Z_][A-Z0-9_]*=' .env.prod | cut -d= -f1 | sort | uniq -d
+
+# Compose acepta el archivo
+docker compose -p omnidesk-prod --env-file .env.prod -f infra/deploy/docker-compose.prod.yml config > /dev/null && echo ok
+```
+
+`deploy.sh prod` repite estas comprobaciones en el VPS: se niega a desplegar con claves repetidas, con un `BACKUP_DIR` que no existe o con `localhost` en `CORS_ORIGINS`.
+
+### Pipeline de versiones
+
+`.github/workflows/release.yml` se ejecuta en cada push a `main` (no en ramas ni en pull requests) con tres jobs:
+
+| Job | Qué comprueba |
+| --- | --- |
+| `verify` | `pnpm lint`, `typecheck`, `test` y `build` |
+| `migrations` | Aplica **todas** las migraciones sobre un Postgres 18 vacío con un superusuario (como el API al arrancar en prod), corre `db:app-role` y falla si `schema.prisma` tiene cambios sin migración |
+| `tag` | Solo si los dos anteriores pasan: crea el siguiente tag `vX.Y.Z` sobre ese commit |
+
+- El primer tag, sin tags previos, es `v0.1.0`; después sube el parche (`v0.1.1`, `v0.1.2`, …). Si el commit ya tiene un tag, no crea otro.
+- Un `main` roto no recibe tag, así que **no se puede desplegar** en prod.
+- Dos pushes seguidos esperan en cola. Si llegan varios mientras uno corre, los intermedios pueden saltarse; el último siempre se ejecuta.
+- El job `tag` necesita permiso de escritura. Si el push del tag falla por permisos: **Settings → Actions → General → Workflow permissions → Read and write permissions**.
+- El pipeline solo crea el tag. El despliegue automático desde GitHub no existe todavía.
+
+### Runbook: primer despliegue de prod
+
+1. **Cloudflare.** En el panel de Cloudflare (Zero Trust, sección de túneles), el túnel de OmniDesk debe tener el hostname público `channel.gastromesa.com` con servicio `http://localhost:80` (el `cloudflared` del compose comparte la red del gateway, así que `localhost:80` es el gateway). Copia el token del túnel al `.env.prod`.
+
+2. **Google OAuth.** En la credencial **ID de cliente de OAuth → Aplicación web**, comprueba que existen:
+
+   | Orígenes autorizados de JavaScript | URI de redirección autorizados |
+   | --- | --- |
+   | `https://channel.gastromesa.com` | `https://channel.gastromesa.com/omnidesk/api/v1/auth/google/callback` |
+
+   Una URI que no coincida con `GOOGLE_CALLBACK_URL` termina en `redirect_uri_mismatch` al iniciar sesión.
+
+3. **Preparar el VPS (una vez).** Con un usuario con `sudo`:
+
+   - **Docker.** Docker Engine con el plugin Compose v2 (`docker compose version`) y `git`. Crea el usuario de despliegue, no root, y añádelo al grupo `docker`.
+   - **Firewall.** Solo SSH entrante. Puedes usar el firewall de red de OVHcloud, `ufw` o ambos:
+
+     ```bash
+     sudo ufw default deny incoming && sudo ufw default allow outgoing
+     sudo ufw allow OpenSSH && sudo ufw enable
+     ```
+
+     Salida libre: `cloudflared` necesita llegar a Cloudflare por 443.
+   - **Reloj.** La verificación HMAC de WhatsApp tolera ±300 s (SPEC 09): `timedatectl` debe mostrar `System clock synchronized: yes`.
+   - **Swap de 2 GB.** Colchón para el pico del build; ver [Swap](#swap-de-2-gb).
+   - **Carpetas.**
+
+     ```bash
+     sudo mkdir -p /srv/omnidesk/backups/prod
+     sudo chown -R "$USER": /srv/omnidesk
+     ```
+
+   - **Deploy key de solo lectura.** El repo es privado. Genera una clave en el VPS y regístrala en GitHub (**Settings → Deploy keys → Add deploy key**, **sin** marcar *Allow write access*):
+
+     ```bash
+     ssh-keygen -t ed25519 -f ~/.ssh/omnidesk_deploy -N "" -C "omnidesk-vps"
+     cat ~/.ssh/omnidesk_deploy.pub    # pega esta línea en GitHub
+     printf 'Host github-omnidesk\n  HostName github.com\n  User git\n  IdentityFile ~/.ssh/omnidesk_deploy\n  IdentitiesOnly yes\n' >> ~/.ssh/config
+     git clone git@github-omnidesk:inerhead/OmniDesk.git /srv/omnidesk/repo
+     git -C /srv/omnidesk/repo ls-remote origin    # debe listar las ramas y los tags
+     ```
+
+     El clon es solo para desplegar: no se edita a mano.
+
+4. **Llevar el `.env.prod` al VPS.** Desde tu máquina, con el archivo ya corregido (tabla anterior):
+
+   ```bash
+   scp .env.prod usuario@vps:/srv/omnidesk/.env.prod
+   ssh usuario@vps 'chmod 600 /srv/omnidesk/.env.prod'
+   ```
+
+5. **Traspaso del túnel.** Si prod corre hoy en otro equipo (por ejemplo, un portátil) con el **mismo** token de túnel, apágalo **antes** de arrancar el VPS: dos conectores del mismo túnel se reparten el tráfico, y parte de los usuarios llegaría a una instancia con otra base de datos.
+
+   ```bash
+   # en el equipo que corre prod hoy; sin -v, para no borrar sus volúmenes
+   docker compose -p omnidesk-prod --env-file .env.prod -f infra/deploy/docker-compose.prod.yml down
+   ```
+
+   La base de datos del VPS arranca **vacía**: los datos del otro equipo no se migran.
+
+6. **Esperar el tag.** Tras fusionar en `main`, comprueba en GitHub (**Actions → release**) que el pipeline terminó en verde, y en el VPS:
+
+   ```bash
+   cd /srv/omnidesk/repo
+   git fetch --tags && git tag --sort=-v:refname | head -3
+   ```
+
+7. **Desplegar.**
+
+   ```bash
+   infra/deploy/deploy.sh prod v0.1.0
+   ```
+
+   Termina con `✅ omnidesk-prod desplegado: v0.1.0`.
+
+8. **Verificar.**
+
+   ```bash
+   C="docker compose -p omnidesk-prod --env-file /srv/omnidesk/.env.prod -f infra/deploy/docker-compose.prod.yml"
+   $C ps    # los 7 servicios en marcha; los que tienen healthcheck, (healthy)
+   curl -s https://channel.gastromesa.com/omnidesk/api/v1/health    # status ok, database up, version v0.1.0
+   curl -s -o /dev/null -w '%{http_code}\n' https://channel.gastromesa.com/omnidesk/api/docs   # 404
+   ss -ltn | grep -E ':(8082|9150)\b'    # solo en 127.0.0.1
+   ```
+
+   - Abre <https://channel.gastromesa.com/omnidesk> e inicia sesión con Google. La cookie `omnidesk_session` debe ser `Secure`, `HttpOnly`, `SameSite=Lax` y `Path=/omnidesk`. El primer login lleva a **Crea tu empresa**; un email de `PLATFORM_ADMIN_EMAILS` ve **Plataforma** y puede aprobarla.
+   - El punto de conexión debe mostrar **En vivo** (WebSocket por el túnel).
+   - Adjunta un archivo en una conversación: se guarda en MinIO del VPS y se vuelve a descargar.
+   - En Cloudflare, el túnel muestra una sola conexión de conector (el VPS).
+   - Desde fuera del VPS, los puertos 80, 443, 8082 y el de MinIO no responden.
+   - Al día siguiente, tras las 03:00, existe `/srv/omnidesk/backups/prod/omnidesk-prod-<fecha>.dump`.
+
+9. **WhatsApp y n8n.** Esta URL pública es nueva para ellos. Cuando la app responda, actualiza lo que apunte a la anterior: el webhook de Meta y el de n8n. La URL del webhook que muestra **Settings** del canal se arma con `APP_URL`; copia esa. Detalle en [integracion-n8n.md](integracion-n8n.md). Nada de esto bloquea el despliegue de la app.
+
+### Dimensionamiento: ¿cabe en el VPS mínimo?
+
+Plan mínimo de referencia: **VPS-1** de OVHcloud, 2 vCores, 4 GB de RAM y 40 GB NVMe (según su [web](https://us.ovhcloud.com/vps/compare/); confirma las cifras y el precio de tu región en el configurador antes de contratar). El siguiente, **VPS-2**, tiene 4 vCores, 8 GB y 75 GB.
+
+Presupuesto de OmniDesk en VPS-1, dejando espacio a otra app en el mismo servidor:
+
+| Recurso | VPS-1 | SO, Docker y swap | Máximo para OmniDesk | Resto para otra app |
+| --- | --- | --- | --- | --- |
+| RAM | 4 GB | 0,5 GB | 2 GB (los 7 servicios en uso normal) | ≥ 1,5 GB |
+| Disco | 40 GB | 8 GB | 20 GB (imágenes, volúmenes, 7 backups y caché de build) | ≥ 12 GB |
+| CPU | 2 vCores | — | Sin tope; los picos son los builds | — |
+
+**Mediciones en local (2026-10-24)**, en Docker Desktop (VM de 10 CPUs), con la base casi vacía. Son una primera estimación, no sustituyen la medición en el VPS:
+
+| Servicio | Reposo | Pico con carga HTTP, sin límites | Pico con carga HTTP, con `mem_limit` | Imagen |
+| --- | --- | --- | --- | --- |
+| `api` | 133 MiB | 414 MiB | 187 MiB | 907 MB |
+| `minio` | 108 MiB | 110 MiB | 99 MiB | 199 MB |
+| `postgres` | 37 MiB | 54 MiB | 48 MiB | 672 MB |
+| `gateway` (Caddy) | 15 MiB | 45 MiB | 33 MiB | 91 MB |
+| `cloudflared` | 19 MiB | 27 MiB | — | 104 MB |
+| `autoheal`, `backup` | < 1 MiB | 2 MiB | — | 14 MB, `postgres:18` |
+| **Suma** | **313 MiB** | **653 MiB** | | **~2 GB** |
+
+- **Carga:** `ab`, 50 conexiones simultáneas, 40.000 peticiones a `GET /omnidesk/api/v1/health` (consulta la base): ~4.700 a 5.000 peticiones por segundo, 0 fallidas, p95 de 15 a 17 ms.
+- **Con límite, el API usa menos:** Node ajusta su heap al tope del contenedor, así que con `mem_limit: 768m` el pico del API fue de 187 MiB frente a los 414 MiB que retenía sin límite. Ningún servicio fue matado por falta de memoria (`OOMKilled=false`, 0 reinicios).
+- **Build en frío** (API y después gateway, sin caché, como `deploy.sh`): 60 s en 10 CPUs; la memoria usada de la VM subió ~944 MiB sobre el nivel base. Con el stack ya levantado, OmniDesk durante un build llega a ~1,25 GiB. En 2 vCores será bastante más lento (no medido).
+- **Sin medir:** carga con mensajes reales (el simulador necesita `DEMO_CHANNEL_API_KEY`, que no existe con `DEMO_MODE=false`), crecimiento de `postgres` y MinIO con datos reales y el build en 2 vCores.
+
+**Veredicto provisional: cabe en VPS-1** en reposo y con carga HTTP ligera (0,3 a 0,65 GB de los 2 GB del presupuesto, ~1,25 GB durante un build). Se confirma, o se cambia a «necesita VPS-2», con la medición en el VPS (abajo). Si OmniDesk supera 2 GB en uso normal, o el kernel mata un contenedor durante un build, la conclusión es VPS-2.
+
+**Límites en el compose** (`infra/deploy/docker-compose.prod.yml`): un servicio descontrolado no debe quitarle la RAM a otra app del servidor.
+
+| Servicio | `mem_limit` | Pico medido con carga |
+| --- | --- | --- |
+| `api` | 768m | 187 MiB |
+| `postgres` | 512m | 48 MiB |
+| `minio` | 384m | 99 MiB |
+| `gateway` | 128m | 33 MiB |
+
+`cloudflared`, `autoheal` y `backup` no llevan límite: consumen poco y un tope justo podría matarlos en el pico del backup. Todos los servicios rotan sus logs (`json-file`, 10 MB × 3 archivos); sin eso los logs de Docker crecen sin tope. Los valores se ajustan en el repo (nunca en el servidor) si la medición en el VPS lo pide.
+
+**Medir en el VPS**, tras el primer despliegue:
+
+```bash
+C="docker compose -p omnidesk-prod --env-file /srv/omnidesk/.env.prod -f infra/deploy/docker-compose.prod.yml"
+docker stats --no-stream                       # memoria de cada servicio (suma ≤ 2 GB)
+free -m && swapon --show                       # memoria disponible y uso de swap
+df -h /  && docker system df                   # disco (≤ 60 % con 7 backups)
+dmesg | grep -i 'out of memory'                # no debe imprimir nada
+```
+
+Mide también **durante** un build: lanza `infra/deploy/deploy.sh prod <tag>` y, en otra sesión SSH, `watch -n2 free -m`. La memoria disponible (RAM + swap) no debe llegar a 0, y el swap no debe usarse de forma sostenida: si lo hace, el VPS se queda corto y la conclusión es VPS-2. Si el build no cabe pero la app sí, hay una alternativa: construir en tu máquina y copiar las imágenes (§3).
+
+`deploy.sh` limpia al terminar bien la caché de build de más de 7 días y las imágenes huérfanas (`docker builder prune` e `image prune`). Actúa sobre todo el host, incluida la caché de otras apps; solo borra caché e imágenes sin uso, que se reconstruyen.
+
+### Swap de 2 GB
+
+El build del API y del gateway (`pnpm install`, `tsc`, `vite build`) es el pico de memoria. Un swap de 2 GB evita que el kernel mate un contenedor en ese momento. Es un seguro, no una forma de que quepa. Comprueba primero si el VPS ya tiene:
+
+```bash
+swapon --show        # vacío = sin swap
+sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
+sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+free -m              # Swap: 2047
+```
+
+### Convivir con otras apps en el mismo VPS
+
+OmniDesk no asume que está solo en el servidor. Si despliegas otra app (por ejemplo, la del restaurante) en el mismo VPS:
+
+| Tema | Regla |
+| --- | --- |
+| **Túnel** | El `cloudflared` de OmniDesk comparte la red de su gateway y su servicio es `http://localhost:80`: solo sirve a OmniDesk. La otra app usa **su propio túnel** (token y hostname distintos), no el de OmniDesk. |
+| **Proyecto Compose** | OmniDesk es `omnidesk-prod`. La otra app usa otro nombre de proyecto, para que no compartan red ni volúmenes. |
+| **Puertos** | OmniDesk usa `127.0.0.1:8082` (gateway) y `127.0.0.1:9150` (MinIO). La otra app, otros. Todo se publica solo en `127.0.0.1`. |
+| **`autoheal`** | El `autoheal` de OmniDesk reinicia **cualquier** contenedor `unhealthy` del servidor que lleve la etiqueta `autoheal=true`. La otra app **no debe usar esa etiqueta**, o le reiniciará contenedores. Comprueba el log: `docker logs omnidesk-prod-autoheal` solo debe mencionar contenedores `omnidesk-prod-*`. |
+| **Horarios** | El backup de OmniDesk corre a las 03:00 y la retención a las 03:30 (hora del servidor). La otra app no programa tareas pesadas a esas horas. |
+| **Builds** | Despliega una app a la vez. `deploy.sh` ya construye una imagen cada vez. |
+| **Firewall y usuario** | Compartidos: solo SSH entrante. |
+| **Recursos** | Presupuesto de OmniDesk: 2 GB de RAM y 20 GB de disco (ver arriba). Lo demás es de la otra app. |

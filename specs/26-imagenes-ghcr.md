@@ -48,7 +48,7 @@ Lo que ya fijaron otros specs y aquí no se reabre:
     - Caché de capas con `type=gha`.
     - Sin atestaciones de procedencia (`provenance: false`), para no dejar manifiestos sin etiquetar que ensucian la lista de versiones.
     - Escribe en el resumen del run las referencias publicadas y su digest.
-  - `prune`: tras publicar, conserva las **10 versiones más recientes** de cada paquete y borra el resto.
+  - `prune`: tras publicar, conserva las **10 versiones más recientes** de cada paquete y borra el resto. Borrar exige que el repo tenga el rol **Admin** en «Manage Actions access» del paquete (con el rol Write que recibe por defecto solo puede publicar): el job usa `continue-on-error` y avisa si no puede, para no marcar en rojo un release que publicó bien.
   - Un tag solo existe en `origin` si `verify` y `migrations` pasaron; las imágenes se construyen después. Si `images` falla, el tag existe sin imagen y no se despliega (ver Riesgos).
 - **`docker-compose.prod.yml`:** `api` y `gateway` pasan a tener `image:` con la variable `OMNIDESK_IMAGE_TAG` (por defecto `dev`), además de su `build:`:
   - Con `build`, el compose etiqueta la imagen construida con ese nombre: dev sigue funcionando igual.
@@ -59,6 +59,7 @@ Lo que ya fijaron otros specs y aquí no se reabre:
     - Si no hay sesión en `ghcr.io`, falla con el comando para iniciarla.
     - Falla si el `.env.prod` tiene `BASE_PATH` distinto de `/omnidesk` o `VITE_API_URL` no vacía: son los valores con los que se construyó la imagen del gateway, y un `.env` distinto no cambiaría la imagen.
     - Mantiene las comprobaciones de SPEC 25 (tag en `origin/main`, claves duplicadas, `BACKUP_DIR`, `localhost`), la espera del healthcheck, la comprobación de versión y la limpieza.
+    - Al terminar, borra las imágenes de OmniDesk de versiones anteriores que ningún contenedor usa (`docker image prune -a` filtrado por la etiqueta `org.opencontainers.image.source`). Sin esto, cada despliegue dejaría ~1 GB en un disco de 40 GB. No toca imágenes de otras apps ni las que están en uso.
   - **`dev`:** sin cambios; sigue construyendo en el VPS con cualquier ref.
 - **Acceso del VPS a las imágenes privadas:** un token personal clásico de solo lectura (`read:packages`), usado una vez con `docker login ghcr.io` en el VPS.
 - **Documentación:**
@@ -123,7 +124,7 @@ gateway:
 2. **Pipeline.** Ampliar `release.yml`: salida del job `tag`, job `images` (login, comprobación de existencia, build y push de las dos imágenes, resumen) y job `prune`. Probar en local que ambos Dockerfiles construyen con los argumentos del pipeline y que la imagen del gateway sirve `/omnidesk/` con `BASE_PATH=/omnidesk`; validar el YAML.
 3. **`deploy.sh`.** Rama de prod por `pull`, comprobación de sesión en `ghcr.io`, mensaje de imagen inexistente y validación de `BASE_PATH` y `VITE_API_URL`; dev intacto. Probar con un `docker` simulado: prod con la imagen presente, sin imagen, sin sesión, con `BASE_PATH` distinto, y dev construyendo.
 4. **Documentación.** Sección de `ghcr.io` en `docs/despliegue.md` con la guía para ver las imágenes, actualización de §2–§4, runbook y dimensionamiento, y README.
-5. **Fusionar en `main`.** El pipeline crea el siguiente tag y publica las imágenes. Comprobar en GitHub que ambos paquetes existen, son privados y están enlazados al repo.
+5. **Fusionar en `main`.** El pipeline crea el siguiente tag y publica las imágenes. Comprobar en GitHub que ambos paquetes existen, son privados y están enlazados al repo, y dar al repo el rol **Admin** en «Manage Actions access» de cada paquete para que `prune` pueda borrar versiones antiguas.
 6. **Token y sesión en el VPS.** Crear el token de solo lectura e iniciar sesión con `docker login ghcr.io`.
 7. **Desplegar por pull** el tag nuevo con `deploy.sh prod <tag>` y verificar.
 
@@ -135,7 +136,7 @@ gateway:
 - [ ] Si `verify` o `migrations` fallan, no hay tag ni imágenes.
 - [ ] El job `images` solo tiene `packages: write`; los jobs `verify` y `migrations` conservan solo `contents: read`.
 - [ ] Volver a ejecutar el workflow sobre un commit que ya tiene tag e imagen no reconstruye ni sobrescribe la imagen (el digest no cambia).
-- [ ] Tras publicar la versión 11, el job `prune` deja solo las 10 más recientes de cada paquete.
+- [ ] Tras publicar la versión 11, el job `prune` deja solo las 10 más recientes de cada paquete (con el rol Admin del repo en el paquete). Sin ese rol, `prune` termina con un aviso y el release sigue en verde.
 - [ ] El resumen del run lista las dos referencias con su digest.
 
 **Registro**
@@ -154,6 +155,7 @@ gateway:
 - [ ] Con `BASE_PATH` distinto de `/omnidesk` o `VITE_API_URL` no vacía en `.env.prod`, `deploy.sh prod` se niega a desplegar.
 - [ ] `deploy.sh dev main` sigue construyendo en el VPS y funciona como antes.
 - [ ] Durante un `deploy.sh prod`, la memoria disponible del VPS no baja del nivel de un despliegue normal: ya no aparece el pico de ~1 GB del build (`watch -n2 free -m`).
+- [ ] Tras un despliegue de prod, `docker image ls` en el VPS solo muestra las imágenes de OmniDesk de la versión en uso (las anteriores se borran) y no se borra ninguna imagen de otra app.
 - [ ] El rollback a una versión anterior que tenga imagen (`deploy.sh prod <tag anterior>`) deja `/health` con esa versión.
 
 **Documentación**
@@ -196,6 +198,8 @@ gateway:
 | El token personal caduca y el despliegue falla con «no autorizado» | El mensaje de `deploy.sh` indica el comando para volver a iniciar sesión. Se documenta la caducidad. |
 | El paquete se crea sin enlace al repo o con otra visibilidad | La etiqueta OCI `org.opencontainers.image.source` lo enlaza. Criterios de aceptación comprueban enlace y visibilidad. |
 | Un cambio de `BASE_PATH` o de la URL de la API exige reconstruir el gateway | `deploy.sh` lo rechaza. Cambiarlos implica cambiar el workflow y publicar un tag nuevo. |
+| `prune` no puede borrar porque el repo solo tiene el rol Write en el paquete | El job avisa sin tumbar el release. Se da el rol Admin al repo una vez (paso 5). Mientras tanto las versiones se acumulan. |
+| `docker image prune -a` borra una imagen de otra app del VPS | Filtra por la etiqueta `org.opencontainers.image.source` del repo de OmniDesk: solo borra imágenes que el pipeline etiquetó así y que ningún contenedor usa. |
 | La retención borra la versión a la que se quiere volver | Solo borra más allá de la décima. Si hace falta más historial, se sube el número en el workflow. |
 | La caché de Actions (`type=gha`) se llena o se invalida | Solo acelera: sin caché el build tarda más pero produce lo mismo. |
 | Las imágenes se publican en un VPS de otra arquitectura | Criterio de aceptación con `uname -m`. Si fuera arm64, hay que añadir esa plataforma. |

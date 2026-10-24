@@ -221,7 +221,7 @@ Si el navegador sigue mostrando una versión vieja: DevTools → Application →
 
 ## Despliegue
 
-dev y prod corren en un VPS con Docker Compose, en <https://dev.gastromesa.com/omnidesk> y <https://channel.gastromesa.com/omnidesk> (prod, por un túnel de Cloudflare en un VPS de OVHcloud). Para desplegar se ejecuta `infra/deploy/deploy.sh <dev|prod> <git-ref>` en el VPS. En prod el ref es un tag `vX.Y.Z` que crea solo el pipeline de GitHub (`.github/workflows/release.yml`) en cada push a `main` que pasa lint, typecheck, tests, build y migraciones; el despliegue sigue siendo manual. La guía completa, con la preparación, el primer despliegue, el rollback y los backups, está en [`docs/despliegue.md`](docs/despliegue.md).
+dev y prod corren en un VPS con Docker Compose, en <https://dev.gastromesa.com/omnidesk> y <https://channel.gastromesa.com/omnidesk> (prod, por un túnel de Cloudflare en un VPS de OVHcloud). Para desplegar se ejecuta `infra/deploy/deploy.sh <dev|prod> <git-ref>` en el VPS. En prod el ref es un tag `vX.Y.Z` que crea solo el pipeline de GitHub (`.github/workflows/release.yml`) en cada push a `main` que pasa lint, typecheck, tests, build y migraciones; el despliegue sigue siendo manual. El mismo pipeline publica las imágenes de cada tag en `ghcr.io` (paquetes privados `omnidesk-api` y `omnidesk-gateway`) y `deploy.sh prod` las descarga en lugar de compilar en el VPS. La guía completa, con la preparación, el primer despliegue, el rollback y los backups, está en [`docs/despliegue.md`](docs/despliegue.md).
 
 ## Estructura
 

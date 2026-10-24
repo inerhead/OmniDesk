@@ -6,6 +6,8 @@
 #
 # Las etiquetas las crea el pipeline de GitHub (.github/workflows/release.yml) sobre commits de main
 # que pasan los checks y las migraciones. En prod, el tag debe estar contenido en origin/main.
+# El pipeline también publica las imágenes de cada tag en ghcr.io (SPEC 26): prod las descarga
+# (necesita `docker login ghcr.io`), no compila. Dev sí construye en el VPS, con cualquier ref.
 # Rollback = desplegar la etiqueta anterior. Guía completa: docs/despliegue.md.
 # Variables opcionales: OMNIDESK_ENV_DIR (por defecto /srv/omnidesk, donde están .env.dev y .env.prod),
 # HEALTH_TIMEOUT_S (por defecto 180).
@@ -55,6 +57,12 @@ main() {
     case $(env_value CORS_ORIGINS) in
       *localhost* | *127.0.0.1*) fail "CORS_ORIGINS de prod no puede incluir localhost (solo el origen público, sin /omnidesk)" ;;
     esac
+    # La imagen del gateway se construye en el pipeline (SPEC 26) con estos valores fijados en la web;
+    # un .env distinto no cambiaría la imagen y rompería las rutas.
+    [[ $(env_value BASE_PATH) == /omnidesk ]] ||
+      fail "BASE_PATH de prod debe ser /omnidesk: la imagen del gateway se construyó con esa base (recibido: '$(env_value BASE_PATH)')"
+    [[ -z $(env_value VITE_API_URL) ]] ||
+      fail "VITE_API_URL de prod debe estar vacía: la imagen del gateway se construyó con la API en el mismo origen"
   fi
 
   cd "$ROOT"
@@ -89,13 +97,29 @@ main() {
 
   compose=(docker compose -p "omnidesk-$ENV_NAME" --env-file "$ENV_FILE" -f infra/deploy/docker-compose.prod.yml)
 
-  # Una imagen a la vez: el build comparte CPU y RAM con el sitio existente.
-  echo "▶ build"
-  "${compose[@]}" build api
-  "${compose[@]}" build gateway
+  if [[ $ENV_NAME == prod ]]; then
+    # Prod no compila: descarga las imágenes que el pipeline publicó para este tag en ghcr.io (SPEC 26).
+    export OMNIDESK_IMAGE_TAG=$REF
+    echo "▶ pull de ghcr.io/inerhead/omnidesk-{api,gateway}:$REF"
+    if ! "${compose[@]}" pull api gateway; then
+      docker_config="${DOCKER_CONFIG:-$HOME/.docker}/config.json"
+      if ! grep -q 'ghcr.io' "$docker_config" 2>/dev/null; then
+        fail "No hay sesión en ghcr.io. Inicia sesión con un token de solo lectura (read:packages): docker login ghcr.io -u <usuario-de-github>"
+      fi
+      fail "No se pudieron descargar las imágenes de $REF. O no existen (espera a que termine el job «images» en GitHub → Actions → release; los tags anteriores a SPEC 26 no tienen imagen), o el token no es válido (docker login ghcr.io)"
+    fi
 
-  echo "▶ up"
-  "${compose[@]}" up -d --remove-orphans
+    echo "▶ up"
+    "${compose[@]}" up -d --no-build --remove-orphans
+  else
+    # Una imagen a la vez: el build comparte CPU y RAM con el sitio existente.
+    echo "▶ build"
+    "${compose[@]}" build api
+    "${compose[@]}" build gateway
+
+    echo "▶ up"
+    "${compose[@]}" up -d --remove-orphans
+  fi
 
   echo "▶ Esperando el healthcheck del API (máx. ${HEALTH_TIMEOUT_S}s)"
   api=$("${compose[@]}" ps -q api)
@@ -123,6 +147,13 @@ main() {
   echo "▶ limpieza de caché de build"
   docker builder prune -f --filter until=168h >/dev/null || echo "⚠ no se pudo limpiar la caché de build" >&2
   docker image prune -f >/dev/null || echo "⚠ no se pudieron limpiar las imágenes huérfanas" >&2
+  if [[ $ENV_NAME == prod ]]; then
+    # Cada despliegue descarga ~1 GB de imágenes con tag nuevo; las de versiones anteriores quedarían
+    # en disco. Borra las de OmniDesk que ningún contenedor usa (se identifican por la etiqueta
+    # `source` que pone el pipeline); las de otras apps y las que están en uso no se tocan.
+    docker image prune -a -f --filter "label=org.opencontainers.image.source=https://github.com/inerhead/OmniDesk" >/dev/null ||
+      echo "⚠ no se pudieron limpiar las imágenes de versiones anteriores" >&2
+  fi
 
   echo "✅ omnidesk-$ENV_NAME desplegado: $deployed"
 }

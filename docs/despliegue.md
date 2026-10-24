@@ -25,7 +25,7 @@ Archivos:
 | `infra/deploy/docker-compose.prod.yml` | Servicios `postgres`, `api`, `gateway`, `backup`, `minio`, `cloudflared` y `autoheal` |
 | `infra/deploy/.env.dev.example`, `.env.prod.example` | Plantillas de entorno (sin secretos) |
 | `infra/deploy/deploy.sh` | Despliegue manual: `deploy.sh <dev\|prod> <git-ref>`. En prod solo acepta un tag `vX.Y.Z` contenido en `origin/main` |
-| `.github/workflows/release.yml` | Pipeline de GitHub: en cada push a `main` comprueba el código y las migraciones y crea el siguiente tag `vX.Y.Z` (SPEC 25) |
+| `.github/workflows/release.yml` | Pipeline de GitHub: en cada push a `main` comprueba el código y las migraciones, crea el siguiente tag `vX.Y.Z` (SPEC 25) y publica las imágenes de ese tag en `ghcr.io` (SPEC 26) |
 | `.github/scripts/next-version.sh` | Calcula el siguiente tag a partir de los existentes |
 | `infra/deploy/backup.sh` | `pg_dump` diario + rotación de 7 (lo ejecuta el servicio `backup`) |
 | `infra/deploy/nginx-omnidesk.conf.example` | Fragmento para el Nginx existente |
@@ -113,10 +113,10 @@ En `ps`, los 4 servicios deben aparecer en marcha y solo `gateway` con un puerto
 ```bash
 cd /srv/omnidesk/repo
 git fetch --tags && git tag --sort=-v:refname | head -3   # el primero es el último tag
-infra/deploy/deploy.sh prod v0.1.0                       # en el VPS
+infra/deploy/deploy.sh prod v0.1.0                       # en el VPS: descarga las imágenes de ese tag
 ```
 
-La página **Estado** muestra `v0.1.0`. Las bases de dev y prod son independientes: un usuario creado en dev no existe en prod.
+Prod no compila: descarga de `ghcr.io` las imágenes que publicó el pipeline para ese tag, así que antes hay que iniciar sesión una vez en el VPS (ver [Imágenes en ghcr.io](#imágenes-en-ghcrio-spec-26)). La página **Estado** muestra `v0.1.0`. Las bases de dev y prod son independientes: un usuario creado en dev no existe en prod.
 
 ### Instalar la PWA en el celular
 
@@ -133,7 +133,7 @@ infra/deploy/deploy.sh dev main          # dev: lo último de main
 Para prod:
 
 1. Haz un **backup manual** (ver §5).
-2. Espera a que el pipeline termine en verde: en GitHub, pestaña **Actions → release**. Si pasa, crea el tag nuevo sobre ese commit de `main` (`v0.1.1`, `v0.1.2`, …). Si falla, ese commit no tiene tag y no se puede desplegar: corrige `main` y espera al siguiente.
+2. Espera a que el pipeline termine en verde: en GitHub, pestaña **Actions → release**. Si pasa, crea el tag nuevo sobre ese commit de `main` (`v0.1.1`, `v0.1.2`, …) y el job `images` publica sus imágenes en `ghcr.io`. Si falla, ese commit no tiene tag y no se puede desplegar: corrige `main` y espera al siguiente. Si el tag existe pero `images` falló, tampoco se puede desplegar (no hay imagen).
 3. Mira el tag nuevo y despliégalo:
 
    ```bash
@@ -148,15 +148,9 @@ Para prod:
 
 El despliegue tiene una caída breve mientras se recrean los contenedores (no hay blue/green). La PWA instalada muestra **Nueva versión disponible** y no se recarga sola.
 
-**Si el build en el VPS molesta al sitio existente**, construye en tu máquina y copia las imágenes:
+**Prod no compila en el VPS** (desde SPEC 26): el pipeline construye las imágenes una vez y `deploy.sh prod` las descarga de `ghcr.io`. Por eso el despliegue de prod ya no tiene el pico de CPU y memoria del build, ni hace falta la alternativa de construir en tu máquina y copiar con `docker save`. **Dev** sí sigue construyendo en el VPS, con cualquier ref.
 
-```bash
-# En tu máquina, en el mismo commit y con el mismo .env (los nombres de imagen salen del proyecto Compose)
-APP_VERSION=v0.1.0 docker compose -p omnidesk-prod --env-file .env.prod -f infra/deploy/docker-compose.prod.yml build
-docker save omnidesk-prod-api omnidesk-prod-gateway | gzip | ssh vps 'gunzip | docker load'
-# En el VPS: checkout del mismo ref y
-APP_VERSION=v0.1.0 docker compose -p omnidesk-prod --env-file /srv/omnidesk/.env.prod -f infra/deploy/docker-compose.prod.yml up -d --no-build
-```
+Al terminar, `deploy.sh prod` borra las imágenes de OmniDesk de versiones anteriores que ningún contenedor usa (las identifica por la etiqueta `org.opencontainers.image.source`; no toca imágenes de otras apps ni las que están en uso). Volver a una versión anterior las descarga otra vez.
 
 ## 4. Rollback
 
@@ -168,7 +162,7 @@ infra/deploy/deploy.sh prod v0.1.0                       # la etiqueta anterior
 infra/deploy/deploy.sh dev <commit>                      # dev acepta cualquier commit
 ```
 
-Volver a una etiqueta antigua es válido siempre que siga contenida en `origin/main`. La página **Estado** (y `/health`) muestran la versión que corre.
+Volver a una etiqueta antigua es válido siempre que siga contenida en `origin/main` **y su imagen siga en `ghcr.io`**: el pipeline conserva solo las 10 versiones más recientes de cada imagen, y los tags anteriores a SPEC 26 (`v0.1.0`, `v0.1.1`) no tienen imagen. `deploy.sh` descarga la imagen del tag anterior, sin compilar. La página **Estado** (y `/health`) muestran la versión que corre.
 
 Las migraciones solo avanzan. Si la versión nueva aplicó una migración que la anterior no tolera (por ejemplo, borró o renombró una columna), hay dos pasos: restaura el backup previo al despliegue (§5) y después despliega el ref anterior.
 
@@ -247,6 +241,9 @@ Todos los servicios tienen `restart: unless-stopped`: vuelven solos tras reinici
 | `deploy.sh` dice «prod solo se despliega desde una etiqueta vX.Y.Z…» | Pasaste `main`, una rama o un commit. Usa el último tag (`git fetch --tags && git tag --sort=-v:refname \| head -3`). |
 | `deploy.sh` dice «La etiqueta … no está contenida en origin/main» | El tag está sobre otra rama. Despliega uno que haya creado el pipeline desde `main`. |
 | `deploy.sh` dice «repite estas claves» o «BACKUP_DIR … no existe» o «CORS_ORIGINS de prod no puede incluir localhost» | Corrige `/srv/omnidesk/.env.prod`: una sola línea por clave, `BACKUP_DIR=/srv/omnidesk/backups/prod` (créala) y `CORS_ORIGINS=https://channel.gastromesa.com`. |
+| `deploy.sh` dice "No hay sesión en ghcr.io" | Falta iniciar sesión en el VPS: `docker login ghcr.io -u <usuario-de-github>` con un token clásico con `read:packages` (ver [Imágenes en ghcr.io](#imágenes-en-ghcrio-spec-26)). |
+| `deploy.sh` dice "No se pudieron descargar las imágenes de vX.Y.Z" | La imagen de ese tag no existe (el job `images` falló o aún corre, el tag es anterior a SPEC 26 o es de más de 10 versiones atrás) o el token caducó. Mira **Actions → release** y los paquetes en GitHub. |
+| `deploy.sh` dice «BASE_PATH de prod debe ser /omnidesk» o «VITE_API_URL de prod debe estar vacía» | La imagen del gateway se construyó con esos valores. Cámbialos en `/srv/omnidesk/.env.prod`; cambiarlos de verdad exige modificar el workflow y publicar un tag nuevo. |
 | Hay commits en `main` sin tag nuevo | El pipeline falló en ese commit (lint, tests, build o migraciones). Mira **Actions → release**. |
 | `502` en `/omnidesk/` | El gateway no está arriba (`$C ps`) o el puerto del `proxy_pass` no es el del entorno. |
 | El badge no pasa a **En vivo** (se queda en reconectando) | Nginx no reenvía el upgrade: faltan `Upgrade`/`Connection` o el `map`. La app sigue usable con el polling de respaldo de 15 s. |
@@ -471,6 +468,8 @@ docker compose -p omnidesk-prod --env-file .env.prod -f infra/deploy/docker-comp
 
      El clon es solo para desplegar: no se edita a mano.
 
+   - **Sesión en `ghcr.io`.** Prod descarga las imágenes de un registro privado. Crea un token personal de solo lectura e inicia sesión una vez; los pasos están en [Imágenes en ghcr.io](#imágenes-en-ghcrio-spec-26).
+
 4. **Llevar el `.env.prod` al VPS.** Desde tu máquina, con el archivo ya corregido (tabla anterior):
 
    ```bash
@@ -487,7 +486,7 @@ docker compose -p omnidesk-prod --env-file .env.prod -f infra/deploy/docker-comp
 
    La base de datos del VPS arranca **vacía**: los datos del otro equipo no se migran.
 
-6. **Esperar el tag.** Tras fusionar en `main`, comprueba en GitHub (**Actions → release**) que el pipeline terminó en verde, y en el VPS:
+6. **Esperar el tag y las imágenes.** Tras fusionar en `main`, comprueba en GitHub (**Actions → release**) que el pipeline terminó en verde (incluido el job `images`) y que los dos paquetes existen (ver [Ver las imágenes en GitHub](#ver-las-imágenes-en-github)). En el VPS:
 
    ```bash
    cd /srv/omnidesk/repo
@@ -500,7 +499,7 @@ docker compose -p omnidesk-prod --env-file .env.prod -f infra/deploy/docker-comp
    infra/deploy/deploy.sh prod v0.1.0
    ```
 
-   Termina con `✅ omnidesk-prod desplegado: v0.1.0`.
+   Descarga las dos imágenes del tag, levanta los servicios y termina con `✅ omnidesk-prod desplegado: v0.1.0`. No compila nada.
 
 8. **Verificar.**
 
@@ -573,7 +572,7 @@ df -h /  && docker system df                   # disco (≤ 60 % con 7 backups)
 dmesg | grep -i 'out of memory'                # no debe imprimir nada
 ```
 
-Mide también **durante** un build: lanza `infra/deploy/deploy.sh prod <tag>` y, en otra sesión SSH, `watch -n2 free -m`. La memoria disponible (RAM + swap) no debe llegar a 0, y el swap no debe usarse de forma sostenida: si lo hace, el VPS se queda corto y la conclusión es VPS-2. Si el build no cabe pero la app sí, hay una alternativa: construir en tu máquina y copiar las imágenes (§3).
+Mide también **durante** un despliegue: lanza `infra/deploy/deploy.sh prod <tag>` y, en otra sesión SSH, `watch -n2 free -m`. Desde SPEC 26 prod descarga las imágenes en lugar de compilarlas, así que el pico de ~1 GB del build (medido en local) ya no ocurre en el VPS de prod; el swap sigue siendo un seguro para los builds de dev. La memoria disponible (RAM + swap) no debe llegar a 0, y el swap no debe usarse de forma sostenida: si lo hace, el VPS se queda corto y la conclusión es VPS-2.
 
 `deploy.sh` limpia al terminar bien la caché de build de más de 7 días y las imágenes huérfanas (`docker builder prune` e `image prune`). Actúa sobre todo el host, incluida la caché de otras apps; solo borra caché e imágenes sin uso, que se reconstruyen.
 
@@ -603,3 +602,92 @@ OmniDesk no asume que está solo en el servidor. Si despliegas otra app (por eje
 | **Builds** | Despliega una app a la vez. `deploy.sh` ya construye una imagen cada vez. |
 | **Firewall y usuario** | Compartidos: solo SSH entrante. |
 | **Recursos** | Presupuesto de OmniDesk: 2 GB de RAM y 20 GB de disco (ver arriba). Lo demás es de la otra app. |
+
+## Imágenes en ghcr.io (SPEC 26)
+
+Prod no compila en el VPS: el pipeline construye las imágenes una vez y `deploy.sh prod <tag>` las descarga. Se publican en GitHub Container Registry, como paquetes **privados** enlazados al repo.
+
+| Paquete | Referencia | Origen |
+| --- | --- | --- |
+| `omnidesk-api` | `ghcr.io/inerhead/omnidesk-api:vX.Y.Z` | `apps/api/Dockerfile`, etapa `prod`, con `APP_VERSION` = el tag |
+| `omnidesk-gateway` | `ghcr.io/inerhead/omnidesk-gateway:vX.Y.Z` | `infra/gateway/Dockerfile`, con `BASE_PATH=/omnidesk` y `VITE_API_URL` vacía |
+
+- Una etiqueta por imagen, igual que el tag de git y que la versión de `/health`. No hay `latest`.
+- Plataforma `linux/amd64` (el VPS de OVHcloud es x86: comprueba con `uname -m`).
+- El job `images` de `release.yml` las publica tras crear el tag, con `GITHUB_TOKEN`. **Una versión publicada es inmutable**: si la imagen de un tag ya existe, el pipeline no la reconstruye.
+- El job `prune` conserva las **10 versiones más recientes** de cada paquete (cada una pesa cerca de 1 GB).
+- Los tags anteriores a SPEC 26 (`v0.1.0`, `v0.1.1`) **no tienen imagen** y no se pueden desplegar en prod. El primer tag desplegable es el siguiente que crea el pipeline.
+- `dev` no usa estas imágenes: construye en el VPS con cualquier ref.
+
+### ¿Es gratis?
+
+Hoy sí. La [documentación de GitHub Packages](https://docs.github.com/en/billing/concepts/product-billing/github-packages) dice que el almacenamiento y el ancho de banda del Container registry son actualmente gratuitos, y que avisarán con al menos un mes de antelación de cualquier cambio. Tenlo presente:
+
+- Es una política vigente, no una garantía. Si cambia, las opciones son pagar, hacer los paquetes públicos o usar otro registro.
+- La misma página lista cuotas para paquetes privados (cuenta Free: 500 MB de almacenamiento y 1 GB de transferencia al mes) y no aclara si la exención del registro de contenedores las anula. La retención de 10 versiones acota el uso.
+- La descarga desde Actions con `GITHUB_TOKEN` es gratis; la del VPS usa tu token personal.
+
+Revisa **Settings → Billing and plans → Usage** de tu cuenta de vez en cuando para ver si el registro empieza a contar.
+
+### Ver las imágenes en GitHub
+
+**En la web** (los nombres de los menús pueden variar un poco):
+
+1. **Desde el repo.** En `https://github.com/inerhead/OmniDesk`, barra lateral derecha, apartado **Packages**: lista los dos paquetes enlazados al repo. Cada uno abre `https://github.com/inerhead/OmniDesk/pkgs/container/omnidesk-api` (o `omnidesk-gateway`).
+2. **Desde tu perfil.** `https://github.com/inerhead?tab=packages` lista todos tus paquetes. La página de cada uno es `https://github.com/users/inerhead/packages/container/package/omnidesk-api`.
+3. **En la página del paquete**, la lista de versiones muestra las etiquetas (`v0.1.2`, …), la fecha y el tamaño. Al abrir una versión ves el **digest** (`sha256:…`) y el comando `docker pull ghcr.io/inerhead/omnidesk-api:vX.Y.Z`.
+4. **Ajustes del paquete** (**Package settings**, en la página del paquete): comprueba que la visibilidad es **Private**, que el repo `OmniDesk` figura como enlazado y quién tiene acceso (**Manage Actions access**).
+5. **En Actions.** En **Actions → release**, abre un run: su **resumen** lista las dos imágenes publicadas con su digest.
+
+**Desde el terminal:**
+
+```bash
+# Listar las versiones de un paquete (necesita el permiso read:packages en gh)
+gh auth refresh -h github.com -s read:packages
+gh api /user/packages/container/omnidesk-api/versions \
+  --jq '.[] | {id, etiquetas: .metadata.container.tags, creada: .created_at}'
+
+# Comprobar que una etiqueta existe, sin descargarla (necesita docker login ghcr.io)
+docker manifest inspect ghcr.io/inerhead/omnidesk-api:v0.1.2 > /dev/null && echo existe
+
+# Digest y arquitectura de una imagen descargada
+docker image inspect ghcr.io/inerhead/omnidesk-api:v0.1.2 --format '{{index .RepoDigests 0}} {{.Os}}/{{.Architecture}}'
+```
+
+Sin sesión, `docker manifest inspect` y `docker pull` responden `denied` o `unauthorized`: el paquete es privado.
+
+### Primera publicación: qué comprobar
+
+Tras el primer push a `main` con este pipeline, en GitHub:
+
+1. **Actions → release**: los jobs `images` y `prune` terminaron (el segundo puede mostrar un aviso, ver abajo).
+2. Los dos paquetes existen, son **Private** y están **enlazados al repo**. Si un paquete no estuviera enlazado, Actions no podría publicar versiones nuevas: en **Package settings → Manage Actions access**, añade el repo `OmniDesk` con rol **Write**.
+3. **Para que `prune` pueda borrar versiones antiguas**, el repo necesita el rol **Admin** en ese mismo apartado (con **Write** puede publicar pero no borrar). Hazlo una vez por paquete. Mientras no lo hagas, `prune` termina con un aviso («No se pudieron borrar versiones antiguas…») y el release sigue en verde; las versiones se acumulan.
+
+### Token y sesión en el VPS (una vez)
+
+El VPS necesita descargar paquetes privados. Se usa un token personal **clásico** de solo lectura (los tokens de granularidad fina no admiten paquetes de `ghcr.io`):
+
+1. En GitHub: **Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token (classic)**. Nombre `omnidesk-vps`, **caducidad** (por ejemplo 90 días) y un único permiso: **`read:packages`**.
+2. Copia el token (solo se muestra una vez) e inicia sesión en el VPS:
+
+   ```bash
+   echo '<el-token>' | docker login ghcr.io -u inerhead --password-stdin
+   ```
+
+   Docker guarda la credencial en `~/.docker/config.json` (en base64, no cifrada): el archivo es del usuario de despliegue. Borra el token de tu portapapeles y del historial del shell.
+3. Comprueba que funciona (con el tag que exista):
+
+   ```bash
+   docker manifest inspect ghcr.io/inerhead/omnidesk-api:v0.1.2 > /dev/null && echo ok
+   ```
+
+**Caducidad y rotación.** Cuando el token caduca, `deploy.sh` falla con «No se pudieron descargar las imágenes…». Genera uno nuevo y repite `docker login`. Para **revocarlo** (por ejemplo, si se filtra): Developer settings → Tokens (classic) → **Delete**. Cierra la sesión del VPS con `docker logout ghcr.io`.
+
+### Flujo completo
+
+```text
+push a main ─▶ verify + migrations ─▶ tag vX.Y.Z ─▶ images (ghcr.io) ─▶ prune (10 versiones)
+                                                            │
+VPS:  deploy.sh prod vX.Y.Z ◀── docker pull api + gateway ◀─┘   (sin compilar)
+```

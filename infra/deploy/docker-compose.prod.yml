@@ -41,6 +41,9 @@ services:
 
   api:
     container_name: ${COMPOSE_PROJECT_NAME}-api
+    # Prod descarga esta imagen de ghcr.io (la publica .github/workflows/release.yml, SPEC 26) con
+    # OMNIDESK_IMAGE_TAG=<tag>, que fija deploy.sh. Dev la construye con `build` y la etiqueta «dev».
+    image: ghcr.io/inerhead/omnidesk-api:${OMNIDESK_IMAGE_TAG:-dev}
     build:
       context: ../..
       dockerfile: apps/api/Dockerfile
@@ -112,6 +115,8 @@ services:
 
   gateway:
     container_name: ${COMPOSE_PROJECT_NAME}-gateway
+    # Igual que `api`. La imagen publicada se construye con BASE_PATH=/omnidesk y VITE_API_URL vacía.
+    image: ghcr.io/inerhead/omnidesk-gateway:${OMNIDESK_IMAGE_TAG:-dev}
     build:
       context: ../..
       dockerfile: infra/gateway/Dockerfile

@@ -79,19 +79,153 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    # El tag de este commit (nuevo o ya existente): el job `images` construye las imágenes de esa versión.
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Crear el siguiente tag
+        id: tag
         run: |
           git fetch --tags --force origin
-          existing=$(git tag --points-at "$GITHUB_SHA" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)
+          existing=$(git tag --points-at "$GITHUB_SHA" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)
           if [ -n "$existing" ]; then
             echo "El commit ya tiene el tag $existing; no se crea otro."
+            echo "version=$existing" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           next=$(git tag --list | sh .github/scripts/next-version.sh)
           git tag "$next" "$GITHUB_SHA"
           git push origin "refs/tags/$next"
+          echo "version=$next" >> "$GITHUB_OUTPUT"
           echo "Tag $next creado sobre $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+  # Construye y publica las imágenes de la versión en ghcr.io (SPEC 26). Prod las descarga con
+  # `deploy.sh prod <tag>`; el VPS ya no compila. Una versión publicada es inmutable: si la imagen
+  # de ese tag existe, no se reconstruye ni se sobrescribe.
+  images:
+    needs: tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      VERSION: ${{ needs.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.tag.outputs.version }}
+      - name: Nombres de las imágenes
+        id: names
+        run: |
+          prefix="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"
+          echo "api=$prefix/omnidesk-api" >> "$GITHUB_OUTPUT"
+          echo "gateway=$prefix/omnidesk-gateway" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: ¿Ya existen las imágenes de este tag?
+        id: exists
+        run: |
+          for name in api gateway; do
+            case $name in api) ref="${{ steps.names.outputs.api }}:$VERSION" ;; gateway) ref="${{ steps.names.outputs.gateway }}:$VERSION" ;; esac
+            if out=$(docker buildx imagetools inspect "$ref" 2>&1); then
+              echo "$name=true" >> "$GITHUB_OUTPUT"
+              echo "$ref ya existe: no se reconstruye."
+            elif echo "$out" | grep -qiE 'not found|manifest unknown|name unknown|denied|unauthorized'; then
+              # GHCR puede responder «denied» a un paquete que todavía no existe. Si fuera un fallo
+              # real de permisos, el push de después falla con un mensaje claro.
+              echo "$name=false" >> "$GITHUB_OUTPUT"
+            else
+              # Un error de red o del registro no equivale a «no existe»: sobrescribir una versión
+              # publicada rompería la inmutabilidad.
+              echo "No se pudo comprobar $ref:" >&2
+              echo "$out" >&2
+              exit 1
+            fi
+          done
+      - name: Imagen del API
+        id: build_api
+        if: steps.exists.outputs.api == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          target: prod
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          build-args: |
+            APP_VERSION=${{ env.VERSION }}
+          tags: ${{ steps.names.outputs.api }}:${{ env.VERSION }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.title=omnidesk-api
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+      # BASE_PATH y VITE_API_URL quedan fijados en el build de la web: son los valores de dev y prod.
+      # deploy.sh prod rechaza un .env.prod que los cambie.
+      - name: Imagen del gateway
+        id: build_gateway
+        if: steps.exists.outputs.gateway == 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/gateway/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          build-args: |
+            BASE_PATH=/omnidesk
+            VITE_API_URL=
+          tags: ${{ steps.names.outputs.gateway }}:${{ env.VERSION }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.title=omnidesk-gateway
+          cache-from: type=gha,scope=gateway
+          cache-to: type=gha,mode=max,scope=gateway
+      - name: Resumen
+        run: |
+          {
+            echo "### Imágenes de $VERSION"
+            echo
+            echo "| Imagen | Referencia | Digest |"
+            echo "| --- | --- | --- |"
+            echo "| api | \`${{ steps.names.outputs.api }}:$VERSION\` | \`${{ steps.build_api.outputs.digest || 'ya existía' }}\` |"
+            echo "| gateway | \`${{ steps.names.outputs.gateway }}:$VERSION\` | \`${{ steps.build_gateway.outputs.digest || 'ya existía' }}\` |"
+            echo
+            echo "Paquetes: https://github.com/${GITHUB_REPOSITORY_OWNER}?tab=packages&repo_name=${GITHUB_REPOSITORY#*/}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Conserva las 10 versiones más recientes de cada paquete (cada una pesa ~1 GB). Borrar versiones
+  # exige que el repo tenga el rol Admin en «Manage Actions access» del paquete (Package settings);
+  # con el rol Write que recibe por defecto, este job avisa pero no tumba el release.
+  prune:
+    needs: images
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [omnidesk-api, omnidesk-gateway]
+    steps:
+      - id: borrar
+        uses: actions/delete-package-versions@v5
+        continue-on-error: true
+        with:
+          package-name: ${{ matrix.package }}
+          package-type: container
+          min-versions-to-keep: 10
+      - name: Aviso si no se pudo limpiar
+        if: steps.borrar.outcome == 'failure'
+        run: echo "::warning::No se pudieron borrar versiones antiguas de ${{ matrix.package }}. Da el rol Admin al repo en Package settings → Manage Actions access."

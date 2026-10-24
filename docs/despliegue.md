@@ -273,11 +273,7 @@ Fuera de producción, si no se define el driver, el API usa `memory` (los archiv
 
 MinIO no publica consola en el VPS. Para administrarlo, abre un túnel SSH al puerto `MINIO_HOST_PORT`.
 
-Si `docker pull minio/minio:RELEASE.2025-09-07T16-13-09Z` falla (el tag no siempre está en Docker Hub), carga la imagen desde una máquina que ya la tenga:
-
-```bash
-docker save minio/minio:RELEASE.2025-09-07T16-13-09Z | ssh vps docker load
-```
+La imagen es `pgsty/minio`, un fork comunitario mantenido por Pigsty: MinIO dejó de publicar imágenes y el repositorio `minio/minio` ya no existe en Docker Hub ni en quay.io. Usa el mismo `server /data`, las mismas variables `MINIO_ROOT_*` e incluye `mc` para el healthcheck.
 
 El volumen se llama `<proyecto>_miniodata` (`omnidesk-dev_miniodata` o `omnidesk-prod_miniodata`). El `backup now` escribe `omnidesk-<env>-media-YYYYMMDD.tar.gz` junto al dump de Postgres y conserva los 7 más recientes. Un `tar` en caliente puede no incluir un objeto que se está escribiendo en ese momento.
 

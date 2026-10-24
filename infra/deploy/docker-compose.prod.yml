@@ -160,7 +160,7 @@ services:
   # Adjuntos (SPEC 14). Sin consola; S3 solo en 127.0.0.1 (administración por túnel SSH).
   minio:
     container_name: ${COMPOSE_PROJECT_NAME}-minio
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     restart: unless-stopped
     command: server /data
     environment:

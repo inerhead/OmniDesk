@@ -1,0 +1,97 @@
+# Pipeline de versiones (SPEC 25). En cada push a main comprueba el código y las migraciones y, si
+# todo pasa, crea el siguiente tag vX.Y.Z sobre ese commit. Prod solo se despliega desde esos tags
+# (infra/deploy/deploy.sh prod vX.Y.Z). El despliegue sigue siendo manual: este workflow no toca el VPS.
+name: release
+
+on:
+  push:
+    branches: [main]
+
+# Una ejecución a la vez: dos pushes seguidos no calculan el mismo número de tag.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      BASE_PATH: /omnidesk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      # El cliente de Prisma (src/generated) no está en git y el lint del API lo necesita.
+      - run: pnpm --filter @omnidesk/api db:generate
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  # Aplica todas las migraciones sobre una base vacía, como hace el API al arrancar en prod, y
+  # falla si schema.prisma tiene cambios sin migración.
+  migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # La misma versión que infra/deploy/docker-compose.prod.yml. POSTGRES_USER es superusuario:
+        # la migración de RLS (SPEC 12) lo exige.
+        image: postgres:18
+        env:
+          POSTGRES_USER: omnidesk
+          POSTGRES_PASSWORD: omnidesk
+          POSTGRES_DB: omnidesk
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U omnidesk -d omnidesk"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://omnidesk:omnidesk@localhost:5432/omnidesk
+      DATABASE_APP_PASSWORD: ci-app-password
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile --filter "@omnidesk/api..."
+      - name: Aplicar las migraciones
+        run: pnpm --filter @omnidesk/api db:deploy
+      - name: Rol de la app (SPEC 12)
+        run: pnpm --filter @omnidesk/api db:app-role
+      - name: Sin deriva entre las migraciones y schema.prisma
+        run: pnpm --filter @omnidesk/api exec prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
+
+  tag:
+    needs: [verify, migrations]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Crear el siguiente tag
+        run: |
+          git fetch --tags --force origin
+          existing=$(git tag --points-at "$GITHUB_SHA" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)
+          if [ -n "$existing" ]; then
+            echo "El commit ya tiene el tag $existing; no se crea otro."
+            exit 0
+          fi
+          next=$(git tag --list | sh .github/scripts/next-version.sh)
+          git tag "$next" "$GITHUB_SHA"
+          git push origin "refs/tags/$next"
+          echo "Tag $next creado sobre $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"

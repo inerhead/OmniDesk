@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# Script fijo del VPS (SPEC 27): /srv/omnidesk/bin/omnidesk-deploy <vX.Y.Z>
+#
+# En el VPS no hay código fuente. Este script descarga de ghcr.io el bundle de despliegue del tag
+# (ghcr.io/inerhead/omnidesk-deploy:<tag>: deploy.sh, docker-compose.prod.yml, backup.sh…), lo
+# extrae en /srv/omnidesk/releases/<tag>/ y ejecuta su deploy.sh. Cada versión se despliega con sus
+# propios archivos, así que un rollback es `omnidesk-deploy <tag anterior>`.
+#
+# Instalación y actualización: docs/despliegue.md → "Prod en OVHcloud". Necesita `docker login ghcr.io`.
+# Variables opcionales: OMNIDESK_HOME (por defecto /srv/omnidesk).
+set -euo pipefail
+
+BUNDLE=ghcr.io/inerhead/omnidesk-deploy
+KEEP_RELEASES=5
+REQUIRED=(VERSION deploy.sh docker-compose.prod.yml backup.sh .env.prod.example omnidesk-deploy)
+
+usage() {
+  echo "Uso: $0 <vX.Y.Z>" >&2
+  exit 2
+}
+
+fail() {
+  echo "❌ $*" >&2
+  exit 1
+}
+
+# Descarga el bundle del tag y lo extrae en una carpeta temporal; solo la mueve a su sitio si está completo.
+extract_bundle() {
+  local ref=$1 dest=$2 tmp id file
+  echo "▶ bundle $BUNDLE:$ref"
+  if ! docker pull -q "$BUNDLE:$ref" >/dev/null; then
+    if ! grep -q 'ghcr.io' "${DOCKER_CONFIG:-$HOME/.docker}/config.json" 2>/dev/null; then
+      fail "No hay sesión en ghcr.io. Inicia sesión con un token de solo lectura (read:packages): docker login ghcr.io -u <usuario-de-github>"
+    fi
+    fail "No se pudo descargar el bundle $BUNDLE:$ref. O no existe (espera a que termine el job «images» en GitHub → Actions → release; los tags anteriores a SPEC 27 y los puestos a mano no tienen bundle), o el token no es válido (docker login ghcr.io)"
+  fi
+
+  tmp="$(dirname "$dest")/.$ref.tmp.$$"
+  rm -rf "$tmp" && mkdir -p "$tmp"
+  # FROM scratch: el contenedor se crea para copiar archivos, nunca se ejecuta.
+  id=$(docker create "$BUNDLE:$ref")
+  docker cp "$id:/bundle/." "$tmp/" >/dev/null || {
+    docker rm "$id" >/dev/null
+    rm -rf "$tmp"
+    fail "No se pudo extraer /bundle de $BUNDLE:$ref"
+  }
+  docker rm "$id" >/dev/null
+
+  for file in "${REQUIRED[@]}"; do
+    [[ -f $tmp/$file ]] || { rm -rf "$tmp"; fail "El bundle $ref está incompleto: falta $file"; }
+  done
+  [[ $(cat "$tmp/VERSION") == "$ref" ]] || { rm -rf "$tmp"; fail "El bundle $ref dice ser $(cat "$tmp/VERSION")"; }
+
+  rm -rf "$dest"
+  mv "$tmp" "$dest"
+}
+
+# Conserva las KEEP_RELEASES carpetas más recientes; nunca borra la que está en uso.
+prune_releases() {
+  local releases=$1 current=$2 dir count=0
+  while IFS= read -r dir; do
+    [[ -n $dir ]] || continue
+    count=$((count + 1))
+    if ((count > KEEP_RELEASES)) && [[ $dir != "$current" ]]; then
+      rm -rf "$dir"
+      echo "▶ release antiguo borrado: $(basename "$dir")"
+    fi
+  done < <(ls -1dt "$releases"/v*/ 2>/dev/null | sed 's:/$::')
+}
+
+main() {
+  [[ $# -eq 1 ]] || usage
+  local ref=$1
+  [[ $ref =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+    fail "Solo se despliegan etiquetas vX.Y.Z publicadas por el pipeline (recibido: $ref)"
+
+  local home=${OMNIDESK_HOME:-/srv/omnidesk}
+  local releases=$home/releases release=$home/releases/$ref
+  mkdir -p "$releases"
+
+  if [[ -f $release/VERSION && $(cat "$release/VERSION") == "$ref" && -f $release/deploy.sh ]]; then
+    echo "▶ bundle $ref ya extraído en $release"
+  else
+    extract_bundle "$ref" "$release"
+  fi
+  # La fecha de la carpeta marca el uso: la retención conserva las más recientes.
+  touch "$release"
+
+  bash "$release/deploy.sh" "$ref"
+
+  # Acceso directo a la versión en uso, para operar (ps, logs, backup) sin buscar la carpeta.
+  ln -sfn "$release" "$home/current"
+  prune_releases "$releases" "$release"
+
+  local self
+  self=$(readlink -f "${BASH_SOURCE[0]}")
+  if ! cmp -s "$self" "$release/omnidesk-deploy"; then
+    echo "⚠ El bundle $ref trae otra versión de omnidesk-deploy. Para actualizarlo:" >&2
+    echo "    install -m 755 $release/omnidesk-deploy $self" >&2
+  fi
+}
+
+main "$@"

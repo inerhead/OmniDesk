@@ -1,11 +1,13 @@
-# Producción en el VPS: un proyecto Compose aislado por entorno (red, volumen pgdata y backups propios).
-# Se ejecuta desde la raíz del repo (lo hace infra/deploy/deploy.sh):
+# Producción en el VPS (proyecto Compose `omnidesk-prod`). Viaja en el bundle
+# ghcr.io/inerhead/omnidesk-deploy:<tag> (SPEC 27): en el VPS no hay código fuente, así que no hay
+# `build`. api y gateway son las imágenes que el pipeline publicó para ese tag. Lo lanza deploy.sh
+# desde /srv/omnidesk/releases/<tag>/:
 #
-#   docker compose -p omnidesk-dev  --env-file /srv/omnidesk/.env.dev  -f infra/deploy/docker-compose.prod.yml up -d
-#   docker compose -p omnidesk-prod --env-file /srv/omnidesk/.env.prod -f infra/deploy/docker-compose.prod.yml up -d
+#   OMNIDESK_IMAGE_TAG=<tag> docker compose -p omnidesk-prod --env-file /srv/omnidesk/.env.prod \
+#     -f /srv/omnidesk/releases/<tag>/docker-compose.prod.yml up -d --no-build
 #
-# Solo `gateway` publica un puerto, y solo en 127.0.0.1: el Nginx del servidor termina TLS y
-# reenvía <BASE_PATH>/* a 127.0.0.1:${GATEWAY_HOST_PORT}. Ver docs/despliegue.md.
+# Solo `gateway` publica un puerto, y solo en 127.0.0.1: el túnel de Cloudflare (`cloudflared`,
+# en la red del gateway) es la entrada pública. Ver docs/despliegue.md.
 
 x-postgres-env: &postgres-env
   POSTGRES_USER: ${POSTGRES_USER:?falta POSTGRES_USER}
@@ -41,15 +43,8 @@ services:
 
   api:
     container_name: ${COMPOSE_PROJECT_NAME}-api
-    # Prod descarga esta imagen de ghcr.io (la publica .github/workflows/release.yml, SPEC 26) con
-    # OMNIDESK_IMAGE_TAG=<tag>, que fija deploy.sh. Dev la construye con `build` y la etiqueta «dev».
-    image: ghcr.io/inerhead/omnidesk-api:${OMNIDESK_IMAGE_TAG:-dev}
-    build:
-      context: ../..
-      dockerfile: apps/api/Dockerfile
-      target: prod
-      args:
-        APP_VERSION: ${APP_VERSION:-}
+    # La publica .github/workflows/release.yml (SPEC 26); deploy.sh fija OMNIDESK_IMAGE_TAG=<tag>.
+    image: ghcr.io/inerhead/omnidesk-api:${OMNIDESK_IMAGE_TAG:?falta OMNIDESK_IMAGE_TAG (el tag a desplegar)}
     restart: unless-stopped
     logging: *default-logging
     # Tope de memoria (SPEC 25): un servicio fuera de control no se lleva la RAM de otra app del VPS.
@@ -115,14 +110,8 @@ services:
 
   gateway:
     container_name: ${COMPOSE_PROJECT_NAME}-gateway
-    # Igual que `api`. La imagen publicada se construye con BASE_PATH=/omnidesk y VITE_API_URL vacía.
-    image: ghcr.io/inerhead/omnidesk-gateway:${OMNIDESK_IMAGE_TAG:-dev}
-    build:
-      context: ../..
-      dockerfile: infra/gateway/Dockerfile
-      args:
-        BASE_PATH: ${BASE_PATH:?falta BASE_PATH}
-        VITE_API_URL: ${VITE_API_URL:-}
+    # Igual que `api`. Se construye con BASE_PATH=/omnidesk y VITE_API_URL vacía.
+    image: ghcr.io/inerhead/omnidesk-gateway:${OMNIDESK_IMAGE_TAG:?falta OMNIDESK_IMAGE_TAG (el tag a desplegar)}
     environment:
       API_PORT: ${API_PORT:-5001}
     restart: unless-stopped

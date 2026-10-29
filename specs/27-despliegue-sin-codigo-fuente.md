@@ -3,11 +3,11 @@
 > **Status:** Approved
 > **Depends on:** SPEC 25, SPEC 26
 > **Date:** 2026-10-24
-> **Objective:** El VPS de OVHcloud despliega prod sin clon del repo: un script fijo descarga de `ghcr.io` un bundle con los archivos de despliegue de cada tag y las imágenes de esa versión, y el clon y la deploy key se retiran del servidor.
+> **Objective:** El VPS de OVHcloud despliega prod sin clon del repo: un script fijo descarga de `ghcr.io` un bundle con los archivos de despliegue de cada tag y las imágenes de esa versión, sin clon ni deploy key en el servidor.
 
 ## Por qué existe este spec
 
-Desde SPEC 26, prod no compila en el VPS: descarga las imágenes `omnidesk-api` y `omnidesk-gateway` de `ghcr.io`. Aun así el VPS conserva un clon completo del repo en `/srv/omnidesk/repo`, por tres motivos:
+Desde SPEC 26, prod no compila en el VPS: descarga las imágenes `omnidesk-api` y `omnidesk-gateway` de `ghcr.io`. Aun así el flujo de SPEC 25 y 26 exige un clon completo del repo en `/srv/omnidesk/repo`, por tres motivos:
 
 - **Archivos de despliegue:** `infra/deploy/deploy.sh`, `infra/deploy/docker-compose.prod.yml` e `infra/deploy/backup.sh`, que el servicio `backup` monta (`./backup.sh:/usr/local/bin/omnidesk-backup.sh`).
 - **Git en `deploy.sh`:** `git fetch`, `checkout` del tag, la comprobación de que el tag está en `origin/main` y el cálculo de `APP_VERSION`.
@@ -42,6 +42,7 @@ Lo que ya fijaron otros specs y aquí no se reabre:
   - Si no hay sesión en `ghcr.io` o el bundle no existe, falla con el mismo tipo de mensaje que SPEC 26 (login o «espera al job `images`»).
   - Si el `omnidesk-deploy` del bundle es distinto del instalado, avisa al terminar con el comando para actualizarlo. No se reemplaza solo.
   - Conserva las 5 carpetas de `releases/` más recientes y borra las demás (solo son archivos de texto; las imágenes se limpian aparte).
+  - Tras un despliegue correcto, apunta `/srv/omnidesk/current` a la carpeta de esa versión. La guía usa ese enlace para operar (`ps`, `logs`, `backup now`, restauraciones) sin buscar la carpeta del release; la retención nunca borra la carpeta en uso.
 - **`deploy.sh`, solo prod y sin git:**
   - Uso: `deploy.sh vX.Y.Z`. Desaparece el argumento `<dev|prod>` y la rama de dev.
   - Elimina `git status`, `git fetch`, `checkout`, la comprobación de `origin/main` y el cálculo de `APP_VERSION` con git: `APP_VERSION` es el tag.
@@ -50,16 +51,15 @@ Lo que ya fijaron otros specs y aquí no se reabre:
 - **`docker-compose.prod.yml` sin `build:`**: `api` y `gateway` solo tienen `image:`. Sin código en el VPS no hay contexto de build. `OMNIDESK_IMAGE_TAG` pasa a ser obligatoria (`${OMNIDESK_IMAGE_TAG:?…}`).
 - **Garantía «solo tags de `main`»**: pasa del VPS al pipeline. Solo `release.yml` publica imágenes y bundles, y solo corre en push a `main`, así que un tag con bundle viene siempre de `main`. Un tag puesto a mano (por ejemplo, `v0.2.0` para subir el menor) no tiene bundle ni imágenes y no se despliega; el siguiente push a `main` publica `v0.2.1`.
 - **Dev sale del VPS**: el VPS solo aloja prod. Dev se trabaja en local con `docker-compose.yml`. `.env.dev.example` deja de usarse en el VPS (se conserva en el repo solo si algo local lo usa; si no, se elimina).
-- **Migración del VPS actual** (pasos documentados y verificados):
-  1. Instalar `omnidesk-deploy` desde el bundle del primer tag publicado con este spec.
-  2. Desplegar ese tag con `omnidesk-deploy`. Compose reconoce el proyecto `omnidesk-prod` y recrea los contenedores; los volúmenes `pgdata` y `miniodata` se conservan.
-  3. Borrar `/srv/omnidesk/repo`.
-  4. Quitar la deploy key en GitHub (Settings → Deploy keys) y en el VPS (`~/.ssh/omnidesk_deploy*` y su bloque de `~/.ssh/config`).
-  5. Comprobar que no queda código ni credenciales de git en el servidor.
+- **Primera instalación en un VPS vacío** (pasos documentados y verificados). El VPS de OVHcloud todavía no tiene nada desplegado (decisión del usuario, 2026-10-24: se cambia la migración prevista por una primera instalación):
+  1. Preparar el VPS (Docker, firewall, NTP, swap, carpetas) e iniciar sesión en `ghcr.io` con el token de SPEC 26. Sin `git`, sin clon y sin deploy key.
+  2. Instalar `omnidesk-deploy` desde el bundle del primer tag publicado con este spec.
+  3. Copiar el `.env.prod` y desplegar ese tag con `omnidesk-deploy`.
+  4. Comprobar que no hay código ni credenciales de git en el servidor.
 - **Documentación** (`docs/despliegue.md` y README):
   - Runbook de OVHcloud sin clon: prepara el VPS, inicia sesión en `ghcr.io`, instala `omnidesk-deploy`, copia el `.env.prod` y despliega.
-  - Actualizar, rollback y la sección de migración.
-  - Quitar de la guía de prod los pasos de git y de deploy key.
+  - Actualizar y rollback.
+  - Quitar de la guía de prod los pasos de git, clon y deploy key (no hay migración: el VPS empieza vacío).
   - Marcar como retirados los pasos de dev en el VPS de SPEC 08.
   - Explicar cómo ver el bundle en GitHub, igual que las otras imágenes.
 
@@ -120,9 +120,9 @@ Sin `/srv/omnidesk/repo` y sin `~/.ssh/omnidesk_deploy`.
 3. **Compose.** Quitar `build:` de `api` y `gateway`, y hacer obligatoria `OMNIDESK_IMAGE_TAG`. Comprobar `compose config` con y sin la variable.
 4. **`deploy.sh` sin git y solo prod.** Nueva firma `deploy.sh vX.Y.Z`. Probar con un `docker` simulado, desde una carpeta sin `.git`: despliegue correcto, ref inválido, validaciones del `.env` y fallo de `pull`.
 5. **`omnidesk-deploy`.** Script fijo con descarga y extracción del bundle, reutilización de carpeta, aviso de versión distinta del script y retención de 5 releases. Probar con `docker` simulado: bundle presente, inexistente, sin sesión, carpeta ya extraída y poda de releases.
-6. **Documentación.** Runbook sin clon, actualizar, rollback, migración, ver el bundle en GitHub, retirada de dev en el VPS y README.
+6. **Documentación.** Runbook de primera instalación sin clon, actualizar, rollback, ver el bundle en GitHub, retirada de dev en el VPS y README.
 7. **Fusionar en `main`.** El pipeline publica el tag con sus tres paquetes. Dar el rol Admin al repo en el paquete nuevo `omnidesk-deploy` (como en SPEC 26).
-8. **Migrar el VPS** siguiendo la guía: instalar `omnidesk-deploy`, desplegar, borrar el clon, retirar la deploy key y verificar.
+8. **Primera instalación en el VPS** siguiendo la guía: preparar el servidor, iniciar sesión en `ghcr.io`, instalar `omnidesk-deploy`, copiar el `.env.prod`, desplegar y verificar.
 
 ## Criterios de aceptación
 
@@ -148,16 +148,16 @@ Sin `/srv/omnidesk/repo` y sin `~/.ssh/omnidesk_deploy`.
 - [ ] Si el `omnidesk-deploy` del bundle es distinto del instalado, el despliegue termina avisando con el comando para actualizarlo.
 - [ ] El servicio `backup` arranca con el `backup.sh` de la carpeta de release y un `backup now` deja un dump en `/srv/omnidesk/backups/prod/`.
 
-**Migración del VPS**
+**Primera instalación en el VPS**
 
-- [ ] Tras migrar, los datos siguen ahí: una empresa y una conversación creadas antes del cambio existen después.
 - [ ] `/srv/omnidesk/repo` no existe y `find /srv/omnidesk -name '*.ts' -o -name '.git'` no devuelve nada.
-- [ ] La deploy key ya no aparece en GitHub (Settings → Deploy keys), y `~/.ssh/omnidesk_deploy*` no existe en el VPS.
-- [ ] `docker compose -p omnidesk-prod … ps` muestra los 7 servicios sanos tras la migración.
+- [ ] No hay deploy key del repo en GitHub (Settings → Deploy keys) ni `~/.ssh/omnidesk_deploy*` en el VPS.
+- [ ] `docker compose -p omnidesk-prod … ps` muestra los 7 servicios sanos tras la instalación.
+- [ ] Un segundo despliegue (otro tag) conserva los datos: una empresa y una conversación creadas tras el primero siguen existiendo.
 
 **Documentación y calidad**
 
-- [ ] `docs/despliegue.md` describe el despliegue de prod sin ningún paso de git, clon ni deploy key, e incluye la migración y cómo ver el bundle en GitHub.
+- [ ] `docs/despliegue.md` describe el despliegue de prod sin ningún paso de git, clon ni deploy key, e incluye la primera instalación y cómo ver el bundle en GitHub.
 - [ ] `pnpm lint`, `pnpm typecheck`, `pnpm test` y `pnpm build` terminan con código 0.
 
 ## Decisiones
@@ -175,21 +175,21 @@ Sin `/srv/omnidesk/repo` y sin `~/.ssh/omnidesk_deploy`.
 - **No:** dev también por imágenes. Exigiría publicar imágenes de `main` o de ramas; otro spec.
 - **Sí:** el compose de prod no tiene `build:`. Sin código no hay contexto de build, y quitarlo evita que alguien compile por error.
 - **Sí:** la comprobación «tag en `main`» la garantiza el pipeline. Solo `release.yml` publica bundles e imágenes, y solo en push a `main`; sin bundle no hay despliegue.
-- **Sí:** se incluye la migración del VPS actual, con borrado del clon y revocación de la deploy key. Decisión del usuario. Sin ella, el código seguiría en el servidor.
+- **Sí:** primera instalación en lugar de migración. El VPS está vacío (decisión del usuario, 2026-10-24): no hay clon ni deploy key que retirar, y la guía nunca los crea.
+- **No:** guía de migración desde el flujo con clon. Nadie la necesita: el flujo con clon nunca llegó a desplegarse en el VPS.
 
 ## Riesgos
 
 | Riesgo | Mitigación |
 | --- | --- |
-| La migración borra el clon antes de comprobar que el despliegue nuevo funciona | Orden fijo: desplegar con `omnidesk-deploy`, verificar `/health` y los datos, y solo después borrar el clon y la deploy key. |
-| Compose no reconoce los contenedores existentes porque cambia la ruta del compose | El nombre de proyecto `omnidesk-prod` se mantiene, y Compose agrupa por proyecto, no por ruta. Los volúmenes se llaman `omnidesk-prod_*` y se conservan. Hay un criterio que comprueba los datos. |
+| Cada versión usa un compose en una carpeta distinta (`releases/vX.Y.Z/`) y Compose podría no reconocer los contenedores de la anterior | El nombre de proyecto `omnidesk-prod` se mantiene, y Compose agrupa por proyecto, no por ruta. Los volúmenes se llaman `omnidesk-prod_*` y se conservan. Un criterio comprueba los datos tras un segundo despliegue. |
 | El bundle y las imágenes de un tag quedan desalineados (uno publicado y otro no) | Los tres se publican en el mismo job. `omnidesk-deploy` falla si falta el bundle y `deploy.sh` si faltan las imágenes. |
 | `omnidesk-deploy` instalado queda viejo y no entiende un bundle nuevo | El script compara su copia con la del bundle y avisa. El formato del bundle (carpeta `/bundle/` y `deploy.sh vX.Y.Z`) se trata como contrato: cambiarlo exige actualizar el script. |
 | Sin clon, no hay forma rápida de inspeccionar el código desplegado en el VPS | Es el objetivo. El código de cada tag está en GitHub; el VPS solo tiene lo que ejecuta. |
 | La retención (10 versiones en `ghcr.io`, 5 carpetas locales) impide volver a una versión muy antigua | Se documenta. Si hace falta más historial, se suben los números. |
 | El paquete nuevo `omnidesk-deploy` no tiene el rol Admin del repo y `prune` no lo poda | Igual que en SPEC 26: el job avisa sin tumbar el release, y el paso 7 da el rol. |
 | Un tag puesto a mano para subir el menor no se puede desplegar | Se documenta: el siguiente push a `main` publica el parche siguiente (`v0.2.1`). |
-| Quedan restos de git o credenciales en el VPS | Criterios de aceptación con `find` y la comprobación de la deploy key. |
+| Alguien sigue la guía vieja (SPEC 25) y clona el repo en el VPS | La guía de prod deja de mencionar el clon y la deploy key. Criterios de aceptación con `find` y la comprobación de la deploy key. |
 
 ## Lo que **no** entra en este spec
 

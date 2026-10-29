@@ -1,0 +1,19 @@
+# syntax=docker/dockerfile:1
+# Bundle de despliegue de prod (SPEC 27): ghcr.io/inerhead/omnidesk-deploy:<tag>. Solo archivos, sin
+# código de la aplicación: el VPS no tiene clon del repo y saca de aquí lo que necesita para
+# desplegar ese tag. Lo extrae /srv/omnidesk/bin/omnidesk-deploy con `docker create` + `docker cp`.
+# Contexto de build: raíz del monorepo (lo publica .github/workflows/release.yml).
+
+FROM alpine:3.21 AS files
+ARG VERSION
+RUN test -n "$VERSION" || (echo "falta --build-arg VERSION" >&2 && exit 1)
+COPY infra/deploy/deploy.sh infra/deploy/docker-compose.prod.yml infra/deploy/backup.sh \
+  infra/deploy/.env.prod.example infra/deploy/omnidesk-deploy /bundle/
+RUN printf '%s\n' "$VERSION" > /bundle/VERSION \
+  && chmod 755 /bundle/deploy.sh /bundle/backup.sh /bundle/omnidesk-deploy \
+  && chmod 644 /bundle/VERSION /bundle/docker-compose.prod.yml /bundle/.env.prod.example
+
+FROM scratch
+COPY --from=files /bundle/ /bundle/
+# `docker create` exige un comando aunque el contenedor nunca se ejecute.
+CMD ["/bundle/omnidesk-deploy"]

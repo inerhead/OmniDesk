@@ -221,7 +221,7 @@ Si el navegador sigue mostrando una versión vieja: DevTools → Application →
 
 ## Despliegue
 
-dev y prod corren en un VPS con Docker Compose, en <https://dev.gastromesa.com/omnidesk> y <https://channel.gastromesa.com/omnidesk> (prod, por un túnel de Cloudflare en un VPS de OVHcloud). Para desplegar se ejecuta `infra/deploy/deploy.sh <dev|prod> <git-ref>` en el VPS. En prod el ref es un tag `vX.Y.Z` que crea solo el pipeline de GitHub (`.github/workflows/release.yml`) en cada push a `main` que pasa lint, typecheck, tests, build y migraciones; el despliegue sigue siendo manual. El mismo pipeline publica las imágenes de cada tag en `ghcr.io` (paquetes privados `omnidesk-api` y `omnidesk-gateway`) y `deploy.sh prod` las descarga en lugar de compilar en el VPS. La guía completa, con la preparación, el primer despliegue, el rollback y los backups, está en [`docs/despliegue.md`](docs/despliegue.md).
+Prod corre en un VPS de OVHcloud con Docker Compose, en <https://channel.gastromesa.com/omnidesk> (túnel de Cloudflare), y **sin código fuente en el servidor**: en cada push a `main` que pasa lint, typecheck, tests, build y migraciones, el pipeline de GitHub (`.github/workflows/release.yml`) crea un tag `vX.Y.Z` y publica en `ghcr.io` las imágenes `omnidesk-api` y `omnidesk-gateway` y el bundle de despliegue `omnidesk-deploy` (paquetes privados). En el VPS se despliega con `/srv/omnidesk/bin/omnidesk-deploy vX.Y.Z`, que descarga el bundle y las imágenes de ese tag. Dev se trabaja en local. La guía completa, con la primera instalación, las actualizaciones, el rollback y los backups, está en [`docs/despliegue.md`](docs/despliegue.md).
 
 ## Estructura
 

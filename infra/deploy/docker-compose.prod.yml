@@ -95,7 +95,7 @@ services:
     labels:
       autoheal: 'true'
     healthcheck:
-      # La imagen no trae curl: fetch de Node 24. Liveness (SPEC 19): no mira la base, así autoheal
+      # La imagen no trae curl: fetch de Node 26. Liveness (SPEC 19): no mira la base, así autoheal
       # no reinicia el API cuando la que falla es Postgres.
       test:
         - CMD

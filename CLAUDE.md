@@ -8,7 +8,7 @@ See also `AGENTS.md` (managed by turbo): read the installed `turbo` package's bu
 
 ## Commands
 
-Monorepo: pnpm workspaces (`apps/*`, `packages/*`, `tools/*`) + Turborepo. Node 24. Run from the repo root.
+Monorepo: pnpm workspaces (`apps/*`, `packages/*`, `tools/*`) + Turborepo. Node 26. Run from the repo root.
 
 ```bash
 # Full local stack (postgres, api, web, caddy, minio). Always use the gateway URL:

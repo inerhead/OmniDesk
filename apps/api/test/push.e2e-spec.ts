@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { randomInt, randomUUID } from 'node:crypto';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
-import webpush from 'web-push';
+import { generateVAPIDKeys } from 'web-push';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
@@ -45,7 +45,11 @@ describe('Web Push (e2e)', () => {
     beforeAll(async () => {
       app = await boot();
       prisma = app.get(PrismaService);
-      owner = (await prisma.tenantMember.findFirstOrThrow({ where: { email: 'supervisor@demo.omnidesk.local' } })).id;
+      owner = (
+        await prisma.tenantMember.findFirstOrThrow({
+          where: { email: 'supervisor@demo.omnidesk.local' },
+        })
+      ).id;
       cookie = await devLogin(app, owner);
     });
 
@@ -96,7 +100,7 @@ describe('Web Push (e2e)', () => {
     let owner: string;
     let laura: string;
     const cookies = new Map<string, string>();
-    const keys = webpush.generateVAPIDKeys();
+    const keys = generateVAPIDKeys();
 
     const http = () => request(app.getHttpServer());
     const as = (memberId: string, method: 'get' | 'post' | 'patch' | 'delete', path: string) =>
@@ -178,9 +182,13 @@ describe('Web Push (e2e)', () => {
         .send({ memberId: laura, controlVersion: taken.body.controlVersion })
         .expect(200);
 
-      const events = await prisma.outboxEvent.findMany({ where: { type: 'notification.requested' } });
+      const events = await prisma.outboxEvent.findMany({
+        where: { type: 'notification.requested' },
+      });
       const forConversation = (id: string) =>
-        events.filter((event) => (event.payload as { conversationId?: string }).conversationId === id);
+        events.filter(
+          (event) => (event.payload as { conversationId?: string }).conversationId === id,
+        );
 
       expect(forConversation(created.body.conversationId)).toEqual([
         expect.objectContaining({

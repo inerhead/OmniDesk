@@ -2,9 +2,10 @@
 # Gateway de producción: build de la web (PWA) servido por Caddy + proxy al API.
 # Contexto de build: raíz del monorepo (infra/deploy/docker-compose.prod.yml lo configura).
 
-FROM node:24-bookworm-slim AS build
+FROM node:26-bookworm-slim AS build
 ENV TURBO_TELEMETRY_DISABLED=1
-RUN corepack enable
+# Node 26 ya no trae corepack (SPEC 31).
+RUN npm install -g corepack@0.36.0 && corepack enable
 WORKDIR /repo
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY packages/ packages/

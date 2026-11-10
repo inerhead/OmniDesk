@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import webpush from 'web-push';
+import { sendNotification, setVapidDetails } from 'web-push';
 import { ENV, type Env } from '../../../shared/config/env';
 import { pushConfigured } from '../application/push-configured';
 import type { StoredSubscription } from '../application/ports/notification.repository';
@@ -9,7 +9,7 @@ import { PushEndpointGoneError, type PushTransport } from '../application/ports/
 export class WebPushTransport implements PushTransport {
   constructor(@Inject(ENV) private readonly env: Env) {
     if (pushConfigured(env) && env.VAPID_SUBJECT && env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY) {
-      webpush.setVapidDetails(env.VAPID_SUBJECT, env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY);
+      setVapidDetails(env.VAPID_SUBJECT, env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY);
     }
   }
 
@@ -19,7 +19,7 @@ export class WebPushTransport implements PushTransport {
     options: { ttl: number; topic: string },
   ): Promise<void> {
     try {
-      await webpush.sendNotification(
+      await sendNotification(
         {
           endpoint: subscription.endpoint,
           keys: { p256dh: subscription.p256dh, auth: subscription.auth },

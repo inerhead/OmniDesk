@@ -1,9 +1,10 @@
 # syntax=docker/dockerfile:1
 # Contexto de build: raíz del monorepo (docker compose lo configura).
 
-FROM node:24-bookworm-slim AS base
+FROM node:26-bookworm-slim AS base
 ENV TURBO_TELEMETRY_DISABLED=1
-RUN corepack enable
+# Node 26 ya no trae corepack (SPEC 31).
+RUN npm install -g corepack@0.36.0 && corepack enable
 WORKDIR /repo
 
 # Etapa de desarrollo: dependencias dentro de la imagen; el código fuente llega por bind mount.

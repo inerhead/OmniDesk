@@ -8,7 +8,7 @@ Plataforma SaaS multiempresa para supervisar conversaciones atendidas por IA y p
 ## Requisitos
 
 - Docker con Docker Compose v2.
-- Opcional, para ejecutar lint, typecheck, tests y builds en el host: Node 24 (`.nvmrc`) y pnpm (versión fijada en `package.json` → `packageManager`; con `corepack enable` se usa automáticamente).
+- Opcional, para ejecutar lint, typecheck, tests y builds en el host: Node 26 (`.nvmrc`) y pnpm (versión fijada en `package.json` → `packageManager`; Node 26 ya no trae corepack: `npm install -g corepack@0.36.0 && corepack enable` y se usa automáticamente).
 
 ## Arranque rápido
 
@@ -91,7 +91,7 @@ pnpm simulate          # crea 5 conversaciones de ejemplo; repetirlo no duplica 
 pnpm simulate --live   # un mensaje nuevo cada 4 s (cliente + IA) hasta Ctrl+C
 ```
 
-El simulador corre en el host (Node 24 + pnpm) y llama a `http://localhost:${GATEWAY_HOST_PORT}/omnidesk`. Para otra URL, define `SIMULATOR_API_URL` (con la subruta).
+El simulador corre en el host (Node 26 + pnpm) y llama a `http://localhost:${GATEWAY_HOST_PORT}/omnidesk`. Para otra URL, define `SIMULATOR_API_URL` (con la subruta).
 
 ## Iniciar sesión
 

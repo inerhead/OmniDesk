@@ -1,9 +1,9 @@
 {
   "name": "omnidesk",
   "private": true,
-  "packageManager": "pnpm@12.11.2",
+  "packageManager": "pnpm@12.18.0",
   "engines": {
-    "node": ">=24"
+    "node": ">=26"
   },
   "scripts": {
     "dev": "turbo run dev",
@@ -16,10 +16,10 @@
     "simulate": "turbo run build --filter=@omnidesk/contracts --output-logs=errors-only && pnpm --filter @omnidesk/simulator start"
   },
   "devDependencies": {
-    "@types/node": "26.6.4",
-    "eslint": "10.12.0",
-    "prettier": "3.9.9",
-    "turbo": "2.11.7",
+    "@types/node": "26.6.6",
+    "eslint": "10.14.0",
+    "prettier": "3.9.10",
+    "turbo": "2.11.10",
     "typescript": "6.0.3"
   }
 }

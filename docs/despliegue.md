@@ -4,6 +4,8 @@ Prod corre en un VPS de OVHcloud con Docker Compose, bajo la subruta `/omnidesk`
 
 **En el VPS no hay código fuente** (SPEC 27). El pipeline de GitHub construye y publica en `ghcr.io`, para cada tag `vX.Y.Z`, las imágenes de la app y un **bundle** con los archivos de despliegue. El VPS solo los descarga: no tiene clon del repo, ni `git`, ni deploy key, y no compila nada.
 
+**El despliegue es automático** (SPEC 28): tras publicar un tag, el job `deploy` entra por SSH al VPS y lo despliega con backup previo y rollback si falla. Ver [Despliegue automático](#despliegue-automático-spec-28). El despliegue a mano (§3) sigue disponible.
+
 | Proyecto Compose | `.env` | Gateway en el host | URL pública | Se despliega desde |
 | --- | --- | --- | --- | --- |
 | `omnidesk-prod` | `/srv/omnidesk/.env.prod` | `127.0.0.1:8082` | <https://channel.gastromesa.com/omnidesk> | un tag `vX.Y.Z` que el pipeline crea y publica desde `main` |
@@ -13,11 +15,12 @@ Dev ya no vive en el VPS (SPEC 27): se trabaja en local con `docker-compose.yml`
 ```text
                      GitHub Actions (release.yml)                          ghcr.io (privado)
 push a main ─▶ verify + migrations ─▶ tag vX.Y.Z ─▶ images ─▶ prune  ─▶  omnidesk-api:vX.Y.Z
-                                                                          omnidesk-gateway:vX.Y.Z
-                                                                          omnidesk-deploy:vX.Y.Z (bundle)
-                                                                                   │ docker pull
-VPS:  /srv/omnidesk/bin/omnidesk-deploy vX.Y.Z ◀───────────────────────────────────┘
-        └─ extrae el bundle en /srv/omnidesk/releases/vX.Y.Z/ y ejecuta su deploy.sh
+                                                        └──▶ deploy           omnidesk-gateway:vX.Y.Z
+                                                               │ SSH          omnidesk-deploy:vX.Y.Z (bundle)
+                                                               ▼                       │ docker pull
+VPS:  /srv/omnidesk/bin/omnidesk-autodeploy vX.Y.Z  (backup previo, rollback)          │
+        └─ /srv/omnidesk/bin/omnidesk-deploy vX.Y.Z ◀───────────────────────────────────┘
+             └─ extrae el bundle en /srv/omnidesk/releases/vX.Y.Z/ y ejecuta su deploy.sh
 
 Internet ──HTTPS──▶ Cloudflare ◀──túnel (saliente, 443)── cloudflared ──http://localhost:80──▶ gateway (Caddy)
                                                          (comparte la red del gateway)         ├─ /omnidesk/*      → web (PWA)
@@ -25,19 +28,21 @@ Internet ──HTTPS──▶ Cloudflare ◀──túnel (saliente, 443)── c
                                                           backup ──pg_dump 03:00──▶ /srv/omnidesk/backups/prod/
 ```
 
-- El firewall del VPS solo deja entrar **SSH**. `cloudflared` sale hacia Cloudflare, que termina el TLS: no se abren 80 ni 443 y no hay Nginx ni certificados en el servidor.
+- El firewall del VPS solo deja entrar **SSH** (también para el job `deploy`, que usa muchas IPs de GitHub que cambian). `cloudflared` sale hacia Cloudflare, que termina el TLS: no se abren 80 ni 443 y no hay Nginx ni certificados en el servidor.
 - Solo el gateway (`127.0.0.1:8082`) y MinIO (`127.0.0.1:${MINIO_HOST_PORT}`) publican puertos, y solo en el propio servidor. Postgres no publica ninguno.
 
 **En el repo:**
 
 | Archivo | Qué es |
 | --- | --- |
-| `.github/workflows/release.yml` | Pipeline: comprueba el código y las migraciones, crea el tag y publica las tres imágenes (SPEC 25, 26 y 27) |
+| `.github/workflows/release.yml` | Pipeline: comprueba el código y las migraciones, crea el tag, publica las tres imágenes y despliega (SPEC 25 a 28) |
 | `.github/scripts/next-version.sh` | Calcula el siguiente tag a partir de los existentes |
 | `apps/api/Dockerfile` (etapa `prod`) | Imagen `omnidesk-api`: usuario no root; `prisma migrate deploy` y después `node dist/main.js` |
 | `infra/gateway/Dockerfile` + `Caddyfile.prod` | Imagen `omnidesk-gateway`: la web servida por Caddy, proxy al API, caché y CSP |
 | `infra/deploy/Dockerfile.bundle` | Imagen `omnidesk-deploy`: solo los archivos de abajo, sin código de la app |
 | `infra/deploy/omnidesk-deploy` | Script fijo del VPS: descarga el bundle de un tag y lo despliega |
+| `infra/deploy/omnidesk-autodeploy` | Script fijo del VPS que ejecuta el job `deploy`: pausa, backup previo, `omnidesk-deploy` y rollback (SPEC 28) |
+| `infra/deploy/tests/deploy-scripts.test.sh` | Pruebas de `omnidesk-autodeploy` y del cerrojo, con `docker` simulado |
 | `infra/deploy/deploy.sh` | Despliegue de un tag: valida el `.env.prod`, descarga las imágenes, levanta y comprueba |
 | `infra/deploy/docker-compose.prod.yml` | Servicios `postgres`, `api`, `gateway`, `backup`, `minio`, `cloudflared` y `autoheal` |
 | `infra/deploy/backup.sh` | `pg_dump` diario + rotación de 7 (lo ejecuta el servicio `backup`) |
@@ -49,12 +54,18 @@ Internet ──HTTPS──▶ Cloudflare ◀──túnel (saliente, 443)── c
 ```text
 /srv/omnidesk/
 ├── bin/omnidesk-deploy          # instalado una vez desde un bundle (§2.4)
+├── bin/omnidesk-autodeploy      # ídem; lo ejecuta el job `deploy` (SPEC 28)
 ├── .env.prod                    # chmod 600
 ├── backups/prod/                # dumps y archivos de media
+│   └── pre-deploy/              # dump previo a cada despliegue automático (se conservan 3)
 ├── current -> releases/vX.Y.Z   # la versión en uso (la fija omnidesk-deploy)
+├── deploy.lock                  # cerrojo: un despliegue a la vez, manual o automático
+├── autodeploy.log               # una línea por despliegue automático
+├── autodeploy/vX.Y.Z.out        # salida completa de cada despliegue automático
+├── autodeploy.paused            # solo si el despliegue automático está pausado
 └── releases/
-    ├── v0.1.3/                  # bundle extraído: VERSION, deploy.sh, docker-compose.prod.yml,
-    └── v0.1.4/                  #   backup.sh, .env.prod.example, omnidesk-deploy (se conservan 5)
+    ├── v0.1.3/                  # bundle extraído: VERSION, deploy.sh, docker-compose.prod.yml, backup.sh,
+    └── v0.1.4/                  #   .env.prod.example, omnidesk-deploy, omnidesk-autodeploy (se conservan 5)
 ```
 
 ## 1. Cómo se publica una versión
@@ -68,13 +79,14 @@ Internet ──HTTPS──▶ Cloudflare ◀──túnel (saliente, 443)── c
 | `tag` | Solo si los dos anteriores pasan: crea el siguiente tag `vX.Y.Z` sobre ese commit |
 | `images` | Construye y publica en `ghcr.io` `omnidesk-api`, `omnidesk-gateway` y el bundle `omnidesk-deploy` de ese tag. Si ya existen, no los reconstruye |
 | `prune` | Conserva las 10 versiones más recientes de cada paquete |
+| `deploy` | En paralelo a `prune`: entra por SSH al VPS y despliega el tag (ver [Despliegue automático](#despliegue-automático-spec-28)). Sin los secretos `VPS_*`, avisa y termina en verde |
 
 - El primer tag, sin tags previos, es `v0.1.0`; después sube el parche (`v0.1.1`, `v0.1.2`, …). Si el commit ya tiene un tag, no crea otro.
 - Un `main` roto no recibe tag ni imágenes, así que **no se puede desplegar**.
 - **Solo se despliegan tags de `main`**: únicamente este workflow publica bundles, y solo corre en push a `main`. Un tag puesto a mano no tiene bundle.
 - Dos pushes seguidos esperan en cola. Si llegan varios mientras uno corre, los intermedios pueden saltarse; el último siempre se ejecuta.
 - Si el push del tag falla por permisos: **Settings → Actions → General → Workflow permissions → Read and write permissions**.
-- El despliegue sigue siendo manual (§3). El despliegue automático desde GitHub no existe todavía.
+- Cada tag nuevo se despliega solo (job `deploy`). El despliegue a mano (§3) queda como alternativa y para los rollbacks.
 
 **Subir el menor o el mayor.** El pipeline solo sube el parche (`v0.1.4` → `v0.1.5`). Para pasar a `v0.2.0`, crea y sube ese tag a mano sobre un commit de `main` verificado (`git tag v0.2.0 <commit> && git push origin v0.2.0`). Ese tag **no** tiene bundle ni imágenes; el siguiente push a `main` publica `v0.2.1`, que sí se despliega.
 
@@ -120,7 +132,7 @@ Con un usuario con `sudo`:
 
 Los paquetes son privados. Crea un token y inicia sesión, como se explica en [Token y sesión en el VPS](#token-y-sesión-en-el-vps-una-vez). Es la única credencial de GitHub que tiene el servidor.
 
-### 2.4 Instalar `omnidesk-deploy`
+### 2.4 Instalar `omnidesk-deploy` y `omnidesk-autodeploy`
 
 Con el tag más reciente que haya publicado el pipeline (míralo en **Packages** o en el resumen de **Actions → release**; ver [Ver las imágenes en GitHub](#ver-las-imágenes-en-github)):
 
@@ -129,11 +141,12 @@ TAG=v0.1.2
 docker pull ghcr.io/inerhead/omnidesk-deploy:$TAG
 id=$(docker create ghcr.io/inerhead/omnidesk-deploy:$TAG)
 docker cp "$id":/bundle/omnidesk-deploy /srv/omnidesk/bin/omnidesk-deploy
+docker cp "$id":/bundle/omnidesk-autodeploy /srv/omnidesk/bin/omnidesk-autodeploy
 docker rm "$id"
-chmod 755 /srv/omnidesk/bin/omnidesk-deploy
+chmod 755 /srv/omnidesk/bin/omnidesk-deploy /srv/omnidesk/bin/omnidesk-autodeploy
 ```
 
-El bundle es una imagen `FROM scratch` con solo archivos: `docker create` no ejecuta nada. Si en algún despliegue el bundle trae una versión distinta del script, `omnidesk-deploy` lo avisa al terminar con el comando para actualizarlo (`install -m 755 /srv/omnidesk/releases/<tag>/omnidesk-deploy /srv/omnidesk/bin/omnidesk-deploy`). No se reemplaza solo.
+`omnidesk-autodeploy` solo existe en los bundles publicados desde SPEC 28; con uno anterior, ese `docker cp` falla y basta con el primero. El bundle es una imagen `FROM scratch` con solo archivos: `docker create` no ejecuta nada. Si en algún despliegue el bundle trae una versión distinta de alguno de los dos scripts, `omnidesk-deploy` lo avisa al terminar con el comando para actualizarlo (`install -m 755 /srv/omnidesk/releases/<tag>/omnidesk-deploy /srv/omnidesk/bin/omnidesk-deploy`, e igual con `omnidesk-autodeploy`). No se reemplazan solos.
 
 ### 2.5 El `.env.prod`
 
@@ -219,6 +232,10 @@ find /srv/omnidesk -name '.git' -o -name '*.ts'    # no debe devolver nada: no h
 
 ## 3. Actualizar
 
+Con el despliegue automático activo no hace falta nada: cada push verde a `main` se despliega solo, con backup previo (ver [Despliegue automático](#despliegue-automático-spec-28)). El resultado está en **Actions → release → deploy**.
+
+**A mano** (sin el despliegue automático, con él pausado, o para desplegar una versión que no se desplegó sola):
+
 1. Haz un **backup manual** (§5).
 2. Espera a que el pipeline termine en verde en **Actions → release**, incluido el job `images`. Si `verify` o `migrations` fallan, ese commit no tiene tag; si `images` falla, el tag existe pero no tiene imágenes ni bundle. En ambos casos no se puede desplegar: corrige `main` y espera al siguiente.
 3. Despliega el tag nuevo:
@@ -227,17 +244,24 @@ find /srv/omnidesk -name '.git' -o -name '*.ts'    # no debe devolver nada: no h
    /srv/omnidesk/bin/omnidesk-deploy vX.Y.Z
    ```
 
+Si en ese momento corre un despliegue automático, `omnidesk-deploy` falla con «Hay otro despliegue en curso»: espera a que termine.
+
 El despliegue tiene una caída breve mientras se recrean los contenedores (no hay blue/green). La PWA instalada muestra **Nueva versión disponible** y no se recarga sola.
 
 Prod no compila: descarga lo que el pipeline construyó. Por eso el despliegue no tiene pico de CPU ni de memoria de build.
 
 ## 4. Rollback
 
-Despliega la etiqueta anterior; `omnidesk-deploy` usa el bundle de esa versión, con su propio compose:
+Si un despliegue automático falla, él mismo vuelve a la versión anterior (ver [Despliegue automático](#despliegue-automático-spec-28)). Este apartado es para volver atrás a mano una versión que se desplegó bien.
+
+Primero **pausa el despliegue automático**, para que el siguiente push no vuelva a subir la versión que retiras. Después despliega la etiqueta anterior; `omnidesk-deploy` usa el bundle de esa versión, con su propio compose:
 
 ```bash
+touch /srv/omnidesk/autodeploy.paused
 /srv/omnidesk/bin/omnidesk-deploy v0.1.1
 ```
+
+Cuando `main` tenga el arreglo, quita la pausa (`rm /srv/omnidesk/autodeploy.paused`): la siguiente versión publicada se desplegará sola.
 
 - La versión tiene que tener bundle e imágenes en `ghcr.io`: el pipeline conserva las 10 más recientes, y los tags anteriores a SPEC 27 (o puestos a mano) no tienen bundle.
 - Si la carpeta de esa versión sigue en `releases/` (se conservan 5), no se vuelve a descargar el bundle; las imágenes sí, porque `deploy.sh` borra las que no están en uso.
@@ -262,6 +286,8 @@ $C run --rm backup now
 ```
 
 Si hay más de un backup el mismo día, el último reemplaza al anterior, porque el nombre lleva la fecha.
+
+**Backup previo al despliegue automático.** `omnidesk-autodeploy` hace un `backup now` antes de cada despliegue y copia el dump a `backups/prod/pre-deploy/omnidesk-prod-pre-vX.Y.Z.dump` (el tag es el de la versión que se iba a desplegar). Esa copia no la toca la rotación diaria; se conservan las 3 más recientes. Para restaurarla, usa `DUMP=pre-deploy/omnidesk-prod-pre-vX.Y.Z.dump` en los comandos de abajo.
 
 ### Restaurar un backup
 
@@ -323,6 +349,9 @@ Todos los servicios tienen `restart: unless-stopped`: vuelven solos tras reinici
 | «BASE_PATH de prod debe ser /omnidesk» o «VITE_API_URL de prod debe estar vacía» | La imagen del gateway se construyó con esos valores. Corrígelos en el `.env.prod`; cambiarlos de verdad exige modificar el workflow y publicar un tag nuevo. |
 | «falta OMNIDESK_IMAGE_TAG» al usar `$C` | Falta el `export OMNIDESK_IMAGE_TAG=…` de [Operación diaria](#6-operación-diaria). |
 | Hay commits en `main` sin tag nuevo | El pipeline falló en ese commit (lint, tests, build o migraciones). Mira **Actions → release**. |
+| «Hay otro despliegue en curso» | Otro `omnidesk-deploy` (manual o automático) tiene el cerrojo `/srv/omnidesk/deploy.lock`. Espera a que termine. |
+| El job `deploy` dice «No se pudo conectar al VPS» | Falla el SSH: contraseña de `ubuntu` cambiada sin actualizar `VPS_PASSWORD`, huella del servidor distinta de `VPS_KNOWN_HOSTS` (reinstalación) o el VPS no responde. Ver [Despliegue automático](#despliegue-automático-spec-28). |
+| El job `deploy` dice «Resultado desconocido» | `omnidesk-autodeploy` no está instalado en el VPS, o la conexión se cortó. Mira `/srv/omnidesk/autodeploy.log`. |
 | Cloudflare responde **502** en `/omnidesk/` | El gateway no está arriba (`$C ps`). |
 | Cloudflare responde **error 1033** en `/omnidesk/` | El túnel no tiene ninguna conexión: `cloudflared` sigue "Up" pero se quedó colgado (típico tras un corte de red). `autoheal` lo reinicia solo en unos 4 min desde el corte. Para no esperar: `$C restart cloudflared`. Ver [Autorreparación](#autorreparación-spec-19). |
 | El badge no pasa a **En vivo** (se queda en reconectando) | El WebSocket no llega por el túnel: revisa `$C logs cloudflared`. La app sigue usable con el polling de respaldo de 15 s. |
@@ -340,7 +369,7 @@ El pipeline publica tres paquetes **privados**, enlazados al repo, con una etiqu
 | --- | --- | --- |
 | `omnidesk-api` | `ghcr.io/inerhead/omnidesk-api:vX.Y.Z` | API: `apps/api/Dockerfile`, etapa `prod`, con `APP_VERSION` = el tag (SPEC 26) |
 | `omnidesk-gateway` | `ghcr.io/inerhead/omnidesk-gateway:vX.Y.Z` | Caddy + web, con `BASE_PATH=/omnidesk` y `VITE_API_URL` vacía (SPEC 26) |
-| `omnidesk-deploy` | `ghcr.io/inerhead/omnidesk-deploy:vX.Y.Z` | Bundle: `VERSION`, `deploy.sh`, `docker-compose.prod.yml`, `backup.sh`, `.env.prod.example` y `omnidesk-deploy`, en `/bundle/`. Sin código de la app (SPEC 27) |
+| `omnidesk-deploy` | `ghcr.io/inerhead/omnidesk-deploy:vX.Y.Z` | Bundle: `VERSION`, `deploy.sh`, `docker-compose.prod.yml`, `backup.sh`, `.env.prod.example`, `omnidesk-deploy` y `omnidesk-autodeploy` (desde SPEC 28), en `/bundle/`. Sin código de la app (SPEC 27) |
 
 - **Una versión publicada es inmutable**: si un paquete de un tag ya existe, el pipeline no lo reconstruye.
 - El job `prune` conserva las **10 versiones más recientes** de cada paquete.
@@ -410,6 +439,99 @@ Se usa un token personal **clásico** de solo lectura (los tokens de granularida
    ```
 
 **Caducidad y rotación.** Cuando el token caduca, `omnidesk-deploy` falla al descargar el bundle. Genera uno nuevo y repite `docker login`. Para **revocarlo** (por ejemplo, si se filtra): Developer settings → Tokens (classic) → **Delete**, y `docker logout ghcr.io` en el VPS.
+
+## Despliegue automático (SPEC 28)
+
+Tras publicar un tag, el job `deploy` de `release.yml` entra por SSH al VPS como `ubuntu`, con su contraseña, y ejecuta `/srv/omnidesk/bin/omnidesk-autodeploy vX.Y.Z`. Ese script:
+
+1. Solo acepta un tag `vX.Y.Z`; cualquier otra cosa se rechaza sin ejecutar nada.
+2. Toma el cerrojo `/srv/omnidesk/deploy.lock`. Si hay otro despliegue en curso (manual o automático), termina con `ocupado` sin tocar nada.
+3. Si existe `/srv/omnidesk/autodeploy.paused`, no despliega (`pausado`).
+4. **Solo avanza:** si el tag no es posterior a la versión en uso, no despliega (`omitido`). Re-ejecutar un run antiguo nunca hace un downgrade.
+5. Hace un **backup previo** con el compose de la versión en uso y lo copia a `backups/prod/pre-deploy/`. Si falla, no despliega (`fallo_backup`).
+6. Despliega con `omnidesk-deploy vX.Y.Z`.
+7. Si falla:
+   - y la versión anterior sigue en marcha y sana (falló antes de levantar contenedores: bundle, imágenes o `.env.prod`), no hace nada más (`fallo_sin_cambios`);
+   - si no, vuelve a desplegar la versión anterior (`rollback`);
+   - si también falla el rollback (por ejemplo, por una migración que la versión anterior no tolera), **pausa el despliegue automático** y avisa (`fallo_sin_rollback`).
+
+Si la conexión SSH se corta a mitad (fin de los 20 minutos del job, caída de la red), el script sigue en el VPS hasta terminar, con rollback si hace falta, y deja su línea en el log.
+
+**Seguridad.** La contraseña de `ubuntu` guardada en GitHub da acceso completo al VPS: los límites de arriba evitan errores del pipeline, no a un atacante. GitHub oculta los secretos en los logs, y el job pasa la contraseña por una variable de entorno (`sshpass -e`), nunca en la línea de comandos. El job comprueba la huella del servidor y nunca acepta una desconocida. El token `read:packages` del VPS no se copia a GitHub. Mientras exista este mecanismo, SSH debe seguir aceptando contraseñas.
+
+### Activar el despliegue automático (una vez)
+
+1. **Login por contraseña.** Desde tu máquina, `ssh ubuntu@<IP-del-VPS>` debe dejarte entrar escribiendo la contraseña de `ubuntu`. Si no la recuerdas, restablécela desde el panel de OVHcloud o con `sudo passwd ubuntu` en el VPS. Conviene que sea larga y aleatoria: SSH está abierto a internet.
+2. **Instalar `omnidesk-autodeploy`** en el VPS, desde el bundle de un tag publicado desde SPEC 28 (el primero que publique el pipeline tras fusionarlo). Despliega ese tag a mano una vez y copia el script desde su carpeta:
+
+   ```bash
+   /srv/omnidesk/bin/omnidesk-deploy vX.Y.Z
+   install -m 755 /srv/omnidesk/releases/vX.Y.Z/omnidesk-deploy /srv/omnidesk/bin/omnidesk-deploy
+   install -m 755 /srv/omnidesk/releases/vX.Y.Z/omnidesk-autodeploy /srv/omnidesk/bin/omnidesk-autodeploy
+   ```
+
+3. **Huella del VPS.** En tu máquina:
+
+   ```bash
+   ssh-keyscan -t ed25519 <IP-del-VPS>                       # la línea que irá en el secreto
+   ssh-keyscan -t ed25519 <IP-del-VPS> | ssh-keygen -lf -    # su huella SHA256:…
+   ```
+
+   Y **dentro del VPS**: `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`. Las dos huellas `SHA256:…` deben ser iguales; si no, no sigas (alguien podría estar en medio).
+4. **Secretos en GitHub.** En `https://github.com/inerhead/OmniDesk` → **Settings → Secrets and variables → Actions → New repository secret**, uno por fila:
+
+   | Secreto | Valor |
+   | --- | --- |
+   | `VPS_HOST` | la IP del VPS |
+   | `VPS_USER` | `ubuntu` |
+   | `VPS_PASSWORD` | la contraseña de Linux de `ubuntu` |
+   | `VPS_KNOWN_HOSTS` | la línea completa de `ssh-keyscan -t ed25519 <IP>` (`<IP> ssh-ed25519 AAAA…`), sin las que empiezan por `#` |
+
+   O desde el terminal, sin que el valor quede en el historial: `gh secret set VPS_PASSWORD --repo inerhead/OmniDesk` (pide el valor).
+5. **Probar.** En **Actions → release**, abre el último run y re-ejecuta el job `deploy` (**Re-run jobs → Re-run failed jobs**, o **Re-run all jobs**). Con la versión ya desplegada, debe terminar en verde con «Omitido»: eso valida la contraseña y la huella. El despliegue completo se verifica con el siguiente push a `main`.
+
+### Ver el resultado
+
+- **Actions → release → deploy**: el resumen del run dice el resultado y la versión en uso. Verde: desplegado, pausado u omitido (estos dos con un aviso). Rojo: cualquier fallo.
+- En el VPS:
+
+  ```bash
+  tail /srv/omnidesk/autodeploy.log          # una línea por ejecución
+  cat /srv/omnidesk/autodeploy/vX.Y.Z.out    # la salida completa de ese tag
+  ```
+
+  ```text
+  2026-11-03T18:42:10Z	v0.1.5	desplegado	en_uso=v0.1.5
+  2026-11-04T09:10:02Z	v0.1.6	rollback	en_uso=v0.1.5	motivo=despliegue
+  2026-11-04T11:00:00Z	v0.1.7	pausado	en_uso=v0.1.5
+  2026-11-04T11:05:00Z	v0.1.4	omitido	en_uso=v0.1.5	motivo=no_avanza
+  ```
+
+  Resultados: `desplegado`, `pausado`, `omitido`, `rollback`, `fallo_backup`, `fallo_sin_cambios`, `fallo_sin_rollback` y `ocupado`.
+
+### Pausar y reanudar
+
+```bash
+touch /srv/omnidesk/autodeploy.paused    # pausa (por ejemplo, durante un rollback manual o una incidencia)
+rm /srv/omnidesk/autodeploy.paused       # reanuda
+```
+
+Mientras está pausado, cada versión nueva deja el job en verde con un aviso «Pausado». Al reanudar, la **siguiente** versión publicada se despliega; las publicadas durante la pausa, o rechazadas por `ocupado`, no se despliegan solas: despliégalas a mano (§3) o espera a la siguiente.
+
+### Si el rollback automático falla
+
+El job queda en rojo con «falló y el rollback también», el log dice `fallo_sin_rollback` y el despliegue automático queda **pausado** solo. Lo más probable es que la versión nueva aplicara una migración que la anterior no tolera.
+
+1. Mira qué pasó: `cat /srv/omnidesk/autodeploy/vX.Y.Z.out`.
+2. Restaura el backup previo, con `DUMP=pre-deploy/omnidesk-prod-pre-vX.Y.Z.dump` (el tag de la versión que falló), siguiendo [Restaurar un backup](#restaurar-un-backup).
+3. Despliega a mano la versión anterior: `/srv/omnidesk/bin/omnidesk-deploy vX.Y.W`.
+4. Cuando `main` tenga el arreglo, quita la pausa: `rm /srv/omnidesk/autodeploy.paused`.
+
+### Rotar la contraseña o revocar el acceso
+
+- **Rotar:** en el VPS, `passwd`; después actualiza el secreto `VPS_PASSWORD` en GitHub (**Update secret**, o `gh secret set`). Si solo cambias una de las dos, el siguiente job falla al conectar («No se pudo conectar al VPS») sin tocar nada.
+- **Revocar** (por ejemplo, si sospechas que se filtró): borra el secreto `VPS_PASSWORD` y cambia la contraseña con `passwd`. Sin el secreto, el job avisa y termina en verde sin conectarse.
+- **Huella nueva** (tras reinstalar el VPS): repite el paso 3 de la activación y actualiza `VPS_KNOWN_HOSTS`.
 
 ## 9. Dimensionamiento: ¿cabe en el VPS mínimo?
 
@@ -577,7 +699,7 @@ docker logs omnidesk-prod-autoheal                            # una línea por c
 ## Evolución
 
 - **Copias de los backups fuera del VPS** (S3 u otro): hoy los backups están en el mismo disco que la base, un riesgo aceptado (SPEC 08).
-- Despliegue automático desde GitHub.
+- Despliegue automático con una clave SSH restringida en lugar de la contraseña, y SSH sin contraseñas.
 - Despliegue sin caída (blue/green).
 - Varias instancias del API, que requieren el adapter Redis de Socket.IO.
 - Monitoreo y alertas (SPEC 11).

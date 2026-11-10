@@ -8,6 +8,9 @@
 #
 # Instalación y actualización: docs/despliegue.md → "Prod en OVHcloud". Necesita `docker login ghcr.io`.
 # Variables opcionales: OMNIDESK_HOME (por defecto /srv/omnidesk).
+#
+# Un despliegue a la vez (SPEC 28): toma /srv/omnidesk/deploy.lock, el mismo cerrojo que
+# omnidesk-autodeploy. Con OMNIDESK_DEPLOY_LOCK_HELD=1 no lo toma: lo tiene ya quien lo llama.
 set -euo pipefail
 
 BUNDLE=ghcr.io/inerhead/omnidesk-deploy
@@ -78,6 +81,12 @@ main() {
   local releases=$home/releases release=$home/releases/$ref
   mkdir -p "$releases"
 
+  # Dos `docker compose up` simultáneos sobre el mismo proyecto dejan un estado imprevisible.
+  if [[ ${OMNIDESK_DEPLOY_LOCK_HELD:-} != 1 ]]; then
+    exec 9>"$home/deploy.lock"
+    flock -n 9 || fail "Hay otro despliegue en curso (manual o automático, $home/deploy.lock). Espera a que termine."
+  fi
+
   if [[ -f $release/VERSION && $(cat "$release/VERSION") == "$ref" && -f $release/deploy.sh ]]; then
     echo "▶ bundle $ref ya extraído en $release"
   else
@@ -97,6 +106,13 @@ main() {
   if ! cmp -s "$self" "$release/omnidesk-deploy"; then
     echo "⚠ El bundle $ref trae otra versión de omnidesk-deploy. Para actualizarlo:" >&2
     echo "    install -m 755 $release/omnidesk-deploy $self" >&2
+  fi
+  # omnidesk-autodeploy (SPEC 28) no está en los bundles anteriores: solo se compara si viene.
+  local autodeploy
+  autodeploy=$(dirname "$self")/omnidesk-autodeploy
+  if [[ -f $release/omnidesk-autodeploy ]] && ! cmp -s "$autodeploy" "$release/omnidesk-autodeploy"; then
+    echo "⚠ El bundle $ref trae otra versión de omnidesk-autodeploy (o no está instalado). Para actualizarlo:" >&2
+    echo "    install -m 755 $release/omnidesk-autodeploy $autodeploy" >&2
   fi
 }
 

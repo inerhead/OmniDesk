@@ -1,6 +1,7 @@
 # Pipeline de versiones (SPEC 25). En cada push a main comprueba el código y las migraciones y, si
-# todo pasa, crea el siguiente tag vX.Y.Z sobre ese commit. Prod solo se despliega desde esos tags
-# (infra/deploy/deploy.sh prod vX.Y.Z). El despliegue sigue siendo manual: este workflow no toca el VPS.
+# todo pasa, crea el siguiente tag vX.Y.Z sobre ese commit y publica sus imágenes (SPEC 26 y 27).
+# Prod solo se despliega desde esos tags: el job `deploy` (SPEC 28) entra por SSH al VPS y ejecuta
+# /srv/omnidesk/bin/omnidesk-autodeploy <tag>. A mano sigue funcionando omnidesk-deploy <tag>.
 name: release
 
 on:
@@ -199,8 +200,9 @@ jobs:
             org.opencontainers.image.title=omnidesk-gateway
           cache-from: type=gha,scope=gateway
           cache-to: type=gha,mode=max,scope=gateway
-      # Bundle de despliegue (SPEC 27): solo deploy.sh, el compose, backup.sh, la plantilla del .env y
-      # omnidesk-deploy. El VPS no tiene código fuente y saca de aquí lo que necesita para este tag.
+      # Bundle de despliegue (SPEC 27): solo deploy.sh, el compose, backup.sh, la plantilla del .env,
+      # omnidesk-deploy y omnidesk-autodeploy. El VPS no tiene código fuente y saca de aquí lo que
+      # necesita para este tag.
       - name: Bundle de despliegue
         id: build_deploy
         if: steps.exists.outputs.deploy == 'false'
@@ -256,3 +258,102 @@ jobs:
       - name: Aviso si no se pudo limpiar
         if: steps.borrar.outcome == 'failure'
         run: echo "::warning::No se pudieron borrar versiones antiguas de ${{ matrix.package }}. Da el rol Admin al repo en Package settings → Manage Actions access."
+
+  # Despliega el tag en prod (SPEC 28): entra por SSH al VPS con el usuario y la contraseña de los
+  # secretos y ejecuta omnidesk-autodeploy, que hace el backup previo, el despliegue y, si falla, el
+  # rollback. El resultado sale de su última línea (OMNIDESK_RESULTADO=…). Sin secretos, avisa y no
+  # se conecta. Activación, pausa y rollback fallido: docs/despliegue.md → "Despliegue automático".
+  deploy:
+    needs: [tag, images]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    # Nunca dos despliegues a la vez; uno en curso no se cancela.
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+    env:
+      VERSION: ${{ needs.tag.outputs.version }}
+    steps:
+      # Los secretos no se pueden usar en un `if:`: se comprueban aquí.
+      - name: ¿Hay acceso al VPS?
+        id: access
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          missing=""
+          for name in VPS_HOST VPS_USER VPS_PASSWORD VPS_KNOWN_HOSTS; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::warning::Despliegue automático sin configurar (faltan los secretos:$missing). $VERSION no se desplegó; hazlo a mano con omnidesk-deploy."
+            echo "### Despliegue de $VERSION: sin configurar" >> "$GITHUB_STEP_SUMMARY"
+            echo "Faltan los secretos:$missing. Ver docs/despliegue.md → «Despliegue automático»." >> "$GITHUB_STEP_SUMMARY"
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Instalar sshpass
+        if: steps.access.outputs.ok == 'true'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sshpass
+      - name: Desplegar en el VPS
+        if: steps.access.outputs.ok == 'true'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          # sshpass -e la lee de aquí: nunca va en la línea de comandos.
+          SSHPASS: ${{ secrets.VPS_PASSWORD }}
+        run: |
+          known_hosts=$(mktemp)
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$known_hosts"
+          # Huella fijada: nunca se acepta una desconocida ni se envía la contraseña a otro servidor.
+          set +e
+          sshpass -e ssh \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known_hosts" -o GlobalKnownHostsFile=/dev/null \
+            -o PreferredAuthentications=password -o PubkeyAuthentication=no -o NumberOfPasswordPrompts=1 \
+            -o ConnectTimeout=30 -o ServerAliveInterval=30 -o ServerAliveCountMax=4 \
+            "$VPS_USER@$VPS_HOST" /srv/omnidesk/bin/omnidesk-autodeploy "$VERSION" 2>&1 | tee autodeploy.out
+          code=${PIPESTATUS[0]}
+          set -e
+
+          line=$(grep -E '^OMNIDESK_RESULTADO=' autodeploy.out | tail -n 1 || true)
+          result=$(echo "$line" | sed -nE 's/^OMNIDESK_RESULTADO=([a-z_]+).*/\1/p')
+          in_use=$(echo "$line" | sed -nE 's/.* en_uso=([^ ]+).*/\1/p')
+          case $result in
+            desplegado) title="✅ $VERSION desplegado" ;;
+            pausado) title="⏸ Pausado: $VERSION no se desplegó"
+              echo "::warning::Despliegue automático pausado en el VPS (/srv/omnidesk/autodeploy.paused). $VERSION no se desplegó." ;;
+            omitido) title="⏭ Omitido: $VERSION no es posterior a la versión en uso"
+              echo "::warning::$VERSION no es posterior a la versión en uso ($in_use): no se desplegó." ;;
+            rollback) title="↩ $VERSION falló: rollback a $in_use"
+              echo "::error::El despliegue de $VERSION falló y se volvió a $in_use. Mira la salida de este paso." ;;
+            fallo_sin_cambios) title="❌ $VERSION falló antes de tocar nada; sigue $in_use"
+              echo "::error::El despliegue de $VERSION falló antes de levantar contenedores. Sigue en uso $in_use." ;;
+            fallo_sin_rollback) title="🚨 $VERSION falló y el rollback también: despliegue automático pausado"
+              echo "::error::Falló el despliegue de $VERSION y el rollback. Restaura el backup previo y la versión a mano: docs/despliegue.md → «Si el rollback automático falla»." ;;
+            fallo_backup) title="❌ Falló el backup previo: $VERSION no se desplegó"
+              echo "::error::Falló el backup previo en el VPS: $VERSION no se desplegó." ;;
+            ocupado) title="❌ Había otro despliegue en curso: $VERSION no se desplegó"
+              echo "::error::Había otro despliegue en curso en el VPS: $VERSION no se desplegó. Despliégalo a mano o espera al siguiente." ;;
+            # 255: ssh; 5 y 6: sshpass (contraseña incorrecta, huella desconocida).
+            *) if [ "$code" -eq 255 ] || [ "$code" -eq 5 ] || [ "$code" -eq 6 ]; then
+                 title="❌ No se pudo conectar al VPS"
+                 echo "::error::Fallo de SSH (conexión, contraseña o huella del servidor). Revisa los secretos VPS_*."
+               else
+                 title="❌ Resultado desconocido (código $code)"
+                 echo "::error::No llegó el resultado de omnidesk-autodeploy. Mira /srv/omnidesk/autodeploy.log en el VPS."
+               fi ;;
+          esac
+          {
+            echo "### Despliegue: $title"
+            echo
+            [ -n "$in_use" ] && echo "Versión en uso en prod: \`$in_use\`"
+            echo
+            echo "Registro en el VPS: \`/srv/omnidesk/autodeploy.log\` y \`/srv/omnidesk/autodeploy/$VERSION.out\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+          case $result in desplegado | pausado | omitido) exit 0 ;; *) exit 1 ;; esac

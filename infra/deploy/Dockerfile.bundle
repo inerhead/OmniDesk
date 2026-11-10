@@ -8,9 +8,9 @@ FROM alpine:3.21 AS files
 ARG VERSION
 RUN test -n "$VERSION" || (echo "falta --build-arg VERSION" >&2 && exit 1)
 COPY infra/deploy/deploy.sh infra/deploy/docker-compose.prod.yml infra/deploy/backup.sh \
-  infra/deploy/.env.prod.example infra/deploy/omnidesk-deploy /bundle/
+  infra/deploy/.env.prod.example infra/deploy/omnidesk-deploy infra/deploy/omnidesk-autodeploy /bundle/
 RUN printf '%s\n' "$VERSION" > /bundle/VERSION \
-  && chmod 755 /bundle/deploy.sh /bundle/backup.sh /bundle/omnidesk-deploy \
+  && chmod 755 /bundle/deploy.sh /bundle/backup.sh /bundle/omnidesk-deploy /bundle/omnidesk-autodeploy \
   && chmod 644 /bundle/VERSION /bundle/docker-compose.prod.yml /bundle/.env.prod.example
 
 FROM scratch

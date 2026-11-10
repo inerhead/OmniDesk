@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+# Despliegue automático de prod (SPEC 28): /srv/omnidesk/bin/omnidesk-autodeploy <vX.Y.Z>
+#
+# Lo ejecuta por SSH el job `deploy` de .github/workflows/release.yml cada vez que el pipeline
+# publica un tag de main. Envuelve a omnidesk-deploy con lo que antes se hacía a mano:
+#
+#   1. solo acepta un tag vX.Y.Z;          5. backup previo (copia en <BACKUP_DIR>/pre-deploy/);
+#   2. sigue aunque se corte el SSH;       6. omnidesk-deploy <tag>;
+#   3. cerrojo compartido con el manual;   7. si falla y algo cambió, rollback a la versión anterior;
+#   4. pausa y «solo avanza»;              8. una línea en autodeploy.log.
+#
+# Última línea de la salida, que lee el job: OMNIDESK_RESULTADO=<resultado> en_uso=<tag>.
+# Código 0 para desplegado, pausado y omitido; distinto de 0 para el resto.
+# Instalación, pausa y qué hacer si el rollback falla: docs/despliegue.md → "Despliegue automático".
+# Variables opcionales: OMNIDESK_HOME (por defecto /srv/omnidesk), OMNIDESK_DEPLOY (por defecto
+# $OMNIDESK_HOME/bin/omnidesk-deploy).
+set -uo pipefail
+
+HOME_DIR=${OMNIDESK_HOME:-/srv/omnidesk}
+DEPLOY=${OMNIDESK_DEPLOY:-$HOME_DIR/bin/omnidesk-deploy}
+ENV_FILE=$HOME_DIR/.env.prod
+LOG=$HOME_DIR/autodeploy.log
+PAUSED=$HOME_DIR/autodeploy.paused
+PROJECT=omnidesk-prod
+KEEP_PRE_DEPLOY=3
+TAG_RE='^v[0-9]+\.[0-9]+\.[0-9]+$'
+
+TAG=
+TEE_PID=
+
+# Versión en uso según /srv/omnidesk/current (vacío si no hay ninguna).
+current_version() {
+  [[ -L $HOME_DIR/current ]] || return 0
+  basename "$(readlink -f "$HOME_DIR/current")"
+}
+
+# Último valor de una clave del .env, sin comillas (igual que deploy.sh).
+env_value() {
+  { grep -E "^$1=" "$ENV_FILE" || true; } | tail -n 1 | cut -d= -f2- | sed -e "s/^[\"']//" -e "s/[\"']\$//"
+}
+
+# ¿$1 es una versión mayor que $2?
+version_gt() {
+  [[ $1 != "$2" && $(printf '%s\n' "$1" "$2" | sort -V | tail -n 1) == "$1" ]]
+}
+
+# Registra el resultado, imprime la línea que lee el job y termina.
+finish() {
+  local result=$1 reason=${2:-} in_use code=1
+  in_use=$(current_version)
+  in_use=${in_use:-ninguna}
+  local line
+  line=$(printf '%s\t%s\t%s\ten_uso=%s' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$TAG" "$result" "$in_use")
+  [[ -n $reason ]] && line+=$(printf '\tmotivo=%s' "$reason")
+  printf '%s\n' "$line" >>"$LOG" || echo "⚠ no se pudo escribir en $LOG" >&2
+  case $result in desplegado | pausado | omitido) code=0 ;; esac
+  echo "OMNIDESK_RESULTADO=$result en_uso=$in_use"
+  # Cierra la salida y espera a que tee la termine de escribir en el .out.
+  if [[ -n $TEE_PID ]]; then
+    exec >&- 2>&-
+    wait "$TEE_PID" 2>/dev/null || true
+  fi
+  exit "$code"
+}
+
+# Imagen (y estado de salud) de un servicio del proyecto, sin depender del compose de ninguna versión.
+service_image() {
+  local id
+  id=$(docker ps -q --filter "label=com.docker.compose.project=$PROJECT" \
+    --filter "label=com.docker.compose.service=$1" | head -n 1)
+  [[ -n $id ]] || return 0
+  docker inspect -f '{{.Config.Image}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$id"
+}
+
+# ¿Sigue en marcha la versión anterior, sana, como si el despliegue fallido no hubiera tocado nada?
+untouched() {
+  local prev=$1 api gateway
+  api=$(service_image api)
+  gateway=$(service_image gateway)
+  [[ $api == *":$prev healthy" && $gateway == *":$prev "* ]]
+}
+
+# backup now con el compose de la versión en uso, y copia del dump a pre-deploy/ con el tag en el nombre.
+pre_deploy_backup() {
+  local prev=$1 backup_dir env_name marker dump dest
+  backup_dir=$(env_value BACKUP_DIR)
+  env_name=$(env_value OMNIDESK_ENV)
+  env_name=${env_name:-prod}
+  [[ -n $backup_dir && -d $backup_dir ]] || { echo "❌ BACKUP_DIR='$backup_dir' no existe" >&2; return 1; }
+
+  mkdir -p "$HOME_DIR/autodeploy" "$backup_dir/pre-deploy" || return 1
+  marker=$HOME_DIR/autodeploy/.backup-start
+  touch "$marker" || return 1
+
+  echo "▶ backup previo (compose de $prev)"
+  OMNIDESK_IMAGE_TAG=$prev APP_VERSION=$prev docker compose -p "$PROJECT" --env-file "$ENV_FILE" \
+    -f "$HOME_DIR/releases/$prev/docker-compose.prod.yml" run --rm backup now || return 1
+
+  # El dump del día: backup.sh reemplaza el del mismo día y la rotación diaria lo borra en 7 días.
+  dump=$(ls -1t "$backup_dir"/omnidesk-"$env_name"-[0-9]*.dump 2>/dev/null | head -n 1)
+  [[ -n $dump && $dump -nt $marker ]] || { echo "❌ el backup no dejó un dump nuevo en $backup_dir" >&2; return 1; }
+  dest=$backup_dir/pre-deploy/omnidesk-$env_name-pre-$TAG.dump
+  cp "$dump" "$dest.partial" && mv "$dest.partial" "$dest" || return 1
+  echo "▶ copia previa al despliegue: $dest"
+
+  ls -1t "$backup_dir"/pre-deploy/omnidesk-"$env_name"-pre-v*.dump 2>/dev/null | tail -n +"$((KEEP_PRE_DEPLOY + 1))" |
+    while IFS= read -r old; do
+      rm -f "$old" && echo "▶ copia previa antigua borrada: $(basename "$old")"
+    done
+}
+
+main() {
+  if [[ $# -ne 1 || ! $1 =~ $TAG_RE ]]; then
+    echo "❌ Solo se acepta un tag vX.Y.Z publicado por el pipeline (recibido: $*)" >&2
+    exit 2
+  fi
+  TAG=$1
+
+  # Un corte del SSH (fin del tiempo máximo, caída de la red) no debe dejar el despliegue a medias:
+  # se ignoran SIGHUP y SIGPIPE, y la salida va también a autodeploy/<tag>.out. Si el SSH se cierra,
+  # tee sigue escribiendo en el archivo y el script termina (con rollback si hace falta).
+  trap '' HUP PIPE
+  mkdir -p "$HOME_DIR/autodeploy" || exit 1
+  exec > >(tee -a "$HOME_DIR/autodeploy/$TAG.out") 2>&1
+  TEE_PID=$!
+  echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) omnidesk-autodeploy $TAG ==="
+
+  # Mismo cerrojo que omnidesk-deploy. Se abre después de tee para que tee no lo herede.
+  exec 9>"$HOME_DIR/deploy.lock"
+  if ! flock -n 9; then
+    echo "❌ Hay otro despliegue en curso (manual o automático). No se toca nada." >&2
+    finish ocupado
+  fi
+  # omnidesk-deploy hereda el cerrojo: que no intente tomarlo otra vez.
+  export OMNIDESK_DEPLOY_LOCK_HELD=1
+
+  if [[ -e $PAUSED ]]; then
+    echo "⏸ Despliegue automático pausado ($PAUSED). Para reanudarlo: rm $PAUSED"
+    finish pausado
+  fi
+
+  local prev
+  prev=$(current_version)
+  if [[ -n $prev ]] && ! version_gt "$TAG" "$prev"; then
+    echo "⏭ $TAG no es posterior a la versión en uso ($prev): no se despliega. Los rollbacks se hacen a mano con omnidesk-deploy."
+    finish omitido no_avanza
+  fi
+
+  if [[ -n $prev ]]; then
+    if ! pre_deploy_backup "$prev"; then
+      echo "❌ El backup previo falló: no se despliega $TAG." >&2
+      finish fallo_backup backup
+    fi
+  fi
+
+  echo "▶ omnidesk-deploy $TAG"
+  if "$DEPLOY" "$TAG"; then
+    finish desplegado
+  fi
+
+  echo "❌ El despliegue de $TAG falló." >&2
+  if [[ -n $prev ]] && untouched "$prev"; then
+    echo "La versión $prev sigue en marcha y sana: el fallo fue antes de levantar contenedores. No hace falta rollback." >&2
+    finish fallo_sin_cambios despliegue
+  fi
+
+  if [[ -n $prev ]]; then
+    echo "▶ rollback: omnidesk-deploy $prev"
+    if "$DEPLOY" "$prev"; then
+      echo "↩ Rollback a $prev completado. $TAG no está en uso." >&2
+      finish rollback despliegue
+    fi
+  fi
+
+  # Sin versión anterior que funcione: la base puede estar a medio migrar. Se pausa para que la
+  # siguiente versión no despliegue encima ni sustituya el backup previo.
+  touch "$PAUSED" || true
+  echo "❌ El rollback${prev:+ a $prev} también falló. Despliegue automático PAUSADO ($PAUSED)." >&2
+  echo "   Restaura el backup previo (<BACKUP_DIR>/pre-deploy/) y despliega la versión anterior a mano:" >&2
+  echo "   docs/despliegue.md → «Si el rollback automático falla»." >&2
+  finish fallo_sin_rollback rollback
+}
+
+main "$@"

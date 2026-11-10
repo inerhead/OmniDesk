@@ -12,7 +12,7 @@ import {
   SettingsSection,
   SettingsSectionSkeleton,
 } from '@/shared/ui/settings-section';
-import { checkImageSource, readAsDataUrl } from '@/shared/lib/crop-to-blob';
+import { IMAGE_SOURCE_MAX_LABEL, checkImageSource, readAsDataUrl } from '@/shared/lib/crop-to-blob';
 import { AboutSection } from './about-section';
 import { deleteAvatar, putAvatar } from './profile-api';
 
@@ -21,7 +21,7 @@ const ImageCropDialog = lazy(loadCropDialog);
 
 const SOURCE_NOTICE = {
   unsupported: 'Elige una imagen JPEG, PNG o WebP.',
-  'too-large': 'La imagen supera 10 MB. Elige una más pequeña.',
+  'too-large': `La imagen supera ${IMAGE_SOURCE_MAX_LABEL}. Elige una más pequeña.`,
 } as const;
 
 function uploadNotice(error: unknown): string {
@@ -138,6 +138,9 @@ export function ProfilePage() {
                 </Button>
               )}
             </div>
+            <p className="text-muted-foreground text-xs">
+              JPEG, PNG o WebP. Máximo {IMAGE_SOURCE_MAX_LABEL}.
+            </p>
             <input
               ref={input}
               type="file"

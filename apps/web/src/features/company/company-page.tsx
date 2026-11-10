@@ -14,7 +14,7 @@ import {
 import { ME_QUERY_KEY, activeMembership, useMe } from '@/features/auth/api/use-me';
 import { ApiCodeError } from '@/shared/api/api-error';
 import { ApiHttpError } from '@/shared/api/http-client';
-import { checkImageSource, readAsDataUrl } from '@/shared/lib/crop-to-blob';
+import { IMAGE_SOURCE_MAX_LABEL, checkImageSource, readAsDataUrl } from '@/shared/lib/crop-to-blob';
 import { Button } from '@/shared/ui/button';
 import { ConfirmDialog } from '@/shared/ui/confirm-dialog';
 import { EmptyState } from '@/shared/ui/empty-state';
@@ -44,7 +44,7 @@ const dateFormat = new Intl.DateTimeFormat('es', { dateStyle: 'long' });
 
 const SOURCE_NOTICE = {
   unsupported: 'Elige una imagen JPEG, PNG o WebP.',
-  'too-large': 'La imagen supera 10 MB. Elige una más pequeña.',
+  'too-large': `La imagen supera ${IMAGE_SOURCE_MAX_LABEL}. Elige una más pequeña.`,
 } as const;
 
 function saveNotice(error: unknown): string {
@@ -346,6 +346,9 @@ function CompanyLogo({ company }: { company: TenantDetails }) {
               </Button>
             )}
           </div>
+          <p className="text-muted-foreground text-xs">
+            JPEG, PNG o WebP. Máximo {IMAGE_SOURCE_MAX_LABEL}.
+          </p>
           {notice && (
             <p role="status" className="text-muted-foreground text-sm">
               {notice}

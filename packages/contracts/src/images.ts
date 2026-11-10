@@ -6,7 +6,7 @@
 /** Lo que acepta el API: el recorte ya reducido en la web. */
 export const IMAGE_UPLOAD_MAX_BYTES = 1024 * 1024;
 /** Lo que acepta la web antes de recortar. */
-export const IMAGE_SOURCE_MAX_BYTES = 10 * 1024 * 1024;
+export const IMAGE_SOURCE_MAX_BYTES = 2 * 1024 * 1024;
 /** Lado del cuadrado que sube la web. */
 export const IMAGE_SIZE_PX = 512;
 /** Formatos que la web deja elegir para recortar. */

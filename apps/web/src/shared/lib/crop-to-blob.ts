@@ -14,7 +14,10 @@ export interface CropArea {
 
 export type ImageSourceCheck = 'ok' | 'unsupported' | 'too-large';
 
-/** Antes de abrir el recorte: JPEG, PNG o WebP de hasta 10 MB. */
+/** «2 MB»: límite del archivo elegido, para el aviso y la ayuda. */
+export const IMAGE_SOURCE_MAX_LABEL = `${IMAGE_SOURCE_MAX_BYTES / (1024 * 1024)} MB`;
+
+/** Antes de abrir el recorte: JPEG, PNG o WebP de hasta 2 MB. */
 export function checkImageSource(file: { type: string; size: number }): ImageSourceCheck {
   if (!(IMAGE_SOURCE_MIME_TYPES as readonly string[]).includes(file.type)) return 'unsupported';
   if (file.size > IMAGE_SOURCE_MAX_BYTES) return 'too-large';

@@ -1,18 +1,22 @@
 import { describe, expect, it, vi } from 'vitest';
-import { checkImageSource, encodeImage } from './crop-to-blob';
+import { IMAGE_SOURCE_MAX_LABEL, checkImageSource, encodeImage } from './crop-to-blob';
 
 describe('checkImageSource', () => {
-  it('acepta JPEG, PNG y WebP de hasta 10 MB', () => {
-    expect(checkImageSource({ type: 'image/jpeg', size: 10 * 1024 * 1024 })).toBe('ok');
+  it('acepta JPEG, PNG y WebP de hasta 2 MB', () => {
+    expect(checkImageSource({ type: 'image/jpeg', size: 2 * 1024 * 1024 })).toBe('ok');
     expect(checkImageSource({ type: 'image/png', size: 1 })).toBe('ok');
     expect(checkImageSource({ type: 'image/webp', size: 1 })).toBe('ok');
   });
 
-  it('rechaza otros tipos y más de 10 MB', () => {
+  it('rechaza otros tipos y más de 2 MB', () => {
     expect(checkImageSource({ type: 'image/gif', size: 1 })).toBe('unsupported');
     expect(checkImageSource({ type: 'application/pdf', size: 1 })).toBe('unsupported');
     expect(checkImageSource({ type: 'image/heic', size: 1 })).toBe('unsupported');
-    expect(checkImageSource({ type: 'image/jpeg', size: 10 * 1024 * 1024 + 1 })).toBe('too-large');
+    expect(checkImageSource({ type: 'image/jpeg', size: 2 * 1024 * 1024 + 1 })).toBe('too-large');
+  });
+
+  it('la etiqueta del límite es «2 MB»', () => {
+    expect(IMAGE_SOURCE_MAX_LABEL).toBe('2 MB');
   });
 });
 

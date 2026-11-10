@@ -1,6 +1,6 @@
 # SPEC 28 — Despliegue automático en el VPS tras cada versión de `main`
 
-> **Status:** Approved
+> **Status:** Approved/spec
 > **Depends on:** SPEC 25, SPEC 26, SPEC 27
 > **Date:** 2026-11-03
 > **Objective:** Cuando el pipeline publica un tag nuevo de `main`, un job de GitHub entra por SSH al VPS de OVHcloud con el usuario `ubuntu` y su contraseña y lo despliega solo, con backup previo, rollback automático si falla, un interruptor de pausa y el resultado visible en Actions.

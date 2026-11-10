@@ -39,7 +39,7 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"],
-      "env": ["VITE_*", "BASE_PATH"]
+      "env": ["VITE_*", "BASE_PATH", "APP_VERSION"]
     },
     "dev": {
       "dependsOn": ["^build"],

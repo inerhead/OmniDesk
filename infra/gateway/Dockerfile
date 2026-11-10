@@ -15,7 +15,9 @@ RUN pnpm install --frozen-lockfile --filter "@omnidesk/web..."
 # Se fijan en el build (base de Vite, manifest, scope del service worker).
 ARG BASE_PATH=/omnidesk
 ARG VITE_API_URL=
-ENV BASE_PATH=${BASE_PATH} VITE_API_URL=${VITE_API_URL} NODE_ENV=production
+# Versión de la web (SPEC 29): el mismo tag que la imagen del API; vacía = `dev`.
+ARG APP_VERSION=
+ENV BASE_PATH=${BASE_PATH} VITE_API_URL=${VITE_API_URL} APP_VERSION=${APP_VERSION} NODE_ENV=production
 RUN pnpm exec turbo run build --filter=@omnidesk/web...
 
 FROM caddy:2

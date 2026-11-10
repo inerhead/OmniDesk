@@ -49,6 +49,8 @@ export default defineConfig(({ mode }) => {
   return {
     // La app se sirve bajo la subruta (/omnidesk/) también en local.
     base,
+    // Versión de la web (SPEC 29): el tag que el pipeline pasa al build del gateway; `dev` sin él.
+    define: { __APP_VERSION__: JSON.stringify(process.env.APP_VERSION || 'dev') },
     plugins: [
       legalPages(base),
       react(),

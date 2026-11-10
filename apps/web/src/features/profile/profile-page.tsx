@@ -13,6 +13,7 @@ import {
   SettingsSectionSkeleton,
 } from '@/shared/ui/settings-section';
 import { checkImageSource, readAsDataUrl } from '@/shared/lib/crop-to-blob';
+import { AboutSection } from './about-section';
 import { deleteAvatar, putAvatar } from './profile-api';
 
 const loadCropDialog = () => import('@/shared/ui/image-crop-dialog');
@@ -31,8 +32,8 @@ function uploadNotice(error: unknown): string {
 }
 
 /**
- * `/settings/profile`: la foto del usuario (subir, cambiar o quitar) y su cuenta (nombre y email,
- * solo lectura), en secciones de dos columnas (SPEC 21).
+ * `/settings/profile`: la foto del usuario (subir, cambiar o quitar), su cuenta (nombre y email,
+ * solo lectura) y la versión de OmniDesk (SPEC 29), en secciones de dos columnas (SPEC 21).
  */
 export function ProfilePage() {
   const { data: me } = useMe();
@@ -166,6 +167,8 @@ export function ProfilePage() {
           </div>
         </dl>
       </SettingsSection>
+
+      <AboutSection />
 
       {source !== null && (
         <Suspense fallback={null}>

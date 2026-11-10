@@ -192,6 +192,7 @@ jobs:
           build-args: |
             BASE_PATH=/omnidesk
             VITE_API_URL=
+            APP_VERSION=${{ env.VERSION }}
           tags: ${{ steps.names.outputs.gateway }}:${{ env.VERSION }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}

@@ -248,6 +248,8 @@ Si en ese momento corre un despliegue automático, `omnidesk-deploy` falla con �
 
 El despliegue tiene una caída breve mientras se recrean los contenedores (no hay blue/green). La PWA instalada muestra **Nueva versión disponible** y no se recarga sola.
 
+**Comprobar la versión desde la app** (SPEC 29): **Mi perfil → Acerca de** muestra la **versión del servidor** (la de `/health`) y la **versión de la app** de ese dispositivo (la de la imagen del gateway). Tras un despliegue correcto, y con la app actualizada, las dos muestran el tag nuevo. Si no coinciden, el dispositivo usa la app anterior: el botón **Actualizar** la actualiza y recarga.
+
 Prod no compila: descarga lo que el pipeline construyó. Por eso el despliegue no tiene pico de CPU ni de memoria de build.
 
 ## 4. Rollback
@@ -265,7 +267,7 @@ Cuando `main` tenga el arreglo, quita la pausa (`rm /srv/omnidesk/autodeploy.pau
 
 - La versión tiene que tener bundle e imágenes en `ghcr.io`: el pipeline conserva las 10 más recientes, y los tags anteriores a SPEC 27 (o puestos a mano) no tienen bundle.
 - Si la carpeta de esa versión sigue en `releases/` (se conservan 5), no se vuelve a descargar el bundle; las imágenes sí, porque `deploy.sh` borra las que no están en uso.
-- La página **Estado** (y `/health`) muestran la versión que corre.
+- La página **Estado** (y `/health`) muestran la versión que corre. **Mi perfil → Acerca de** muestra además la de la app de ese dispositivo.
 
 Las migraciones solo avanzan. Si la versión nueva aplicó una migración que la anterior no tolera (por ejemplo, borró o renombró una columna), hay dos pasos: restaura el backup previo al despliegue (§5) y después despliega la etiqueta anterior.
 
